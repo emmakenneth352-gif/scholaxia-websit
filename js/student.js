@@ -283,10 +283,33 @@
   document.querySelectorAll(".side-link, [data-goto]").forEach(function (el) {
     el.addEventListener("click", function (e) {
       e.preventDefault();
+      e.stopPropagation();
       var page = el.dataset.page || el.dataset.goto;
-      if (page) showPage(page);
+      if (page) {
+        showPage(page);
+        if (window.matchMedia("(max-width: 900px)").matches) closeMobileNav();
+      }
     });
   });
+
+  // Capture-phase fallback so mobile taps on icons/text still switch pages
+  var sideNav = document.querySelector(".student-side");
+  if (sideNav) {
+    sideNav.addEventListener(
+      "click",
+      function (e) {
+        var btn = e.target.closest(".side-link, [data-goto]");
+        if (!btn) return;
+        var page = btn.getAttribute("data-page") || btn.getAttribute("data-goto");
+        if (!page) return;
+        e.preventDefault();
+        e.stopPropagation();
+        showPage(page);
+        if (window.matchMedia("(max-width: 900px)").matches) closeMobileNav();
+      },
+      true
+    );
+  }
 
   document.addEventListener("click", function (e) {
     var retryBtn = e.target.closest("[data-retry]");
@@ -2608,11 +2631,7 @@
   if ($("sidebarBackdrop")) {
     $("sidebarBackdrop").addEventListener("click", closeMobileNav);
   }
-  document.querySelectorAll(".side-link, [data-goto]").forEach(function (el) {
-    el.addEventListener("click", function () {
-      if (window.matchMedia("(max-width: 900px)").matches) closeMobileNav();
-    });
-  });
+  // close handler already on side-link above
 
   loadHome();
 })();

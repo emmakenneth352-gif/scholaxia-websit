@@ -1225,14 +1225,18 @@ body.app-body {
     grid-template-columns: 1fr !important;
   }
 
-  /* Keep drawer above the dimmed backdrop so tabs are clickable */
   .sidebar-wrap {
-    position: static;
+    position: relative;
     width: 0 !important;
     min-width: 0 !important;
     height: 0;
     overflow: visible;
-    z-index: 90;
+    z-index: 200;
+  }
+
+  .app-main {
+    position: relative;
+    z-index: 1;
   }
 
   .student-side {
@@ -1242,7 +1246,7 @@ body.app-body {
     bottom: 0;
     width: min(300px, 86vw) !important;
     min-width: min(300px, 86vw) !important;
-    z-index: 90;
+    z-index: 210 !important;
     transform: translateX(-105%);
     transition: transform 0.25s ease;
     height: 100vh !important;
@@ -1251,6 +1255,7 @@ body.app-body {
     pointer-events: auto !important;
     padding: 1.15rem 0.9rem 1.4rem !important;
     overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
     box-shadow: 20px 0 50px rgba(15, 23, 42, 0.18);
   }
 
@@ -1258,7 +1263,6 @@ body.app-body {
     transform: translateX(0);
   }
 
-  /* Never leave collapsed styles blocking mobile drawer clicks */
   .app-shell.sidebar-collapsed .student-side {
     width: min(300px, 86vw) !important;
     min-width: min(300px, 86vw) !important;
@@ -1272,10 +1276,16 @@ body.app-body {
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    z-index: 70;
+    z-index: 150;
+    pointer-events: auto;
   }
 
   .sidebar-backdrop[hidden] { display: none !important; }
+
+  .side-link, .side-link .ico {
+    pointer-events: auto !important;
+    touch-action: manipulation;
+  }
 
   .app-top {
     padding: 0.75rem 0.85rem;
@@ -1471,9 +1481,10 @@ body.app-body {
   .sidebar-wrap {
     width: 0 !important;
     min-width: 0 !important;
-    position: static;
+    position: relative;
     height: 0;
     overflow: visible;
+    z-index: 200;
   }
 
   .student-shell .app-shell,
@@ -1485,7 +1496,7 @@ body.app-body {
   .app-shell.sidebar-collapsed .student-side {
     width: min(300px, 86vw) !important;
     min-width: min(300px, 86vw) !important;
-    opacity: 1;
-    pointer-events: auto;
+    opacity: 1 !important;
+    pointer-events: auto !important;
   }
 }

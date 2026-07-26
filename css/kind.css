@@ -665,23 +665,25 @@ input, select, textarea { font: inherit; }
     width: 0 !important;
     min-width: 0 !important;
     height: 0;
-    position: static;
+    position: relative;
     overflow: visible;
-    z-index: 90;
+    z-index: 200;
   }
+  .kind-main { position: relative; z-index: 1; }
   .kind-shell, .kind-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .kind-side {
     position: fixed;
     left: 0; top: 0; bottom: 0;
     width: min(300px, 86vw) !important;
     min-width: min(300px, 86vw) !important;
-    z-index: 90;
+    z-index: 210;
     transform: translateX(-105%);
     transition: transform 0.25s ease;
     opacity: 1 !important;
     pointer-events: auto !important;
     padding: 1rem 0.85rem !important;
     overflow: auto !important;
+    -webkit-overflow-scrolling: touch;
   }
   body.nav-open .kind-side { transform: translateX(0); }
   .kind-shell.sidebar-collapsed .kind-side {
@@ -695,9 +697,10 @@ input, select, textarea { font: inherit; }
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    z-index: 70;
+    z-index: 150;
   }
   .sidebar-backdrop[hidden] { display: none !important; }
+  .kind-nav-btn { touch-action: manipulation; pointer-events: auto !important; }
   .user-meta { display: none; }
   .kind-pill { display: none; }
   .kind-content { padding: 1rem 0.85rem 5rem; }
