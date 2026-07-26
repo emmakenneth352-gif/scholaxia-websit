@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scholaxia Classroom</title>
+    <link rel="icon" type="image/png" href="media/logo.png" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      :root { --purple: #7c3aed; --ink: #0f172a; --muted: #64748b; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: Outfit, system-ui, sans-serif;
+        min-height: 100vh;
+        color: #fff;
+        background: linear-gradient(160deg, #1e1b4b 0%, #4c1d95 45%, #0f172a 100%);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+      header {
+        display: flex; align-items: center; gap: 0.75rem;
+        padding: 1rem 1.25rem; background: rgba(0,0,0,0.25);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      header img { width: 36px; height: 36px; border-radius: 12px; }
+      header strong { display: block; font-size: 1rem; }
+      header span { font-size: 0.78rem; opacity: 0.8; }
+      .spacer { flex: 1; }
+      .badge {
+        background: #fee2e2; color: #b91c1c; border-radius: 999px;
+        padding: 0.3rem 0.7rem; font-size: 0.75rem; font-weight: 800;
+      }
+      button {
+        font: inherit; border: 0; cursor: pointer; border-radius: 12px;
+        min-height: 2.4rem; padding: 0 1rem; font-weight: 800;
+      }
+      .btn-end { background: #ef4444; color: #fff; }
+      .btn-back { background: rgba(255,255,255,0.12); color: #fff; }
+      main {
+        display: grid; place-items: center; padding: 1.5rem;
+      }
+      .stage {
+        width: min(960px, 100%);
+        background: rgba(255,255,255,0.06);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 24px;
+        padding: 1.5rem;
+        display: grid;
+        gap: 1rem;
+      }
+      #videoArea {
+        min-height: 320px;
+        background: #0b1020;
+        border-radius: 18px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        position: relative;
+      }
+      #videoArea video {
+        width: 100%; max-height: 52vh; object-fit: cover; border-radius: 18px;
+      }
+      .status { text-align: center; color: rgba(255,255,255,0.85); line-height: 1.5; }
+      .status strong { display: block; font-size: 1.25rem; margin-bottom: 0.35rem; }
+      footer {
+        padding: 0.85rem 1.25rem; text-align: center;
+        font-size: 0.8rem; opacity: 0.7;
+      }
+      .err { color: #fecaca; font-weight: 700; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="media/logo.png" alt="" />
+      <div>
+        <strong id="classTitle">Live Class</strong>
+        <span id="classSubject">Classroom</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="badge">LIVE</span>
+      <button type="button" class="btn-back" id="backBtn">Exit</button>
+      <button type="button" class="btn-end" id="endBtn">End class</button>
+    </header>
+    <main>
+      <div class="stage">
+        <div id="videoArea">
+          <div class="status" id="statusBox">
+            <strong>Connecting…</strong>
+            Preparing your classroom room.
+          </div>
+        </div>
+        <p class="err" id="errorBox"></p>
+      </div>
+    </main>
+    <footer>Scholaxia Teacher Classroom · Keep this tab open while teaching</footer>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.7.3/dist/livekit-client.umd.min.js"></script>
+    <script src="js/api.js?v=4"></script>
+    <script>
+      (function () {
+        var api = window.ScholaxiaAPI;
+        var raw = localStorage.getItem("live_session");
+        if (!raw) {
+          window.location.href = "teacher.html#live";
+          return;
+        }
+        var session;
+        try { session = JSON.parse(raw); } catch (e) {
+          window.location.href = "teacher.html#live";
+          return;
+        }
+
+        document.getElementById("classTitle").textContent = session.title || "Live Class";
+        document.getElementById("classSubject").textContent = session.subject || "Classroom";
+
+        var room = null;
+        var localStream = null;
+
+        async function endClass() {
+          try {
+            if (session.class_id || session.classId) {
+              await api.api("/api/v1/live-classes/" + encodeURIComponent(session.class_id || session.classId) + "/end", {
+                method: "POST",
+              });
+            }
+          } catch (e) {}
+          cleanup();
+          localStorage.removeItem("live_session");
+          window.location.href = "teacher.html#live";
+        }
+
+        function cleanup() {
+          try { if (room) room.disconnect(); } catch (e) {}
+          try {
+            if (localStream) localStream.getTracks().forEach(function (t) { t.stop(); });
+          } catch (e) {}
+        }
+
+        document.getElementById("backBtn").onclick = function () {
+          cleanup();
+          window.location.href = "teacher.html#live";
+        };
+        document.getElementById("endBtn").onclick = endClass;
+
+        async function connect() {
+          var status = document.getElementById("statusBox");
+          var err = document.getElementById("errorBox");
+          var area = document.getElementById("videoArea");
+          try {
+            // Local camera preview always (so teacher sees themselves)
+            localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            var video = document.createElement("video");
+            video.autoplay = true;
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = localStream;
+            area.innerHTML = "";
+            area.appendChild(video);
+
+            var url = session.livekit_url;
+            var token = session.livekit_token;
+            if (url && token && window.LivekitClient) {
+              room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+              await room.connect(url, token);
+              await room.localParticipant.setCameraEnabled(true);
+              await room.localParticipant.setMicrophoneEnabled(true);
+              status.innerHTML = "<strong>You're live</strong>Connected to students via LiveKit.";
+            } else {
+              status.innerHTML =
+                "<strong>Class is live</strong>Camera is on. LiveKit room token was unavailable — students can still join from their apps.";
+              area.appendChild(status);
+            }
+          } catch (e) {
+            err.textContent = e.message || "Could not start camera / room.";
+            status.innerHTML =
+              "<strong>Classroom ready</strong>Your class is marked live on Scholaxia. Allow camera/mic permissions and refresh if needed.";
+          }
+        }
+
+        connect();
+        window.addEventListener("beforeunload", cleanup);
+      })();
+    </script>
+  </body>
+</html>
