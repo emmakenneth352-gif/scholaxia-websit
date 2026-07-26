@@ -89,11 +89,12 @@ input, select, textarea { font: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .kind-brand img {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 14px;
   object-fit: cover;
-  box-shadow: 0 8px 16px rgba(124, 58, 237, 0.25);
+  background: #000;
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.2);
 }
 .kind-brand strong { display: block; font-size: 0.95rem; color: var(--purple); }
 .kind-brand span { font-size: 0.75rem; color: var(--muted); font-weight: 700; }
@@ -660,17 +661,35 @@ input, select, textarea { font: inherit; }
 @media (max-width: 900px) {
   .mobile-menu-btn, .back-btn:not([hidden]) { display: inline-grid; }
   .sidebar-edge-toggle { display: none; }
-  .sidebar-wrap { width: 0; min-width: 0; height: 0; overflow: visible; position: static; }
+  .sidebar-wrap {
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 0;
+    position: static;
+    overflow: visible;
+    z-index: 90;
+  }
   .kind-shell, .kind-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .kind-side {
     position: fixed;
     left: 0; top: 0; bottom: 0;
-    width: min(300px, 86vw);
-    z-index: 80;
+    width: min(300px, 86vw) !important;
+    min-width: min(300px, 86vw) !important;
+    z-index: 90;
     transform: translateX(-105%);
     transition: transform 0.25s ease;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    padding: 1rem 0.85rem !important;
+    overflow: auto !important;
   }
   body.nav-open .kind-side { transform: translateX(0); }
+  .kind-shell.sidebar-collapsed .kind-side {
+    width: min(300px, 86vw) !important;
+    min-width: min(300px, 86vw) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
   .sidebar-backdrop {
     display: block;
     position: fixed;

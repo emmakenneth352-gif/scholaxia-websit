@@ -64,7 +64,11 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
   border-bottom: 1px solid var(--line);
 }
 .side-brand img {
-  width: 40px; height: 40px; border-radius: 14px; object-fit: cover;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #000;
   box-shadow: 0 8px 16px rgba(124,58,237,0.25);
 }
 .side-brand strong { display: block; color: var(--purple); font-size: 0.95rem; }
@@ -435,13 +439,29 @@ code.join-code {
 @media (max-width: 900px) {
   .mobile-menu-btn, .back-btn:not([hidden]) { display: inline-grid; }
   .sidebar-edge-toggle { display: none; }
-  .sidebar-wrap { width: 0; min-width: 0; height: 0; position: static; }
+  .sidebar-wrap {
+    width: 0 !important;
+    min-width: 0 !important;
+    height: 0;
+    position: static;
+    overflow: visible;
+    z-index: 90;
+  }
   .teacher-shell, .teacher-shell.sidebar-collapsed { grid-template-columns: 1fr; }
   .teacher-side {
-    position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw);
-    z-index: 80; transform: translateX(-105%); transition: transform 0.25s ease;
+    position: fixed; left: 0; top: 0; bottom: 0; width: min(300px, 86vw) !important;
+    min-width: min(300px, 86vw) !important;
+    z-index: 90; transform: translateX(-105%); transition: transform 0.25s ease;
+    opacity: 1 !important; pointer-events: auto !important;
+    padding: 1rem 0.85rem !important; overflow: auto !important;
   }
   body.nav-open .teacher-side { transform: translateX(0); }
+  .teacher-shell.sidebar-collapsed .teacher-side {
+    width: min(300px, 86vw) !important;
+    min-width: min(300px, 86vw) !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
   .sidebar-backdrop {
     display: block; position: fixed; inset: 0;
     background: rgba(15,23,42,0.45); z-index: 70;

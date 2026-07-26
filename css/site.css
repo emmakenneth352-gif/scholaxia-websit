@@ -83,14 +83,18 @@ video {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.35rem;
-  padding: 0 0.95rem;
-  border-radius: 8px;
-  background: var(--purple);
-  color: #fff;
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  padding: 0;
+  border-radius: 10px;
+  background: #000;
+  overflow: hidden;
+  line-height: 0;
+}
+.logo img {
+  height: 42px;
+  width: auto;
+  max-width: 168px;
+  object-fit: contain;
+  display: block;
 }
 
 .nav {
@@ -198,6 +202,8 @@ video {
   padding: 1rem var(--pad) 1.25rem;
   border-bottom: 1px solid var(--line);
   background: #fff;
+  position: relative;
+  z-index: 50;
 }
 
 .mobile-nav a {
@@ -1070,24 +1076,18 @@ video {
 .footer-logo {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  color: #fff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.35rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  text-transform: lowercase;
   margin-bottom: 0.9rem;
+  line-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
 }
-
-.footer-logo-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: rgba(124, 58, 237, 0.25);
-  color: #c4b5fd;
+.footer-logo img {
+  height: 72px;
+  width: auto;
+  max-width: 220px;
+  object-fit: contain;
+  display: block;
 }
 
 .footer-about p,

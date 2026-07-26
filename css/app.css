@@ -65,18 +65,19 @@ button { font: inherit; cursor: pointer; border: 0; background: none; color: inh
 }
 
 .side-logo {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
   object-fit: cover;
   margin-bottom: 0.75rem;
   flex-shrink: 0;
+  background: #000;
 }
 
 .student-side .side-logo {
   margin-bottom: 0;
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
 }
 
 .side-nav {
