@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Scholaxia Classroom</title>
-    <link rel="icon" type="image/png" href="media/logo.png" />
+    <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&display=swap" rel="stylesheet" />
     <style>
       :root { --purple: #7c3aed; --ink: #0f172a; --muted: #64748b; }
@@ -22,7 +22,7 @@
         padding: 1rem 1.25rem; background: rgba(0,0,0,0.25);
         border-bottom: 1px solid rgba(255,255,255,0.08);
       }
-      header img { width: 36px; height: 36px; border-radius: 12px; }
+      header img { height: 42px; width: auto; max-width: 160px; object-fit: contain; border-radius: 8px; background: #fff; padding: 0.15rem 0.3rem; }
       header strong { display: block; font-size: 1rem; }
       header span { font-size: 0.78rem; opacity: 0.8; }
       .spacer { flex: 1; }
@@ -71,7 +71,7 @@
   </head>
   <body>
     <header>
-      <img src="media/logo.png" alt="" />
+      <img src="media/logo-main.png" alt="Scholaxia" />
       <div>
         <strong id="classTitle">Live Class</strong>
         <span id="classSubject">Classroom</span>

@@ -88,13 +88,16 @@ input, select, textarea { font: inherit; }
   padding: 0.35rem 0.4rem 0.85rem;
   border-bottom: 1px solid var(--line);
 }
-.kind-brand img {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  object-fit: cover;
-  background: #000;
-  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.2);
+.kind-brand img,
+.kind-brand .side-logo-main {
+  width: auto;
+  height: 46px;
+  max-width: 150px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: #fff;
+  padding: 0.15rem 0.3rem;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.08);
 }
 .kind-brand strong { display: block; font-size: 0.95rem; color: var(--purple); }
 .kind-brand span { font-size: 0.75rem; color: var(--muted); font-weight: 700; }
