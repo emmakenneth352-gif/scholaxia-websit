@@ -325,19 +325,6 @@ video {
   color: #fff;
 }
 
-.hero-brand {
-  height: clamp(56px, 8vw, 78px);
-  width: auto;
-  max-width: min(320px, 88vw);
-  object-fit: contain;
-  margin-bottom: 1.35rem;
-  background: rgba(255, 255, 255, 0.95);
-  padding: 0.45rem 0.7rem;
-  border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
-  animation: brandPop 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
 @keyframes brandPop {
   from { opacity: 0; transform: translateY(16px) scale(0.96); }
   to { opacity: 1; transform: translateY(0) scale(1); }
