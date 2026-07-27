@@ -78,6 +78,10 @@
     $("tabSignup").classList.toggle("is-active", !login);
     $("tabLogin").setAttribute("aria-selected", login ? "true" : "false");
     $("tabSignup").setAttribute("aria-selected", login ? "false" : "true");
+    var tabs = document.querySelector(".mode-tabs");
+    if (tabs) tabs.classList.toggle("is-signup", !login);
+    var title = $("authTitle");
+    if (title) title.textContent = login ? "Welcome back" : "Create account";
 
     setVisible($("formLogin"), login);
     setVisible($("formSignup"), !login);
