@@ -6,8 +6,8 @@
     <title>Scholaxia — Student</title>
     <link rel="icon" type="image/png" href="media/logo.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/app.css?v=7" />
-    <link rel="stylesheet" href="css/student-pretty.css?v=7" />
+    <link rel="stylesheet" href="css/app.css?v=8" />
+    <link rel="stylesheet" href="css/student-pretty.css?v=8" />
   </head>
   <body class="app-body student-shell">
     <div class="app-shell" id="appShell">
@@ -413,23 +413,47 @@
                 <div>
                   <span class="hub-kicker">Campus feed</span>
                   <h2>Community</h2>
-                  <p>Share wins, ask questions, and stay updated with other Scholaxia students.</p>
+                  <p>General chat, study groups, and teacher announcements — all in one place.</p>
                 </div>
                 <button type="button" class="btn btn-mini" data-refresh="community">⟲ Refresh</button>
               </header>
 
+              <div class="comm-tabs" id="communityTabs" role="tablist">
+                <button type="button" class="comm-tab is-active" data-comm-tab="general" role="tab" aria-selected="true"># general</button>
+                <button type="button" class="comm-tab" data-comm-tab="groups" role="tab" aria-selected="false"># groups</button>
+                <button type="button" class="comm-tab" data-comm-tab="announcements" role="tab" aria-selected="false"># announcements</button>
+              </div>
+
               <div class="community-layout">
-                <form class="composer-card" id="communityPostForm">
-                  <div class="composer-avatar" id="communityAv">S</div>
-                  <div class="composer-body">
-                    <textarea id="communityPostInput" rows="3" placeholder="What’s on your mind? Share a tip, question, or update…"></textarea>
-                    <div class="composer-foot">
-                      <span class="muted">Be kind · Keep it study-related</span>
-                      <button type="submit" class="btn btn-primary">Post update</button>
+                <div class="comm-panel is-on" id="commPanelGeneral">
+                  <form class="composer-card" id="communityPostForm">
+                    <div class="composer-avatar" id="communityAv">S</div>
+                    <div class="composer-body">
+                      <textarea id="communityPostInput" rows="3" placeholder="What’s on your mind? Share a tip, question, or update…"></textarea>
+                      <div class="composer-foot">
+                        <span class="muted">Posting to #general · Be kind · Keep it study-related</span>
+                        <button type="submit" class="btn btn-primary">Post update</button>
+                      </div>
                     </div>
+                  </form>
+                  <div class="feed-list" id="communityFeed"><div class="loading-state">Loading feed…</div></div>
+                </div>
+
+                <div class="comm-panel" id="commPanelGroups" hidden>
+                  <div class="comm-groups-head">
+                    <div>
+                      <h3>Study groups</h3>
+                      <p class="muted">Join a squad or create one for your subjects.</p>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-mini" data-goto="groups">Open Groups →</button>
                   </div>
-                </form>
-                <div class="feed-list" id="communityFeed"><div class="loading-state">Loading feed…</div></div>
+                  <div class="groups-grid" id="communityTabGroups"><div class="loading-state">Loading groups…</div></div>
+                </div>
+
+                <div class="comm-panel" id="commPanelAnnouncements" hidden>
+                  <p class="comm-ann-note">Teacher &amp; school announcements (read-only for students).</p>
+                  <div class="feed-list" id="communityAnnouncements"><div class="loading-state">Loading announcements…</div></div>
+                </div>
               </div>
             </div>
           </section>
@@ -502,10 +526,23 @@
             <div class="panel">
               <h2>Contact</h2>
               <p>Need help with your account, subscription, or classes?</p>
-              <div class="quick-grid">
-                <div class="quick">support@scholaxia.com</div>
-                <div class="quick">WhatsApp support</div>
-                <div class="quick">Report a bug</div>
+              <div class="contact-cards">
+                <a class="contact-card" href="mailto:support@scholaxia.com">
+                  <strong>Email</strong>
+                  <span>support@scholaxia.com</span>
+                </a>
+                <a class="contact-card" href="tel:+2349021661674">
+                  <strong>Phone</strong>
+                  <span>0902 166 1674</span>
+                </a>
+                <a class="contact-card" href="tel:+2349079343919">
+                  <strong>Phone</strong>
+                  <span>0907 934 3919</span>
+                </a>
+                <a class="contact-card" href="https://wa.me/2349021661674?text=Hello%20Scholaxia%2C%20I%20need%20help." target="_blank" rel="noopener">
+                  <strong>WhatsApp</strong>
+                  <span>Chat with support</span>
+                </a>
               </div>
               <form class="panel-card" id="contactForm">
                 <div class="form-row-2">
@@ -703,8 +740,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=7"></script>
-    <script src="js/paystack.js?v=7"></script>
-    <script src="js/student.js?v=7"></script>
+    <script src="js/api.js?v=8"></script>
+    <script src="js/paystack.js?v=8"></script>
+    <script src="js/student.js?v=8"></script>
   </body>
 </html>

@@ -1063,6 +1063,101 @@ body.app-body {
 
 /* Community */
 .community-layout { display: grid; gap: 1rem; }
+
+.comm-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.comm-tab {
+  min-height: 2.35rem;
+  padding: 0 0.95rem;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.88rem;
+  color: #64748b;
+  background: transparent;
+}
+.comm-tab:hover { background: #f5f3ff; color: var(--purple-dark); }
+.comm-tab.is-active {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  box-shadow: 0 8px 16px rgba(124, 58, 237, 0.25);
+}
+.comm-panel[hidden] { display: none !important; }
+.comm-groups-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+.comm-groups-head h3 { font-size: 1.05rem; }
+.comm-ann-note {
+  color: #64748b;
+  font-weight: 700;
+  font-size: 0.88rem;
+  margin-bottom: 0.75rem;
+}
+
+.plan-sessions {
+  color: var(--purple-dark) !important;
+  font-weight: 800 !important;
+  margin: 0.35rem 0 0.55rem !important;
+}
+.plan-subjects {
+  list-style: none;
+  display: grid;
+  gap: 0.28rem;
+  margin: 0 0 0.85rem;
+  padding: 0;
+}
+.plan-subjects li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #475569;
+  line-height: 1.35;
+}
+.plan-subjects li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: #7c3aed;
+  font-weight: 900;
+}
+
+.contact-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0 1.25rem;
+}
+.contact-card {
+  display: grid;
+  gap: 0.2rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1rem;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.04);
+}
+.contact-card strong { color: var(--purple-dark); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.contact-card span { font-weight: 800; font-size: 1rem; }
+.contact-card:hover { border-color: #c4b5fd; background: #faf5ff; }
+
+@media (max-width: 700px) {
+  .contact-cards { grid-template-columns: 1fr; }
+}
 .composer-card {
   display: grid;
   grid-template-columns: auto 1fr;

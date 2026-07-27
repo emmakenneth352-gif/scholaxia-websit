@@ -83,18 +83,22 @@ video {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 0.15rem 0.25rem;
   border-radius: 10px;
-  background: #000;
+  background: transparent;
   overflow: hidden;
   line-height: 0;
 }
 .logo img {
-  height: 42px;
+  height: 48px;
   width: auto;
-  max-width: 168px;
+  max-width: 200px;
   object-fit: contain;
   display: block;
+}
+.logo-main img {
+  height: 52px;
+  max-width: 220px;
 }
 
 .nav {
@@ -1080,14 +1084,50 @@ video {
   line-height: 0;
   border-radius: 12px;
   overflow: hidden;
-  background: #000;
+  background: #fff;
+  padding: 0.35rem 0.5rem;
 }
 .footer-logo img {
-  height: 72px;
+  height: 56px;
   width: auto;
   max-width: 220px;
   object-fit: contain;
   display: block;
+}
+.footer-phones {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.9rem;
+}
+.footer-phones a {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.footer-phones a:hover { color: #fff; }
+
+.affiliate-section {
+  padding: 3.5rem var(--pad) 2rem;
+}
+.affiliate-card {
+  max-width: 720px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 1.5rem;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+}
+.affiliate-card p {
+  color: #4b5563;
+  line-height: 1.55;
+  font-weight: 600;
+}
+.affiliate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
 }
 
 .footer-about p,

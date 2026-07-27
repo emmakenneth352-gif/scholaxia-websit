@@ -1502,6 +1502,55 @@
      SUBSCRIPTION
      ===================================================================== */
 
+  function planSessionsLabel(p) {
+    var sessions = Number(p.sessions || 0);
+    var billing = String(p.billing || "");
+    var cat = String(p.category || "");
+    var isWeekly =
+      billing === "holiday" ||
+      billing === "monthly" ||
+      /holiday|nursery|primary|secondary|exam/i.test(cat);
+    if (sessions === 1) return "1 session";
+    if (isWeekly && sessions > 1) return sessions + " sessions weekly";
+    return sessions + " sessions";
+  }
+
+  var PLAN_SUBJECTS_FALLBACK = {
+    holiday_primary: ["Mathematics", "English Language", "Phonics", "Moral values"],
+    holiday_jss: ["Mathematics", "English Language", "Phonics", "French", "Computer"],
+    holiday_ss_science: ["Mathematics", "English", "Physics", "Chemistry", "Biology"],
+    holiday_ss_art: ["Mathematics", "English", "Literature-in-English", "CRS/IRS", "Government"],
+    holiday_ss_commercial: ["Mathematics", "English", "Financial Accounting", "Commerce", "Economics"],
+  };
+
+  function planSubjectsHtml(p) {
+    var features = Array.isArray(p.features) ? p.features : [];
+    var subjects = features.filter(function (f) {
+      return f && !/session|tutor|notes|save|questions|and answers/i.test(String(f));
+    });
+    var planId = String(p.id || p.plan_id || "");
+    if (!subjects.length && PLAN_SUBJECTS_FALLBACK[planId]) {
+      subjects = PLAN_SUBJECTS_FALLBACK[planId].slice();
+    }
+    if (!subjects.length && p.max_subjects) {
+      subjects = [
+        p.max_subjects === "All core subjects" || p.max_subjects >= 99
+          ? "All core subjects"
+          : "Up to " + p.max_subjects + " subjects",
+      ];
+    }
+    if (!subjects.length) return "";
+    return (
+      '<ul class="plan-subjects">' +
+      subjects
+        .map(function (s) {
+          return "<li>" + esc(s) + "</li>";
+        })
+        .join("") +
+      "</ul>"
+    );
+  }
+
   function loadSubscription() {
     var wrap = $("subscriptionPlans");
     var banner = $("activePlanBanner");
@@ -1535,6 +1584,11 @@
               var id = p.id || p.plan_id;
               var isActive = active && (active.id === id || active.plan_id === id);
               var price = p.price != null ? Number(p.price) : null;
+              var mins = p.session_minutes
+                ? p.session_minutes >= 60
+                  ? p.session_minutes / 60 + " hr each"
+                  : p.session_minutes + " min each"
+                : "";
               return (
                 '<div class="card plan-card' +
                 (isActive ? " is-active" : "") +
@@ -1544,9 +1598,12 @@
                 "</span><h4>" +
                 esc(p.name || p.title || "Plan") +
                 "</h4>" +
-                "<p>" +
-                esc(p.description || (p.sessions ? p.sessions + " sessions" : "Live class access")) +
+                '<p class="plan-sessions"><strong>' +
+                esc(planSessionsLabel(p)) +
+                "</strong>" +
+                (mins ? " · " + esc(mins) : "") +
                 "</p>" +
+                planSubjectsHtml(p) +
                 '<div class="card-foot"><strong>' +
                 (price != null ? "₦" + price.toLocaleString("en-NG") : "—") +
                 "</strong>" +
@@ -2183,19 +2240,61 @@
   }
 
   /* =====================================================================
-     COMMUNITY
+     COMMUNITY — General / Groups / Announcements
      ===================================================================== */
 
+  var communityTab = "general";
+  var communityGeneralChannelId = null;
+
+  function setCommunityTab(tab) {
+    communityTab = tab || "general";
+    document.querySelectorAll(".comm-tab").forEach(function (b) {
+      var on = b.getAttribute("data-comm-tab") === communityTab;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    var g = $("commPanelGeneral");
+    var gr = $("commPanelGroups");
+    var a = $("commPanelAnnouncements");
+    if (g) {
+      g.hidden = communityTab !== "general";
+      g.classList.toggle("is-on", communityTab === "general");
+    }
+    if (gr) {
+      gr.hidden = communityTab !== "groups";
+      gr.classList.toggle("is-on", communityTab === "groups");
+    }
+    if (a) {
+      a.hidden = communityTab !== "announcements";
+      a.classList.toggle("is-on", communityTab === "announcements");
+    }
+    if (communityTab === "general") loadCommunityGeneral();
+    else if (communityTab === "groups") loadCommunityGroupsTab();
+    else if (communityTab === "announcements") loadCommunityAnnouncementsTab();
+  }
+
   function loadCommunity() {
+    setCommunityTab(communityTab || "general");
+  }
+
+  function loadCommunityGeneral() {
     var wrap = $("communityFeed");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading feed…");
-    api
-      .api("/api/v1/community/feed?limit=50")
-      .then(function (data) {
-        var items = firstArray(data, ["items", "results", "posts", "feed"]);
+    wrap.innerHTML = loadingHtml("Loading #general…");
+    Promise.all([
+      api.api("/api/v1/community/channels").catch(function () { return []; }),
+      api.api("/api/v1/community/feed?limit=50").catch(function (err) { throw err; }),
+    ])
+      .then(function (pair) {
+        var channels = Array.isArray(pair[0]) ? pair[0] : [];
+        var general = channels.find(function (c) {
+          return c.type === "general";
+        });
+        if (general) communityGeneralChannelId = general.id;
+        var data = pair[1];
+        var items = Array.isArray(data) ? data : firstArray(data, ["items", "results", "posts", "feed"]);
         if (!items.length) {
-          wrap.innerHTML = emptyHtml("💬", "No posts yet. Be the first to share something!");
+          wrap.innerHTML = emptyHtml("💬", "No posts in #general yet. Be the first to share something!");
           return;
         }
         wrap.innerHTML = items.map(renderCommunityPost).join("");
@@ -2205,8 +2304,64 @@
       });
   }
 
+  function loadCommunityAnnouncementsTab() {
+    var wrap = $("communityAnnouncements");
+    if (!wrap) return;
+    wrap.innerHTML = loadingHtml("Loading announcements…");
+    api
+      .api("/api/v1/community/announcements?limit=40")
+      .then(function (data) {
+        var items = Array.isArray(data) ? data : firstArray(data, ["items", "results", "posts", "announcements"]);
+        if (!items.length) {
+          wrap.innerHTML = emptyHtml("📢", "No announcements yet. Teachers post updates here.");
+          return;
+        }
+        wrap.innerHTML = items.map(renderCommunityPost).join("");
+      })
+      .catch(function (err) {
+        wrap.innerHTML = errorHtml(errMsg(err), "community");
+      });
+  }
+
+  function loadCommunityGroupsTab() {
+    var wrap = $("communityTabGroups");
+    if (!wrap) return;
+    wrap.innerHTML = loadingHtml("Loading groups…");
+    Promise.all([
+      api.api("/api/v1/student-groups/mine").catch(function () { return []; }),
+      api.api("/api/v1/student-groups/?is_community_listed=true").catch(function () { return []; }),
+    ]).then(function (pair) {
+      var mine = firstArray(pair[0], ["items", "groups", "results"]);
+      if (Array.isArray(pair[0])) mine = pair[0];
+      var discover = firstArray(pair[1], ["items", "groups", "results"]);
+      if (Array.isArray(pair[1])) discover = pair[1];
+      var cards = []
+        .concat(
+          mine.map(function (g) {
+            return renderGroupCard(g, true);
+          })
+        )
+        .concat(
+          discover.map(function (g) {
+            return renderGroupCard(g, false);
+          })
+        );
+      wrap.innerHTML = cards.length
+        ? cards.join("")
+        : emptyHtml("👥", "No groups yet. Open Groups to create or join one.");
+    }).catch(function (err) {
+      wrap.innerHTML = errorHtml(errMsg(err), "community");
+    });
+  }
+
   function renderCommunityPost(p) {
     var name = p.author_name || p.full_name || (p.author && p.author.full_name) || "Student";
+    var media = "";
+    if (p.media_url && p.media_type === "audio") {
+      media = '<audio controls src="' + esc(p.media_url) + '" style="width:100%;margin-top:0.5rem"></audio>';
+    } else if (p.media_url && /image/i.test(String(p.media_type || ""))) {
+      media = '<img src="' + esc(p.media_url) + '" alt="" style="max-width:100%;border-radius:12px;margin-top:0.5rem" />';
+    }
     return (
       '<div class="feed-post"><div class="feed-post-head"><div class="feed-avatar">' +
       esc(name.charAt(0).toUpperCase()) +
@@ -2216,8 +2371,18 @@
       esc(fmtDate(p.created_at)) +
       "</span></div></div><div class=\"feed-post-body\">" +
       esc(p.content || p.text || "") +
+      media +
       "</div></div>"
     );
+  }
+
+  var communityTabs = $("communityTabs");
+  if (communityTabs) {
+    communityTabs.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-comm-tab]");
+      if (!btn) return;
+      setCommunityTab(btn.getAttribute("data-comm-tab"));
+    });
   }
 
   var communityPostForm = $("communityPostForm");
@@ -2229,12 +2394,30 @@
       if (!content) return;
       var btn = communityPostForm.querySelector("button[type=submit]");
       btn.disabled = true;
-      api
-        .api("/api/v1/community/posts", { method: "POST", body: { content: content } })
+
+      function doPost(channelId) {
+        var body = { content: content, visibility: "everyone" };
+        if (channelId) body.channel_id = channelId;
+        return api.api("/api/v1/community/posts", { method: "POST", body: body });
+      }
+
+      var ready = communityGeneralChannelId
+        ? Promise.resolve(communityGeneralChannelId)
+        : api.api("/api/v1/community/channels").then(function (channels) {
+            var general = (channels || []).find(function (c) {
+              return c.type === "general";
+            });
+            if (general) communityGeneralChannelId = general.id;
+            return communityGeneralChannelId;
+          });
+
+      ready
+        .then(function (channelId) {
+          return doPost(channelId);
+        })
         .then(function () {
           input.value = "";
-          loadedPages.community = false;
-          loadCommunity();
+          loadCommunityGeneral();
         })
         .catch(function (err) {
           alert("Could not post: " + errMsg(err));
