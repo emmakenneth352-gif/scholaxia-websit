@@ -19,7 +19,11 @@
   var MAX_SIDEBAR_VIDEOS = 9;
   var JOIN_TIMEOUT_MS = 45000;
   var PUBLISH_TIMEOUT_MS = 35000;
-  var AUDIO_CAPTURE_OPTS = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  var AUDIO_CAPTURE_OPTS = {
+    echoCancellation: { ideal: true },
+    noiseSuppression: { ideal: true },
+    autoGainControl: { ideal: true },
+  };
 
   function lk() {
     return window.LivekitClient || null;
@@ -1038,6 +1042,10 @@
           if (ov2) ov2.classList.remove("view-only");
         }
         await transitionHostToLiveBroadcast();
+        // Stop leftover preview mic/cam so browser AEC is not fighting a second capture (echo).
+        if (typeof clearLocalPreviewStream === "function") {
+          clearLocalPreviewStream();
+        }
         // Always publish mic so students can hear the teacher.
         try { await setMic(true); } catch (e) {}
         if (typeof hideVideoPlaceholder === "function") hideVideoPlaceholder();

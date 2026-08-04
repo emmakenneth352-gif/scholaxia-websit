@@ -19,6 +19,7 @@ var micMonitorCtx = null;
 var selfHearAudio = null;
 var classAutoEndTimer = null;
 var raisedHands = {};
+window.raisedHands = raisedHands;
 var wsStudentCount = 0;
 var API_WS = (typeof window !== "undefined" && window.API_WS)
   ? window.API_WS
@@ -1078,20 +1079,38 @@ function liveKitRosterFallback() {
 
 function applyStudentRoster(students, teacherName, activeCount) {
   var list = students || [];
+  var remote = liveKitRosterFallback();
+  if (remote.length) {
+    var byId = {};
+    list.forEach(function (s) {
+      if (s && s.student_id) byId[String(s.student_id)] = s;
+    });
+    remote.forEach(function (r) {
+      if (r && r.student_id && !byId[String(r.student_id)]) byId[String(r.student_id)] = r;
+    });
+    list = Object.keys(byId).map(function (k) { return byId[k]; });
+  }
+  var count = Math.max(
+    list.length,
+    activeCount != null ? Number(activeCount) || 0 : 0,
+    remote.length,
+    wsStudentCount || 0
+  );
   if (isTeacherRole()) {
     renderClassroomStudents(list);
+    // Keep header honest even when render path had zero cards briefly.
+    updateParticipantsHeader(count, teacherName || liveSession.teacher_name || "Teacher");
     loadClassAttendance();
   } else {
     renderParticipantsForStudent(list);
     updateParticipantsHeader(
-      activeCount != null ? activeCount : list.length,
+      count,
       teacherName || liveSession.teacher_name || liveSession.teacher || "Teacher"
     );
   }
   var badge = document.getElementById("audience-badge");
-  if (badge) {
-    var n = activeCount != null ? Number(activeCount) + 1 : list.length + 1;
-    badge.textContent = n + " in class";
+  if (badge && !isTeacherRole()) {
+    badge.textContent = (count + 1) + " in class";
     badge.classList.remove("hidden");
   }
 }
@@ -1173,7 +1192,7 @@ function startClassroomStudentsPoll() {
   loadClassroomStudents(true);
   classStudentsPollTimer = setInterval(function () {
     loadClassroomStudents(true);
-  }, 12000);
+  }, 5000);
 }
 
 var studentMicPollTimer = null;
@@ -1484,9 +1503,39 @@ function commitBoardLine() {
   if (inp) inp.value = "";
   board.liveText = "";
   board.textY += board.lineHeight;
+  ensureBoardCanvasFitsContent();
   redrawBoard();
+  scrollBoardToTypingCursor();
   sendBoardEvent("text_stream", { x: board.textX, y: board.textY, text: "", size: board.fontSize });
   if (inp) inp.focus();
+}
+
+function ensureBoardCanvasFitsContent() {
+  if (!board.canvas) return;
+  var need = Math.max(board.textY + board.lineHeight * 3, board.canvas.height || 0);
+  var minH = 200;
+  var stage = document.getElementById("video-stage");
+  if (stage) {
+    var rect = stage.getBoundingClientRect();
+    minH = Math.max(rect.height - (board.canDraw ? 160 : 0), 200);
+  }
+  var nextH = Math.max(minH, need);
+  if (nextH > board.canvas.height) {
+    board.canvas.height = nextH;
+    if (board.ctx) {
+      board.ctx.lineCap = "round";
+      board.ctx.lineJoin = "round";
+      board.ctx.strokeStyle = "#e8f5ec";
+      board.ctx.lineWidth = 3;
+    }
+  }
+}
+
+function scrollBoardToTypingCursor() {
+  var scroller = document.getElementById("board-scroll");
+  if (!scroller || !board.canvas) return;
+  var target = Math.max(0, board.textY - scroller.clientHeight * 0.55);
+  scroller.scrollTop = target;
 }
 
 function resizeBoardCanvas() {
@@ -1495,7 +1544,8 @@ function resizeBoardCanvas() {
   if (!stage) return;
   var rect = stage.getBoundingClientRect();
   board.canvas.width = rect.width;
-  board.canvas.height = Math.max(rect.height - (board.canDraw ? 160 : 0), 200);
+  var minH = Math.max(rect.height - (board.canDraw ? 160 : 0), 200);
+  board.canvas.height = Math.max(minH, board.textY + board.lineHeight * 3, board.canvas.height || 0);
   if (board.ctx) {
     board.ctx.lineCap = "round";
     board.ctx.lineJoin = "round";
@@ -1503,6 +1553,7 @@ function resizeBoardCanvas() {
     board.ctx.lineWidth = 3;
   }
   redrawBoard();
+  scrollBoardToTypingCursor();
 }
 
 function boardCoords(ev) {
@@ -1725,14 +1776,21 @@ function handleBoardMessage(msg) {
   if (msg.action === "text") {
     applyBoardText(msg.data, true);
     board.liveText = "";
+    if (msg.data && typeof msg.data.y === "number") {
+      board.textY = Math.max(board.textY, msg.data.y + board.lineHeight);
+    }
+    ensureBoardCanvasFitsContent();
     redrawBoard();
+    scrollBoardToTypingCursor();
     return;
   }
   if (msg.action === "text_stream") {
     board.textX = msg.data.x;
     board.textY = msg.data.y;
     board.liveText = msg.data.text || "";
+    ensureBoardCanvasFitsContent();
     redrawBoard();
+    scrollBoardToTypingCursor();
     return;
   }
   if (msg.action === "image") {
@@ -1825,9 +1883,14 @@ function connectChat() {
         if (isTeacherRole()) {
           addRaisedHand(msg.user_id, msg.name);
           addChatMessage("", (msg.name || "A student") + " raised their hand.", true);
+          showClassroomToast((msg.name || "A student") + " raised their hand");
+          var panel = document.getElementById("raise-hand-panel");
+          if (panel) panel.classList.remove("hidden");
         }
       } else if (msg.event === "lower_hand") {
         removeRaisedHand(msg.user_id);
+      } else if (msg.event === "reaction") {
+        showReactionBurst(msg.emoji || "👍", msg.name || "");
       } else if (msg.event === "mic_access_granted") {
         if (!isTeacherRole() && isMicEventForMe(msg) && typeof enableStudentMic === "function") {
           enableStudentMic().catch(function (err) {
@@ -1898,7 +1961,10 @@ function sendChatMessage(e) {
 }
 
 function raiseHand() {
-  if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) return;
+  if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) {
+    showClassroomToast("Chat still connecting — try raise hand again", true);
+    return;
+  }
   if (isTeacherRole()) {
     addChatMessage("", "Students raise their hand — you are the teacher.", true);
     return;
@@ -1907,6 +1973,48 @@ function raiseHand() {
   addChatMessage("", "You raised your hand. Wait for the teacher to allow you to speak.", true);
   showClassroomToast("Hand raised — waiting for teacher");
 }
+
+function sendReaction(emoji) {
+  if (!emoji) return;
+  if (!liveSocket || liveSocket.readyState !== WebSocket.OPEN) {
+    showClassroomToast("Chat still connecting — try again", true);
+    return;
+  }
+  var payload = {
+    event: "reaction",
+    emoji: emoji,
+    name: isTeacherRole() ? (liveSession && liveSession.teacher_name) || "Teacher" : getStudentName(),
+  };
+  liveSocket.send(JSON.stringify(payload));
+  showReactionBurst(emoji, payload.name);
+}
+
+function showReactionBurst(emoji, name) {
+  var stage = document.getElementById("video-stage") || document.getElementById("reaction-overlay");
+  var overlay = document.getElementById("reaction-overlay");
+  if (!overlay && stage) {
+    overlay = document.createElement("div");
+    overlay.id = "reaction-overlay";
+    overlay.className = "reaction-overlay";
+    stage.appendChild(overlay);
+  }
+  if (!overlay) return;
+  var el = document.createElement("div");
+  el.className = "reaction-burst";
+  el.textContent = emoji || "👍";
+  el.style.left = (18 + Math.random() * 64) + "%";
+  el.style.bottom = (12 + Math.random() * 30) + "%";
+  if (name) el.title = name;
+  overlay.appendChild(el);
+  setTimeout(function () {
+    try { el.remove(); } catch (e) { /* ignore */ }
+  }, 1700);
+  if (name) {
+    addChatMessage("", (name || "Someone") + " reacted " + (emoji || ""), true);
+  }
+}
+window.sendReaction = sendReaction;
+window.showReactionBurst = showReactionBurst;
 
 function showVideoPlaceholder(text) {
   var ph = document.getElementById("video-placeholder");
@@ -1942,8 +2050,18 @@ async function startLocalPreviewOnly() {
   try {
     localPreviewStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: { echoCancellation: true, noiseSuppression: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
     });
+    // Never play local mic into speakers — that causes teacher echo.
+    try {
+      localPreviewStream.getAudioTracks().forEach(function (t) {
+        t.enabled = true;
+      });
+    } catch (e) { /* ignore */ }
     window.localPreviewStream = localPreviewStream;
     if (LiveClassMedia.isJoined()) {
       localPreviewStream.getTracks().forEach(function (t) { t.stop(); });
