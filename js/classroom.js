@@ -110,10 +110,19 @@ var board = {
   textX: 24,
   textY: 48,
   liveText: "",
+  liveTextId: "live-line",
   fontSize: 28,
   lineHeight: 36,
   imageCache: {}
 };
+
+function newBoardTextId() {
+  return "t-" + Date.now().toString(36) + "-" + Math.floor(Math.random() * 1e6).toString(36);
+}
+
+function boardLiveTextId() {
+  return "live-" + Math.round(board.textX) + "-" + Math.round(board.textY);
+}
 
 var liveSaveRecorder = null;
 var liveSaveChunks = [];
@@ -1269,6 +1278,7 @@ function syncBoardToRoom() {
   }
   if (board.liveText) {
     sendBoardEvent("text_stream", {
+      id: board.liveTextId || boardLiveTextId(),
       x: board.textX,
       y: board.textY,
       text: board.liveText,
@@ -1477,8 +1487,10 @@ function onBoardTypeInput() {
   if (!board.canDraw) return;
   var inp = document.getElementById("board-type-input");
   board.liveText = inp ? inp.value : "";
+  board.liveTextId = boardLiveTextId();
   redrawBoard();
   sendBoardEvent("text_stream", {
+    id: board.liveTextId,
     x: board.textX,
     y: board.textY,
     text: board.liveText,
@@ -1496,17 +1508,38 @@ function commitBoardLine() {
   var inp = document.getElementById("board-type-input");
   var text = inp ? inp.value.trim() : "";
   if (text) {
-    var data = { x: board.textX, y: board.textY, text: text, size: board.fontSize };
+    var data = {
+      id: newBoardTextId(),
+      x: board.textX,
+      y: board.textY,
+      text: text,
+      size: board.fontSize
+    };
     board.history.push({ type: "text", data: data });
     sendBoardEvent("text", data);
   }
+  // Clear the live stream marker so remotes drop the in-progress line.
+  sendBoardEvent("text_stream", {
+    id: board.liveTextId || boardLiveTextId(),
+    x: board.textX,
+    y: board.textY,
+    text: "",
+    size: board.fontSize
+  });
   if (inp) inp.value = "";
   board.liveText = "";
   board.textY += board.lineHeight;
+  board.liveTextId = boardLiveTextId();
   ensureBoardCanvasFitsContent();
   redrawBoard();
   scrollBoardToTypingCursor();
-  sendBoardEvent("text_stream", { x: board.textX, y: board.textY, text: "", size: board.fontSize });
+  sendBoardEvent("text_stream", {
+    id: board.liveTextId,
+    x: board.textX,
+    y: board.textY,
+    text: "",
+    size: board.fontSize
+  });
   if (inp) inp.focus();
 }
 
@@ -1585,10 +1618,17 @@ function onBoardPointerDown(ev) {
     commitBoardLine();
     board.textX = p.x;
     board.textY = p.y;
+    board.liveTextId = boardLiveTextId();
     var inp = document.getElementById("board-type-input");
     if (inp) { inp.focus(); }
     updateBoardCursor();
-    sendBoardEvent("text_stream", { x: board.textX, y: board.textY, text: board.liveText, size: board.fontSize });
+    sendBoardEvent("text_stream", {
+      id: board.liveTextId,
+      x: board.textX,
+      y: board.textY,
+      text: board.liveText,
+      size: board.fontSize
+    });
     return;
   }
   if (board.tool !== "draw" && board.tool !== "erase") return;
