@@ -1564,5 +1564,5 @@
   window.getRemoteClassMediaStream = getRemoteClassMediaStream;
   window.reattachParticipantVideos = reattachParticipantVideos;
   window.reattachTeacherMainStage = reattachTeacherMainStage;
-  window.reattachRemoteClassAudio = attachExistingRemoteTracks;
+  window.reattachRemoteClassAudio = reattachRemoteClassAudio;
 })();
