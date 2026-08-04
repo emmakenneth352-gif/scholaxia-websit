@@ -1266,12 +1266,19 @@
   /* Live class invitation ringtone (same sound as the mobile app) */
   var liveRingAudio = null;
   var liveRingTimer = null;
+  var liveRingLimitTimer = null;
   var knownUnreadCodes = {};
+  var LIVE_RING_MAX_MS = 45000;
+  var LIVE_RING_BURST_MS = 4000;
 
   function stopLiveClassRing() {
     if (liveRingTimer) {
       clearInterval(liveRingTimer);
       liveRingTimer = null;
+    }
+    if (liveRingLimitTimer) {
+      clearTimeout(liveRingLimitTimer);
+      liveRingLimitTimer = null;
     }
     try {
       if (liveRingAudio) {
@@ -1300,7 +1307,14 @@
     var bar = $("liveInviteRingBar");
     if (bar) bar.hidden = false;
     playLiveClassRingBurst();
-    liveRingTimer = setInterval(playLiveClassRingBurst, 4000);
+    liveRingTimer = setInterval(playLiveClassRingBurst, LIVE_RING_BURST_MS);
+    // Hard stop so ringtone is never endless while a class stays live.
+    liveRingLimitTimer = setTimeout(function () {
+      stopLiveClassRing();
+      try {
+        localStorage.setItem("sia_stop_live_ring", String(Date.now()));
+      } catch (e) {}
+    }, LIVE_RING_MAX_MS);
   }
 
   function pollLiveInvitesForRing() {
@@ -1314,6 +1328,7 @@
       .then(function (data) {
         var items = firstArray(data, ["codes", "items", "results"]);
         var unread = items.filter(function (c) {
+          if (c.is_class_live === false) return false;
           return c.is_read === false || c.read === false;
         });
         var hasNew = false;
