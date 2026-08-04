@@ -1060,45 +1060,107 @@ async function loadClassAttendance() {
 window.toggleChatDrawer = toggleChatDrawer;
 window.removeStudentFromClass = removeStudentFromClass;
 
+function authHeadersForClassroom() {
+  var tok = typeof getAuthToken === "function" ? getAuthToken() : "";
+  return tok ? { Authorization: "Bearer " + tok } : {};
+}
+
+function liveKitRosterFallback() {
+  try {
+    if (window.LiveClassMedia && typeof window.LiveClassMedia.listRemoteRoster === "function") {
+      return window.LiveClassMedia.listRemoteRoster().filter(function (p) {
+        return p && !p.is_teacher;
+      });
+    }
+  } catch (e) { /* ignore */ }
+  return [];
+}
+
+function applyStudentRoster(students, teacherName, activeCount) {
+  var list = students || [];
+  if (isTeacherRole()) {
+    renderClassroomStudents(list);
+    loadClassAttendance();
+  } else {
+    renderParticipantsForStudent(list);
+    updateParticipantsHeader(
+      activeCount != null ? activeCount : list.length,
+      teacherName || liveSession.teacher_name || liveSession.teacher || "Teacher"
+    );
+  }
+  var badge = document.getElementById("audience-badge");
+  if (badge) {
+    var n = activeCount != null ? Number(activeCount) + 1 : list.length + 1;
+    badge.textContent = n + " in class";
+    badge.classList.remove("hidden");
+  }
+}
+
 async function loadClassroomStudents(quiet) {
   if (!liveSession) return;
   var classId = liveSession.class_id || liveSession.classId;
   if (!classId) return;
   var list = document.getElementById("participants-list");
   if (!quiet && list) list.innerHTML = '<p class="participants-empty">Loading students…</p>';
+  var opts = { headers: authHeadersForClassroom() };
   try {
     // Presence works for teacher + joined students (does not depend on chat WS).
-    var presence = await api("/api/v1/live-classes/" + classId + "/presence");
+    var presence = await api("/api/v1/live-classes/" + encodeURIComponent(classId) + "/presence", opts);
     var students = (presence && presence.students) || [];
     if (presence && presence.teacher_name) {
       liveSession.teacher_name = presence.teacher_name;
     }
-    if (isTeacherRole()) {
-      renderClassroomStudents(students);
-      loadClassAttendance();
-    } else {
-      renderParticipantsForStudent(students);
-      updateParticipantsHeader(
-        presence.active_attendees || students.length || 0,
-        (presence && presence.teacher_name) || liveSession.teacher_name || "Teacher"
-      );
+    // Merge LiveKit remotes so A/V-connected peers always show even if DB lags.
+    var remote = liveKitRosterFallback();
+    if (remote.length) {
+      var byId = {};
+      students.forEach(function (s) {
+        if (s && s.student_id) byId[String(s.student_id)] = s;
+      });
+      remote.forEach(function (r) {
+        if (r && r.student_id && !byId[String(r.student_id)]) byId[String(r.student_id)] = r;
+      });
+      students = Object.keys(byId).map(function (k) { return byId[k]; });
     }
-    var badge = document.getElementById("audience-badge");
-    if (badge) {
-      var n = (presence && presence.active_attendees != null)
-        ? Number(presence.active_attendees) + 1
-        : students.length + 1;
-      badge.textContent = n + " in class";
-      badge.classList.remove("hidden");
-    }
+    applyStudentRoster(
+      students,
+      (presence && presence.teacher_name) || liveSession.teacher_name,
+      presence && presence.active_attendees != null ? presence.active_attendees : students.length
+    );
   } catch (e) {
+    var fallback = liveKitRosterFallback();
     if (isTeacherRole()) {
       try {
-        var students2 = await api("/api/v1/live-classes/" + classId + "/students") || [];
-        renderClassroomStudents(students2);
+        var students2 = await api(
+          "/api/v1/live-classes/" + encodeURIComponent(classId) + "/students",
+          opts
+        ) || [];
+        if (fallback.length) {
+          var map = {};
+          students2.forEach(function (s) {
+            if (s && s.student_id) map[String(s.student_id)] = s;
+          });
+          fallback.forEach(function (r) {
+            if (r && r.student_id && !map[String(r.student_id)]) map[String(r.student_id)] = r;
+          });
+          students2 = Object.keys(map).map(function (k) { return map[k]; });
+        }
+        applyStudentRoster(students2, liveSession.teacher_name, students2.length);
+        return;
       } catch (e2) {
-        if (list) list.innerHTML = '<p class="participants-empty">Could not load students.</p>';
+        if (fallback.length) {
+          applyStudentRoster(fallback, liveSession.teacher_name, fallback.length);
+          return;
+        }
+        if (list && !list.querySelector(".participant-card[data-student-id]")) {
+          list.innerHTML =
+            '<p class="participants-empty">Could not load students' +
+            (e2 && e2.message ? " (" + escHtml(String(e2.message)) + ")" : "") +
+            ".</p>";
+        }
       }
+    } else if (fallback.length) {
+      applyStudentRoster(fallback, liveSession.teacher_name || liveSession.teacher, fallback.length);
     } else {
       renderParticipantsForStudent([]);
       updateParticipantsHeader(wsStudentCount || 0, liveSession.teacher_name || liveSession.teacher);
