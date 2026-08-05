@@ -74,13 +74,22 @@
   function goAuth(pick) {
     if (pick === "vendor") {
       window.location.href =
-        "auth.html?mode=signup&role=vendor&next=" +
+        "auth.html?mode=signup&role=vendor&market=1&next=" +
         encodeURIComponent("marketplace.html?vendor=pending");
       return;
     }
     window.location.href =
-      "auth.html?mode=signup&role=student&next=" +
+      "auth.html?mode=signup&role=student&market=1&next=" +
       encodeURIComponent("marketplace.html?checkout=1");
+  }
+
+  function onJoinClick() {
+    if (isBuyerLoggedIn()) {
+      toast("You're already signed in as a buyer.");
+      openCart();
+      return;
+    }
+    openRoleModal();
   }
 
   async function syncServerCartCount() {
@@ -529,6 +538,9 @@
     $("btnSell").addEventListener("click", function () {
       goAuth("vendor");
     });
+    if ($("btnJoin")) {
+      $("btnJoin").addEventListener("click", onJoinClick);
+    }
     $("closeRole").addEventListener("click", closeRoleModal);
     $("roleModal").addEventListener("click", function (e) {
       if (e.target === $("roleModal")) closeRoleModal();

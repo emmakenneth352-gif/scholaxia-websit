@@ -883,6 +883,9 @@ img {
 }
 
 @media (max-width: 520px) {
-  .mkt-join { display: none; }
   .mkt-trust { font-size: 0.68rem; }
+  .mkt-join {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
 }

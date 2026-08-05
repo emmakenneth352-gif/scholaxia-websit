@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/auth.css?v=20260805c" />
+    <link rel="stylesheet" href="css/auth.css?v=20260805d" />
   </head>
   <body class="auth-body">
     <div class="auth-fx" aria-hidden="true">
@@ -19,18 +19,18 @@
       <span class="fx-orb fx-2"></span>
       <span class="fx-orb fx-3"></span>
     </div>
-    <a class="auth-back" href="index.html">← Back to home</a>
+    <a class="auth-back" href="index.html" id="authBack">← Back to home</a>
 
     <main class="auth-shell">
       <section class="auth-stage">
         <aside class="auth-visual" aria-hidden="true">
-          <img class="auth-visual-bg" src="media/banner-1.png" alt="" />
+          <img class="auth-visual-bg" src="media/banner-1.png" alt="" id="authVisualImg" />
           <div class="auth-visual-tint"></div>
           <div class="auth-visual-copy">
-            <p class="auth-visual-kicker">Scholaxia Online School</p>
-            <h1>Learn smarter.<br /><span>Pass stronger.</span></h1>
-            <p>Live classes, CBT practice, and Sia AI — ready when you are.</p>
-            <ul class="auth-visual-points">
+            <p class="auth-visual-kicker" id="authVisualKicker">Scholaxia Online School</p>
+            <h1 id="authVisualTitle">Learn smarter.<br /><span>Pass stronger.</span></h1>
+            <p id="authVisualLead">Live classes, CBT practice, and Sia AI — ready when you are.</p>
+            <ul class="auth-visual-points" id="authVisualPoints">
               <li>WAEC · NECO · JAMB</li>
               <li>Live tutors</li>
               <li>Instant CBT scores</li>
@@ -45,14 +45,14 @@
             <span id="portalSub">Sign in to your account</span>
           </div>
 
-          <div class="role-row" role="tablist" aria-label="Account type">
-            <button type="button" class="role-btn is-active" data-role="student" role="tab" aria-selected="true">
+          <div class="role-row" role="tablist" aria-label="Account type" id="roleRow">
+            <button type="button" class="role-btn is-active" data-role="student" role="tab" aria-selected="true" id="roleStudentBtn">
               Student
             </button>
-            <button type="button" class="role-btn" data-role="teacher" role="tab" aria-selected="false">
+            <button type="button" class="role-btn" data-role="teacher" role="tab" aria-selected="false" data-hide-market="1">
               Teacher
             </button>
-            <button type="button" class="role-btn" data-role="kind" role="tab" aria-selected="false">
+            <button type="button" class="role-btn" data-role="kind" role="tab" aria-selected="false" data-hide-market="1">
               Kid
             </button>
             <button type="button" class="role-btn" data-role="vendor" role="tab" aria-selected="false">
@@ -185,7 +185,7 @@
       </section>
     </main>
 
-    <script src="js/api.js?v=20260805b"></script>
-    <script src="js/auth-page.js?v=20260805b"></script>
+    <script src="js/api.js?v=20260805d"></script>
+    <script src="js/auth-page.js?v=20260805d"></script>
   </body>
 </html>

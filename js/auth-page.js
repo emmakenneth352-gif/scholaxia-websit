@@ -4,6 +4,7 @@
   var mode = "login";
   var pendingEmail = "";
   var nextUrl = "";
+  var marketMode = false;
 
   var ROLE_META = {
     student: {
@@ -24,6 +25,19 @@
     vendor: {
       subLogin: "Vendor portal — sell on Scholaxia Market",
       subSignup: "Register your store (admin approval required)",
+      allowSignup: true,
+    },
+  };
+
+  var MARKET_ROLE_META = {
+    student: {
+      subLogin: "Buyer login — checkout your Scholaxia Market cart",
+      subSignup: "Create a free buyer account to checkout & track orders",
+      allowSignup: true,
+    },
+    vendor: {
+      subLogin: "Vendor login — manage your Scholaxia Market store",
+      subSignup: "Register as a vendor (admin approval required)",
       allowSignup: true,
     },
   };
@@ -71,7 +85,8 @@
   }
 
   function updateCopy() {
-    var meta = ROLE_META[role] || ROLE_META.student;
+    var metaMap = marketMode ? MARKET_ROLE_META : ROLE_META;
+    var meta = metaMap[role] || metaMap.student || ROLE_META.student;
     $("portalSub").textContent = mode === "login" ? meta.subLogin : meta.subSignup;
     setVisible($("kindFields"), role === "kind" && mode === "signup");
     setVisible($("teacherFields"), role === "teacher" && mode === "signup");
@@ -81,6 +96,40 @@
     $("btnSignup").disabled = false;
     $("tabSignup").disabled = false;
     $("gotoSignup").disabled = false;
+  }
+
+  function applyMarketMode() {
+    if (!marketMode) return;
+    document.body.classList.add("auth-market");
+    var back = $("authBack");
+    if (back) {
+      back.href = "marketplace.html";
+      back.textContent = "← Back to Market";
+    }
+    var studentBtn = $("roleStudentBtn");
+    if (studentBtn) studentBtn.textContent = "Buyer";
+    document.querySelectorAll("[data-hide-market]").forEach(function (btn) {
+      btn.hidden = true;
+      btn.style.display = "none";
+    });
+    var row = $("roleRow");
+    if (row) {
+      row.classList.add("role-row-market");
+      row.style.gridTemplateColumns = "1fr 1fr";
+    }
+    var kicker = $("authVisualKicker");
+    var title = $("authVisualTitle");
+    var lead = $("authVisualLead");
+    var points = $("authVisualPoints");
+    if (kicker) kicker.textContent = "Scholaxia Market";
+    if (title) title.innerHTML = "Buy or sell.<br /><span>Campus ready.</span>";
+    if (lead) lead.textContent = "Join as a buyer to checkout, or as a vendor to list products after approval.";
+    if (points) {
+      points.innerHTML =
+        "<li>Browse free</li><li>Buyer checkout</li><li>Vendor approval</li>";
+    }
+    var img = $("authVisualImg");
+    if (img) img.src = "media/feature-market.png";
   }
 
   function setRole(next) {
@@ -292,15 +341,30 @@
   document.addEventListener("DOMContentLoaded", function () {
     var params = new URLSearchParams(window.location.search);
     nextUrl = safeNext(params.get("next") || "");
+    marketMode =
+      params.get("market") === "1" ||
+      (nextUrl && nextUrl.indexOf("marketplace") >= 0);
 
-    if (api.getToken()) {
-      var existingRole = localStorage.getItem("sia_role") || "student";
-      if (nextUrl) {
+    applyMarketMode();
+
+    if (api.getToken() && !params.get("force")) {
+      var existingRole = (localStorage.getItem("sia_role") || "student").toLowerCase();
+      var wantRole = (params.get("role") || "").toLowerCase();
+      // Allow market signup for a different role (e.g. vendor) by clearing the old session
+      if (
+        marketMode &&
+        params.get("mode") === "signup" &&
+        wantRole &&
+        wantRole !== existingRole
+      ) {
+        api.clearSession();
+      } else if (nextUrl) {
         window.location.href = nextUrl;
         return;
+      } else {
+        window.location.href = api.dashboardForRole(existingRole);
+        return;
       }
-      window.location.href = api.dashboardForRole(existingRole);
-      return;
     }
 
     document.querySelectorAll(".role-btn").forEach(function (btn) {
@@ -331,8 +395,12 @@
     });
 
     var roleParam = params.get("role");
-    if (roleParam && ROLE_META[roleParam]) setRole(roleParam);
-    if (params.get("mode") === "signup") {
+    if (roleParam && (ROLE_META[roleParam] || MARKET_ROLE_META[roleParam])) {
+      setRole(roleParam);
+    } else if (marketMode) {
+      setRole("student");
+    }
+    if (params.get("mode") === "signup" || (marketMode && params.get("mode") !== "login")) {
       switchMode("signup");
     } else {
       switchMode("login");
