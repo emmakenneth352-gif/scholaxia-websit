@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/vendor.css?v=20260805f" />
+    <link rel="stylesheet" href="css/vendor.css?v=20260805g" />
   </head>
   <body class="ven-body">
     <div class="ven-grain" aria-hidden="true"></div>
@@ -47,11 +47,13 @@
             Welcome. We are checking your application status with Scholaxia Market.
           </p>
           <ol class="ven-steps" id="venSteps" aria-label="Vendor progress">
-            <li data-step="applied" class="is-on"><strong>1</strong><span>Applied</span></li>
+            <li data-step="applied"><strong>1</strong><span>Applied</span></li>
             <li data-step="approved"><strong>2</strong><span>Approved</span></li>
             <li data-step="kyc"><strong>3</strong><span>KYC</span></li>
             <li data-step="sell"><strong>4</strong><span>Sell</span></li>
           </ol>
+          <p class="ven-status-line" id="statusLine" hidden></p>
+          <a class="ven-primary ven-hero-cta" href="#panelKyc" id="heroKycCta" hidden>Continue to KYC ↓</a>
         </div>
       </section>
 
@@ -170,6 +172,6 @@
     <div class="ven-toast" id="venToast" hidden></div>
 
     <script src="js/api.js?v=20260805f"></script>
-    <script src="js/vendor.js?v=20260805f"></script>
+    <script src="js/vendor.js?v=20260805g"></script>
   </body>
 </html>

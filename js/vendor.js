@@ -44,29 +44,36 @@
   }
 
   function setSteps(approved, kyc, canSell) {
-    var map = {
+    // Live status from API — not hardcoded:
+    // applied → always done once account exists
+    // approved → admin approved
+    // kyc → NIN submitted
+    // sell → can list products
+    var current = "applied";
+    if (!approved) current = "applied";
+    else if (!kyc) current = "kyc";
+    else if (!canSell) current = "kyc";
+    else current = "sell";
+
+    var done = {
       applied: true,
       approved: !!approved,
       kyc: !!kyc,
       sell: !!canSell,
     };
+
     document.querySelectorAll("#venSteps li").forEach(function (li) {
       var key = li.getAttribute("data-step");
-      li.classList.toggle("is-done", !!map[key] && key !== "sell");
-      li.classList.toggle("is-on", key === "applied" && !approved);
-      if (key === "approved") li.classList.toggle("is-on", approved && !kyc);
-      if (key === "kyc") li.classList.toggle("is-on", approved && kyc && !canSell);
-      if (key === "sell") {
-        li.classList.toggle("is-on", !!canSell);
-        li.classList.toggle("is-done", !!canSell);
+      li.classList.remove("is-on", "is-done");
+      if (done[key]) li.classList.add("is-done");
+      if (key === current) {
+        li.classList.add("is-on");
+        li.classList.remove("is-done");
       }
-      if (approved && key === "applied") {
+      // Approved is a completed gate before KYC current step
+      if (key === "approved" && approved && current === "kyc") {
         li.classList.add("is-done");
         li.classList.remove("is-on");
-      }
-      if (kyc && key === "approved") {
-        li.classList.add("is-done");
-        if (key !== "kyc") li.classList.remove("is-on");
       }
     });
   }
@@ -76,6 +83,12 @@
       var el = $(pid);
       if (el) el.hidden = pid !== id;
     });
+    var panel = $(id);
+    if (panel) {
+      setTimeout(function () {
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 80);
+    }
   }
 
   function applyStatus(data) {
@@ -88,12 +101,26 @@
 
     setSteps(approved, kyc, canSell);
 
+    var statusLine = $("statusLine");
+    if (statusLine) {
+      statusLine.hidden = false;
+      statusLine.textContent =
+        "Live status · approved: " +
+        (approved ? "yes" : "no") +
+        " · KYC: " +
+        (kyc ? "yes" : "no") +
+        " · can sell: " +
+        (canSell ? "yes" : "no");
+    }
+
     if (!approved) {
       $("heroTitle").innerHTML = "Hang tight<br /><span>we're reviewing</span>";
       $("heroLead").textContent =
         "Your vendor application for " +
         name +
         " is with Scholaxia admin. You will unlock KYC here after approval.";
+      var ctaOff = $("heroKycCta");
+      if (ctaOff) ctaOff.hidden = true;
       showPanel("panelPending");
       return;
     }
@@ -101,13 +128,18 @@
     if (!kyc) {
       $("heroTitle").innerHTML = "You're approved<br /><span>finish KYC</span>";
       $("heroLead").textContent =
-        "Admin approved your store. Complete NIN verification to publish products on the market floor.";
+        "Admin approved your store. Complete NIN verification below to unlock selling.";
+      var cta = $("heroKycCta");
+      if (cta) cta.hidden = false;
       showPanel("panelKyc");
       $("kycName").value = status.full_name || "";
       $("kycLocation").value = status.location || "";
       $("kycAddress").value = status.address || "";
       return;
     }
+
+    var ctaHide = $("heroKycCta");
+    if (ctaHide) ctaHide.hidden = true;
 
     $("heroTitle").innerHTML = "Vendor Studio<br /><span>is live</span>";
     $("heroLead").textContent =

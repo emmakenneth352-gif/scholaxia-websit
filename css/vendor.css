@@ -281,13 +281,26 @@ img {
 }
 
 .ven-steps li.is-on {
-  border-color: rgba(196, 122, 44, 0.7);
-  background: rgba(196, 122, 44, 0.18);
+  border-color: rgba(196, 122, 44, 0.85);
+  background: rgba(196, 122, 44, 0.22);
+  box-shadow: 0 0 0 1px rgba(196, 122, 44, 0.35);
 }
 
 .ven-steps li.is-done {
-  border-color: rgba(127, 209, 163, 0.5);
-  background: rgba(31, 122, 77, 0.25);
+  border-color: rgba(127, 209, 163, 0.55);
+  background: rgba(31, 122, 77, 0.28);
+}
+
+.ven-status-line {
+  margin-top: 0.85rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.ven-hero-cta {
+  margin-top: 1rem;
+  display: inline-flex;
 }
 
 .ven-steps strong {
