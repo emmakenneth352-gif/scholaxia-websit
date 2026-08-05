@@ -222,11 +222,6 @@
 
     if (actual === "teacher" && data && data.user && data.user.is_approved === false) {
       localStorage.setItem("sia_teacher_pending_approval", "1");
-      alert("Your teacher account is pending admin approval. You can update profile while waiting.");
-      if (nextUrl) {
-        window.location.href = nextUrl;
-        return;
-      }
       window.location.href = "teacher.html#profile";
       return;
     }
@@ -286,12 +281,17 @@
         if (parent) body.parent_email = parent;
       } else if (role === "teacher") {
         body.phone = $("signupPhone").value.trim();
-        body.location = $("signupLocation").value.trim();
         var subjects = $("signupSubjects").value
           .split(",")
           .map(function (s) { return s.trim(); })
           .filter(Boolean);
         body.subjects = subjects;
+        if (!body.phone || body.phone.length < 7) {
+          throw new Error("WhatsApp number is required");
+        }
+        if (!subjects.length) {
+          throw new Error("Add at least one subject");
+        }
       } else if (role === "vendor") {
         body.business_name = $("signupBusiness").value.trim();
         body.phone = $("signupVendorPhone").value.trim();

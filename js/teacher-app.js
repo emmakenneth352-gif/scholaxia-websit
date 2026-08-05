@@ -1174,6 +1174,8 @@
       $("profileText").textContent =
         (user.name || "Teacher") + " · " + (user.email || "") + " · Teacher";
     }
+    if ($("tpName")) $("tpName").value = user.name || "";
+    if ($("tpEmail")) $("tpEmail").value = user.email || "";
     try {
       var me = await api.api("/api/v1/teachers/me");
       if (me) {
@@ -1182,14 +1184,23 @@
           setUserChip(me.full_name, me.email || user.email);
         }
         if (me.subjects) localStorage.setItem("sia_teacher_subjects", JSON.stringify(me.subjects));
+        var approved = me.is_approved === true;
+        if ($("teacherPendingBanner")) $("teacherPendingBanner").hidden = approved;
+        if ($("teacherQuickActions")) $("teacherQuickActions").hidden = !approved;
+        if ($("tpName")) $("tpName").value = me.full_name || user.name || "";
+        if ($("tpEmail")) $("tpEmail").value = me.email || user.email || "";
+        if ($("tpPhone")) $("tpPhone").value = me.phone || "";
+        if ($("tpSubjects")) $("tpSubjects").value = (me.subjects || []).join(", ");
         if ($("profileText")) {
           $("profileText").textContent =
             (me.full_name || user.name) +
             " · " +
             (me.email || user.email) +
-            " · Teacher" +
+            " · " +
+            (approved ? "Approved teacher" : "Pending approval") +
             (me.subjects && me.subjects.length ? " · " + me.subjects.join(", ") : "");
         }
+        localStorage.setItem("sia_teacher_pending_approval", approved ? "0" : "1");
       }
     } catch (e) {
       /* keep session */

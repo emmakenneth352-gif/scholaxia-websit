@@ -300,6 +300,10 @@
                 <p>Your teacher account details</p>
               </div>
             </header>
+            <div class="panel" id="teacherPendingBanner" hidden>
+              <strong>Pending admin approval</strong>
+              <p class="muted">You signed up successfully. Admin can see your name, email, WhatsApp and subjects — teaching tools unlock after approval.</p>
+            </div>
             <div class="profile-card">
               <div class="profile-av" id="profileAv">T</div>
               <div>
@@ -307,7 +311,16 @@
                 <p id="profileText">Loading…</p>
               </div>
             </div>
-            <div class="quick-grid">
+            <div class="panel">
+              <h3>Your signup details</h3>
+              <div class="form-grid">
+                <label>Full name <input id="tpName" readonly /></label>
+                <label>Email <input id="tpEmail" readonly /></label>
+                <label>WhatsApp <input id="tpPhone" readonly /></label>
+                <label>Subjects <input id="tpSubjects" readonly /></label>
+              </div>
+            </div>
+            <div class="quick-grid" id="teacherQuickActions">
               <button type="button" class="quick" data-goto="live"><span>📹</span><strong>Host a class</strong><small>Go live or schedule</small></button>
               <button type="button" class="quick" data-goto="exams"><span>📝</span><strong>Publish exam</strong><small>Upload JSON questions</small></button>
               <button type="button" class="quick" data-goto="materials"><span>📚</span><strong>Add material</strong><small>Share notes &amp; PDFs</small></button>
@@ -389,6 +402,6 @@
     </div>
 
     <script src="js/api.js?v=7"></script>
-    <script src="js/teacher-app.js?v=9"></script>
+    <script src="js/teacher-app.js?v=20260805h"></script>
   </body>
 </html>
