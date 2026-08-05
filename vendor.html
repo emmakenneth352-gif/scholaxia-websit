@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Scholaxia Vendor Studio — manage your store, KYC, products and orders." />
+    <title>Scholaxia Vendor Studio</title>
+    <link rel="icon" type="image/png" href="media/logo-main.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Sora:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/vendor.css?v=20260805f" />
+  </head>
+  <body class="ven-body">
+    <div class="ven-grain" aria-hidden="true"></div>
+    <div class="ven-glow ven-glow-a" aria-hidden="true"></div>
+    <div class="ven-glow ven-glow-b" aria-hidden="true"></div>
+
+    <header class="ven-top">
+      <a class="ven-brand" href="vendor.html">
+        <img src="media/logo-main.png" alt="" />
+        <span>Scholaxia <em>Vendor</em></span>
+      </a>
+      <nav class="ven-nav" aria-label="Vendor">
+        <a href="marketplace.html">Market floor</a>
+        <a href="index.html">Learning home</a>
+      </nav>
+      <div class="ven-actions">
+        <span class="ven-chip" id="venName">Vendor</span>
+        <button type="button" class="ven-ghost" id="btnLogout">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="ven-hero" id="venHero">
+        <div class="ven-hero-media" aria-hidden="true">
+          <img src="media/feature-market.png" alt="" />
+          <div class="ven-hero-scrim"></div>
+        </div>
+        <div class="ven-hero-copy">
+          <p class="ven-kicker">Vendor Studio</p>
+          <h1 id="heroTitle">Your store<br /><span>starts here</span></h1>
+          <p class="ven-lead" id="heroLead">
+            Welcome. We are checking your application status with Scholaxia Market.
+          </p>
+          <ol class="ven-steps" id="venSteps" aria-label="Vendor progress">
+            <li data-step="applied" class="is-on"><strong>1</strong><span>Applied</span></li>
+            <li data-step="approved"><strong>2</strong><span>Approved</span></li>
+            <li data-step="kyc"><strong>3</strong><span>KYC</span></li>
+            <li data-step="sell"><strong>4</strong><span>Sell</span></li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="ven-panel" id="panelPending" hidden>
+        <div class="ven-card ven-card-wait">
+          <p class="ven-kicker dark">Awaiting approval</p>
+          <h2>Admin is reviewing your store</h2>
+          <p>
+            You signed up as a vendor. Once an admin approves you and sets your WhatsApp,
+            you will unlock KYC and product listing here.
+          </p>
+          <ul class="ven-checklist">
+            <li>Keep this page bookmarked</li>
+            <li>Watch your email / WhatsApp for approval</li>
+            <li>Then complete NIN KYC to start selling</li>
+          </ul>
+          <button type="button" class="ven-primary" id="btnRefreshStatus">Refresh status</button>
+        </div>
+      </section>
+
+      <section class="ven-panel" id="panelKyc" hidden>
+        <div class="ven-card">
+          <p class="ven-kicker dark">Identity</p>
+          <h2>Complete KYC</h2>
+          <p class="ven-muted">Approved — finish NIN verification to list products on the market floor.</p>
+          <form id="kycForm" class="ven-form">
+            <label>
+              Full legal name
+              <input id="kycName" type="text" required minlength="2" placeholder="As on your ID" />
+            </label>
+            <label>
+              City / location
+              <input id="kycLocation" type="text" required minlength="2" placeholder="Lagos, Abuja…" />
+            </label>
+            <label>
+              Business address
+              <textarea id="kycAddress" rows="2" required minlength="5" placeholder="Street, area, city"></textarea>
+            </label>
+            <label>
+              NIN (11 digits)
+              <input id="kycNin" type="text" inputmode="numeric" required maxlength="11" pattern="[0-9]{11}" placeholder="###########" />
+            </label>
+            <p class="ven-error" id="kycError" hidden></p>
+            <button type="submit" class="ven-primary" id="btnKyc">Save KYC &amp; continue</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="ven-panel ven-studio" id="panelStudio" hidden>
+        <div class="ven-studio-head">
+          <div>
+            <p class="ven-kicker dark">Live store</p>
+            <h2>List &amp; fulfill</h2>
+          </div>
+          <div class="ven-tabs" role="tablist">
+            <button type="button" class="ven-tab is-active" data-tab="products">Products</button>
+            <button type="button" class="ven-tab" data-tab="orders">Orders</button>
+            <button type="button" class="ven-tab" data-tab="new">Add product</button>
+          </div>
+        </div>
+
+        <div class="ven-tab-panel is-on" id="tab-products">
+          <div class="ven-grid" id="productGrid">
+            <div class="ven-empty">Loading your products…</div>
+          </div>
+        </div>
+
+        <div class="ven-tab-panel" id="tab-orders" hidden>
+          <div class="ven-list" id="orderList">
+            <div class="ven-empty">Loading orders…</div>
+          </div>
+        </div>
+
+        <div class="ven-tab-panel" id="tab-new" hidden>
+          <form id="productForm" class="ven-card ven-form">
+            <h3>New listing</h3>
+            <label>
+              Title
+              <input id="pTitle" type="text" required minlength="2" placeholder="e.g. JAMB Past Questions Pack" />
+            </label>
+            <label>
+              Category
+              <select id="pCategory">
+                <option value="books">Books</option>
+                <option value="phones">Phones</option>
+                <option value="gadgets">Gadgets</option>
+                <option value="laptops">Laptops</option>
+                <option value="clothes">Clothes</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>
+              Price (₦)
+              <input id="pPrice" type="number" min="1" step="1" required placeholder="5000" />
+            </label>
+            <label>
+              Stock quantity
+              <input id="pStock" type="number" min="0" step="1" value="1" />
+            </label>
+            <label>
+              Description
+              <textarea id="pDesc" rows="3" placeholder="Condition, delivery notes…"></textarea>
+            </label>
+            <label>
+              Product photo
+              <input id="pImage" type="file" accept="image/*" required />
+            </label>
+            <div class="ven-preview" id="pPreview" hidden></div>
+            <p class="ven-error" id="pError" hidden></p>
+            <button type="submit" class="ven-primary" id="btnProduct">Publish to Market</button>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <div class="ven-toast" id="venToast" hidden></div>
+
+    <script src="js/api.js?v=20260805f"></script>
+    <script src="js/vendor.js?v=20260805f"></script>
+  </body>
+</html>

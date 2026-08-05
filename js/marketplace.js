@@ -75,7 +75,7 @@
     if (pick === "vendor") {
       window.location.href =
         "auth.html?mode=signup&role=vendor&market=1&next=" +
-        encodeURIComponent("marketplace.html?vendor=pending");
+        encodeURIComponent("vendor.html");
       return;
     }
     window.location.href =

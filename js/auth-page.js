@@ -69,7 +69,13 @@
       var u = String(url);
       if (u.indexOf("://") >= 0 || u.indexOf("//") === 0) return "";
       if (u.charAt(0) === "/" || u.indexOf("..") >= 0) return "";
-      if (!/\.html(\?|#|$)/.test(u) && u.indexOf("marketplace") < 0) return "";
+      if (
+        !/\.html(\?|#|$)/.test(u) &&
+        u.indexOf("marketplace") < 0 &&
+        u.indexOf("vendor") < 0
+      ) {
+        return "";
+      }
       return u;
     } catch (e) {
       return "";
@@ -226,7 +232,9 @@
     }
 
     if (actual === "vendor") {
-      if (!nextUrl) nextUrl = "marketplace.html?vendor=pending";
+      if (!nextUrl || nextUrl.indexOf("marketplace") >= 0) {
+        nextUrl = "vendor.html";
+      }
       redirectAfterAuth(actual);
       return;
     }
@@ -358,6 +366,9 @@
         wantRole !== existingRole
       ) {
         api.clearSession();
+      } else if (existingRole === "vendor") {
+        window.location.href = "vendor.html";
+        return;
       } else if (nextUrl) {
         window.location.href = nextUrl;
         return;
