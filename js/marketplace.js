@@ -493,9 +493,14 @@
 
     var params = new URLSearchParams(window.location.search);
     if (params.get("vendor") === "pending") {
-      var banner = $("vendorBanner");
-      if (banner) banner.hidden = false;
-      toast("Vendor signup received — wait for admin approval.");
+      window.location.replace("vendor.html");
+      return;
+    }
+
+    var roleNow = (localStorage.getItem("sia_role") || "").toLowerCase();
+    if (api.getToken() && roleNow === "vendor" && params.get("stay") !== "1") {
+      window.location.replace("vendor.html");
+      return;
     }
 
     if (isBuyerLoggedIn()) {
