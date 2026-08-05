@@ -298,6 +298,9 @@
         body.location = $("signupVendorLocation").value.trim();
         body.address = $("signupVendorAddress").value.trim();
         if (!body.business_name) throw new Error("Business name is required");
+        if (!body.phone || body.phone.length < 7) {
+          throw new Error("WhatsApp number is required");
+        }
         if (!body.location) throw new Error("Location is required");
         if (!body.address) throw new Error("Business address is required");
       }
