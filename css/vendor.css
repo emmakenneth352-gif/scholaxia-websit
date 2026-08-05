@@ -591,10 +591,182 @@ img {
   display: none !important;
 }
 
+.ven-kyc-wrap {
+  padding-top: 0.5rem;
+}
+
+.ven-kyc {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+  gap: 0;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(5, 31, 24, 0.12);
+  animation: ven-rise 0.65s ease both;
+  min-height: 480px;
+}
+
+.ven-kyc-aside {
+  padding: clamp(1.5rem, 4vw, 2.4rem);
+  background:
+    linear-gradient(160deg, rgba(5, 31, 24, 0.94), rgba(13, 59, 46, 0.88)),
+    url("../media/feature-market.png") center / cover;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.ven-kyc-aside .ven-kicker {
+  color: var(--copper-soft);
+}
+
+.ven-kyc-aside h2 {
+  font-family: var(--display);
+  font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  margin: 0.35rem 0 0.85rem;
+}
+
+.ven-kyc-aside > p {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.95rem;
+  margin-bottom: 1.4rem;
+  max-width: 28rem;
+}
+
+.ven-kyc-points {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ven-kyc-points li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.ven-kyc-points strong {
+  font-family: var(--display);
+  font-size: 1.05rem;
+  color: var(--copper-soft);
+}
+
+.ven-kyc-points span {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.ven-kyc-main {
+  padding: clamp(1.4rem, 3.5vw, 2.2rem);
+  background:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(196, 122, 44, 0.08), transparent 55%),
+    linear-gradient(180deg, #fffcf8, #f7faf7);
+}
+
+.ven-kyc-form-head h3 {
+  font-family: var(--display);
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.35rem;
+}
+
+.ven-kyc-form-head p {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.ven-kyc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.95rem 1rem;
+}
+
+.ven-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+}
+
+.ven-field-full {
+  grid-column: 1 / -1;
+}
+
+.ven-field input,
+.ven-field textarea {
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.ven-field textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.ven-field input:focus,
+.ven-field textarea:focus {
+  outline: none;
+  border-color: var(--forest);
+  box-shadow: 0 0 0 4px rgba(13, 59, 46, 0.1);
+}
+
+.ven-nin {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  letter-spacing: 0.28em;
+  font-size: 1.15rem !important;
+  text-align: center;
+}
+
+.ven-field small {
+  font-weight: 500;
+  color: #7a8f84;
+  letter-spacing: 0;
+}
+
+.ven-kyc-submit {
+  width: 100%;
+  margin-top: 1.15rem;
+  min-height: 52px;
+  font-size: 1rem;
+}
+
+body.is-kyc .ven-hero {
+  min-height: min(48vh, 380px);
+}
+
 @media (max-width: 860px) {
   .ven-nav { display: none; }
   .ven-steps { grid-template-columns: repeat(2, 1fr); }
   .ven-hero { min-height: 64vh; }
+  .ven-kyc {
+    grid-template-columns: 1fr;
+  }
+  .ven-kyc-aside {
+    min-height: 220px;
+  }
+  .ven-kyc-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {

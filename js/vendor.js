@@ -83,6 +83,9 @@
       var el = $(pid);
       if (el) el.hidden = pid !== id;
     });
+    document.body.classList.toggle("is-kyc", id === "panelKyc");
+    document.body.classList.toggle("is-pending", id === "panelPending");
+    document.body.classList.toggle("is-studio", id === "panelStudio");
     var panel = $(id);
     if (panel) {
       setTimeout(function () {
@@ -351,6 +354,11 @@
     });
     $("btnRefreshStatus").addEventListener("click", loadStatus);
     $("kycForm").addEventListener("submit", submitKyc);
+    if ($("kycNin")) {
+      $("kycNin").addEventListener("input", function () {
+        $("kycNin").value = $("kycNin").value.replace(/\D/g, "").slice(0, 11);
+      });
+    }
     $("productForm").addEventListener("submit", submitProduct);
 
     document.querySelectorAll(".ven-tab").forEach(function (btn) {

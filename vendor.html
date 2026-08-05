@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/vendor.css?v=20260805g" />
+    <link rel="stylesheet" href="css/vendor.css?v=20260805i" />
   </head>
   <body class="ven-body">
     <div class="ven-grain" aria-hidden="true"></div>
@@ -74,31 +74,62 @@
         </div>
       </section>
 
-      <section class="ven-panel" id="panelKyc" hidden>
-        <div class="ven-card">
-          <p class="ven-kicker dark">Identity</p>
-          <h2>Complete KYC</h2>
-          <p class="ven-muted">Approved — finish NIN verification to list products on the market floor.</p>
-          <form id="kycForm" class="ven-form">
-            <label>
-              Full legal name
-              <input id="kycName" type="text" required minlength="2" placeholder="As on your ID" />
-            </label>
-            <label>
-              City / location
-              <input id="kycLocation" type="text" required minlength="2" placeholder="Lagos, Abuja…" />
-            </label>
-            <label>
-              Business address
-              <textarea id="kycAddress" rows="2" required minlength="5" placeholder="Street, area, city"></textarea>
-            </label>
-            <label>
-              NIN (11 digits)
-              <input id="kycNin" type="text" inputmode="numeric" required maxlength="11" pattern="[0-9]{11}" placeholder="###########" />
-            </label>
-            <p class="ven-error" id="kycError" hidden></p>
-            <button type="submit" class="ven-primary" id="btnKyc">Save KYC &amp; continue</button>
-          </form>
+      <section class="ven-panel ven-kyc-wrap" id="panelKyc" hidden>
+        <div class="ven-kyc">
+          <aside class="ven-kyc-aside">
+            <p class="ven-kicker">Step 3 of 4</p>
+            <h2>Verify your identity</h2>
+            <p>
+              You’re approved. One last check — NIN and address — then you can list products
+              on the Scholaxia Market floor.
+            </p>
+            <ul class="ven-kyc-points">
+              <li><strong>Private</strong><span>Used only for vendor verification</span></li>
+              <li><strong>Fast</strong><span>Unlock listing as soon as you save</span></li>
+              <li><strong>Secure</strong><span>11-digit NIN, same as your national ID</span></li>
+            </ul>
+          </aside>
+          <div class="ven-kyc-main">
+            <form id="kycForm" class="ven-kyc-form">
+              <div class="ven-kyc-form-head">
+                <h3>KYC details</h3>
+                <p>Match the name on your ID. Address should be where you operate from.</p>
+              </div>
+              <div class="ven-kyc-grid">
+                <label class="ven-field">
+                  <span>Full legal name</span>
+                  <input id="kycName" type="text" required minlength="2" placeholder="As on your NIN" autocomplete="name" />
+                </label>
+                <label class="ven-field">
+                  <span>City / location</span>
+                  <input id="kycLocation" type="text" required minlength="2" placeholder="Lagos, Abuja…" autocomplete="address-level2" />
+                </label>
+                <label class="ven-field ven-field-full">
+                  <span>Business address</span>
+                  <textarea id="kycAddress" rows="2" required minlength="5" placeholder="Street, area, city"></textarea>
+                </label>
+                <label class="ven-field ven-field-full">
+                  <span>National Identification Number (NIN)</span>
+                  <input
+                    id="kycNin"
+                    class="ven-nin"
+                    type="text"
+                    inputmode="numeric"
+                    required
+                    maxlength="11"
+                    pattern="[0-9]{11}"
+                    placeholder="11 digits"
+                    autocomplete="off"
+                  />
+                  <small>Numbers only · exactly 11 digits</small>
+                </label>
+              </div>
+              <p class="ven-error" id="kycError" hidden></p>
+              <button type="submit" class="ven-primary ven-kyc-submit" id="btnKyc">
+                Save KYC &amp; open your store
+              </button>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -172,6 +203,6 @@
     <div class="ven-toast" id="venToast" hidden></div>
 
     <script src="js/api.js?v=20260805f"></script>
-    <script src="js/vendor.js?v=20260805g"></script>
+    <script src="js/vendor.js?v=20260805i"></script>
   </body>
 </html>
