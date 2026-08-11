@@ -538,6 +538,50 @@ img {
   pointer-events: none;
 }
 
+.mkt-item-media {
+  position: relative;
+}
+
+.mkt-cond,
+.mkt-digital {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.55rem;
+  z-index: 2;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(11, 31, 68, 0.88);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mkt-digital {
+  left: auto;
+  right: 0.55rem;
+  background: rgba(31, 122, 77, 0.92);
+}
+
+.mkt-thumbs {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.55rem 0.75rem 0;
+}
+
+.mkt-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background: #d7dee8 center / cover no-repeat;
+  cursor: pointer;
+}
+
+.mkt-thumb.is-on {
+  border-color: var(--navy);
+}
+
 .mkt-item-media img {
   width: 100%;
   height: 100%;

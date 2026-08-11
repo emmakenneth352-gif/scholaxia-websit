@@ -5,9 +5,42 @@
   var searchQuery = "";
   var guestCart = [];
   var CART_KEY = "sia_market_guest_cart";
+  var META_RE = /\n*---\nSIA_META:(\{[\s\S]*?\})\s*$/;
 
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function parseMeta(description) {
+    var raw = String(description || "");
+    var m = raw.match(META_RE);
+    var meta = {};
+    if (m) {
+      try {
+        meta = JSON.parse(m[1]) || {};
+      } catch (e) {
+        meta = {};
+      }
+    }
+    return {
+      meta: meta,
+      description: raw.replace(META_RE, "").trim(),
+    };
+  }
+
+  function productImages(p) {
+    var parsed = parseMeta(p.description);
+    var imgs = [];
+    if (parsed.meta && Array.isArray(parsed.meta.images)) {
+      imgs = parsed.meta.images.filter(Boolean);
+    }
+    if (p.image_url) imgs.unshift(p.image_url);
+    var seen = {};
+    return imgs.filter(function (u) {
+      if (!u || seen[u]) return false;
+      seen[u] = true;
+      return true;
+    });
   }
 
   function money(n) {
@@ -187,23 +220,55 @@
     }
     grid.innerHTML = list
       .map(function (p, i) {
-        var img = p.image_url || p.secure_url || "";
-        var desc = (p.description || "").trim();
+        var parsed = parseMeta(p.description);
+        var imgs = productImages(p);
+        var img = imgs[0] || p.secure_url || "";
+        var desc = (parsed.description || "").trim();
         var price = Number(p.price || 0);
+        var condition =
+          parsed.meta.condition === "fairly_used" ? "Fairly used" : "New";
+        var isDigital = parsed.meta.product_type === "digital";
+        var cat = String(p.category || "item").replace(/_/g, " ");
+        var thumbs =
+          imgs.length > 1
+            ? '<div class="mkt-thumbs">' +
+              imgs
+                .slice(0, 5)
+                .map(function (u, idx) {
+                  return (
+                    '<button type="button" class="mkt-thumb' +
+                    (idx === 0 ? " is-on" : "") +
+                    '" data-src="' +
+                    escapeHtml(u) +
+                    '" style="background-image:url(\'' +
+                    escapeHtml(u).replace(/'/g, "%27") +
+                    "')\" aria-label=\"Photo " +
+                    (idx + 1) +
+                    '"></button>'
+                  );
+                })
+                .join("") +
+              "</div>"
+            : "";
         return (
           '<article class="mkt-item" style="animation-delay:' +
           Math.min(i, 8) * 0.04 +
           's">' +
           '<div class="mkt-item-media">' +
           (img
-            ? '<img src="' +
+            ? '<img class="mkt-main-img" src="' +
               img.replace(/"/g, "") +
               '" alt="" loading="lazy" />'
             : "") +
+          '<span class="mkt-cond">' +
+          escapeHtml(condition) +
+          "</span>" +
+          (isDigital ? '<span class="mkt-digital">Digital</span>' : "") +
           "</div>" +
+          thumbs +
           '<div class="mkt-item-body">' +
           '<p class="mkt-item-cat">' +
-          escapeHtml(p.category || "item") +
+          escapeHtml(cat) +
           "</p>" +
           '<h3 class="mkt-item-title">' +
           escapeHtml(p.title || "Product") +
@@ -435,7 +500,7 @@
       return;
     }
     try {
-      var data = await api.api("/api/v1/marketplace/orders");
+      var data = await api.api("/api/v1/marketplace/orders/mine");
       var orders = Array.isArray(data)
         ? data
         : (data && (data.orders || data.items || data.results)) || [];
@@ -447,7 +512,7 @@
         .slice(0, 5)
         .map(function (o) {
           return (
-            (o.status || "order") +
+            (o.status || o.payment_status || "order") +
             " · " +
             money(o.total_amount || o.amount || 0)
           );
@@ -529,6 +594,18 @@
     }
 
     $("mktGrid").addEventListener("click", function (e) {
+      var thumb = e.target.closest(".mkt-thumb");
+      if (thumb) {
+        var card = thumb.closest(".mkt-item");
+        var main = card && card.querySelector(".mkt-main-img");
+        if (main && thumb.dataset.src) {
+          main.src = thumb.dataset.src;
+          card.querySelectorAll(".mkt-thumb").forEach(function (t) {
+            t.classList.toggle("is-on", t === thumb);
+          });
+        }
+        return;
+      }
       var btn = e.target.closest("[data-add]");
       if (!btn) return;
       addToCart(btn.dataset.add);

@@ -261,11 +261,24 @@
 
   async function onSignup(e) {
     e.preventDefault();
+    e.stopPropagation();
     var email = $("signupEmail").value.trim();
     var password = $("signupPassword").value;
     var fullName = $("signupName").value.trim();
     var btn = $("btnSignup");
     showErr($("signupError"));
+    if (!fullName) {
+      showErr($("signupError"), "Enter your full name");
+      return;
+    }
+    if (!email) {
+      showErr($("signupError"), "Enter your email");
+      return;
+    }
+    if (!password || password.length < 6) {
+      showErr($("signupError"), "Password must be at least 6 characters");
+      return;
+    }
     btn.disabled = true;
     btn.textContent = "Sending OTP…";
     try {
@@ -350,6 +363,12 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    if (!api || typeof api.api !== "function") {
+      showErr($("loginError"), "Auth scripts failed to load. Refresh the page.");
+      showErr($("signupError"), "Auth scripts failed to load. Refresh the page.");
+      return;
+    }
+
     var params = new URLSearchParams(window.location.search);
     nextUrl = safeNext(params.get("next") || "");
     marketMode =
@@ -361,6 +380,10 @@
     if (api.getToken() && !params.get("force")) {
       var existingRole = (localStorage.getItem("sia_role") || "student").toLowerCase();
       var wantRole = (params.get("role") || "").toLowerCase();
+      var wantFreshAuth =
+        params.get("mode") === "login" ||
+        params.get("mode") === "signup" ||
+        params.get("switch") === "1";
       // Allow market signup for a different role (e.g. vendor) by clearing the old session
       if (
         marketMode &&
@@ -369,6 +392,9 @@
         wantRole !== existingRole
       ) {
         api.clearSession();
+      } else if (wantFreshAuth) {
+        // User opened Sign in / Sign up on purpose — stay on the form.
+        // Keep token until they successfully log in again (saveSession overwrites).
       } else if (existingRole === "vendor") {
         window.location.href = "vendor.html";
         return;

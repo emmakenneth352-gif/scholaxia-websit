@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/vendor.css?v=20260805i" />
+    <link rel="stylesheet" href="css/vendor.css?v=20260809a" />
   </head>
   <body class="ven-body">
     <div class="ven-grain" aria-hidden="true"></div>
@@ -146,6 +146,14 @@
           </div>
         </div>
 
+        <div class="ven-fee-banner" role="note">
+          <strong>Scholaxia fee: 10%</strong>
+          <span>
+            On every successful purchase, Scholaxia deducts 10% automatically.
+            You only see your net balance (90%) after the platform charge.
+          </span>
+        </div>
+
         <div class="ven-tab-panel is-on" id="tab-products">
           <div class="ven-grid" id="productGrid">
             <div class="ven-empty">Loading your products…</div>
@@ -153,6 +161,7 @@
         </div>
 
         <div class="ven-tab-panel" id="tab-orders" hidden>
+          <div class="ven-earnings" id="orderEarnings" hidden></div>
           <div class="ven-list" id="orderList">
             <div class="ven-empty">Loading orders…</div>
           </div>
@@ -160,15 +169,26 @@
 
         <div class="ven-tab-panel" id="tab-new" hidden>
           <form id="productForm" class="ven-card ven-form">
-            <h3>New listing</h3>
+            <h3 id="formTitle">New listing</h3>
+            <input type="hidden" id="pEditId" value="" />
+
             <label>
               Title
-              <input id="pTitle" type="text" required minlength="2" placeholder="e.g. JAMB Past Questions Pack" />
+              <input id="pTitle" type="text" required minlength="2" placeholder="e.g. Physics Textbook SS2" />
             </label>
+
             <label>
               Category
-              <select id="pCategory">
+              <select id="pCategory" required>
+                <option value="physics">Physics</option>
+                <option value="chemistry">Chemistry</option>
+                <option value="biology">Biology</option>
+                <option value="maths">Mathematics</option>
+                <option value="english">English</option>
                 <option value="books">Books</option>
+                <option value="soft_copy">Soft copy / PDF</option>
+                <option value="software">Software</option>
+                <option value="educational_materials">Educational materials</option>
                 <option value="phones">Phones</option>
                 <option value="gadgets">Gadgets</option>
                 <option value="laptops">Laptops</option>
@@ -176,25 +196,72 @@
                 <option value="other">Other</option>
               </select>
             </label>
+
             <label>
-              Price (₦)
+              Product status
+              <select id="pCondition" required>
+                <option value="new">New</option>
+                <option value="fairly_used">Fairly used</option>
+              </select>
+            </label>
+
+            <label>
+              Listing type
+              <select id="pType" required>
+                <option value="physical">Physical item</option>
+                <option value="digital">Digital (PDF / software / soft copy)</option>
+              </select>
+            </label>
+
+            <label>
+              Price (₦) — buyer pays this full amount
               <input id="pPrice" type="number" min="1" step="1" required placeholder="5000" />
             </label>
+            <p class="ven-fee-hint" id="pFeeHint">
+              Buyer pays ₦0 · Scholaxia 10% = ₦0 · You receive ₦0
+            </p>
+
             <label>
               Stock quantity
               <input id="pStock" type="number" min="0" step="1" value="1" />
             </label>
+
             <label>
               Description
-              <textarea id="pDesc" rows="3" placeholder="Condition, delivery notes…"></textarea>
+              <textarea id="pDesc" rows="3" placeholder="Condition notes, delivery, what’s included…"></textarea>
             </label>
+
             <label>
-              Product photo
-              <input id="pImage" type="file" accept="image/*" required />
+              Product photos (you can select multiple)
+              <input id="pImage" type="file" accept="image/*" multiple />
             </label>
-            <div class="ven-preview" id="pPreview" hidden></div>
+            <div class="ven-preview ven-preview-multi" id="pPreview" hidden></div>
+
+            <label id="pFileWrap">
+              Digital file (PDF, ZIP, software, docs) — optional for soft copy / software
+              <input
+                id="pFile"
+                type="file"
+                accept=".pdf,.zip,.rar,.7z,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.apk,.exe,.msi,application/pdf,application/zip"
+              />
+            </label>
+            <p class="ven-file-name" id="pFileName" hidden></p>
+
+            <div class="ven-fee-confirm">
+              <label class="ven-check">
+                <input type="checkbox" id="pFeeAgree" required />
+                <span>
+                  I understand Scholaxia charges <strong>10%</strong> on every sale and I will only
+                  receive the remaining <strong>90%</strong> as my balance.
+                </span>
+              </label>
+            </div>
+
             <p class="ven-error" id="pError" hidden></p>
-            <button type="submit" class="ven-primary" id="btnProduct">Publish to Market</button>
+            <div class="ven-form-actions">
+              <button type="button" class="ven-ghost" id="btnCancelEdit" hidden>Cancel edit</button>
+              <button type="submit" class="ven-primary" id="btnProduct">Publish to Market</button>
+            </div>
           </form>
         </div>
       </section>
@@ -202,7 +269,7 @@
 
     <div class="ven-toast" id="venToast" hidden></div>
 
-    <script src="js/api.js?v=20260805f"></script>
-    <script src="js/vendor.js?v=20260805i"></script>
+    <script src="js/api.js?v=20260809a"></script>
+    <script src="js/vendor.js?v=20260809a"></script>
   </body>
 </html>

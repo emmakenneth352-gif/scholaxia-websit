@@ -36,6 +36,10 @@
       if (role === "teacher" || role === "admin") {
         return teacherTok || studentTok;
       }
+      if (role === "vendor") {
+        // Vendors store JWT in sia_token — never prefer a leftover teacher token.
+        return studentTok || teacherTok;
+      }
       if (role === "student" || role === "kind") {
         return studentTok || teacherTok;
       }

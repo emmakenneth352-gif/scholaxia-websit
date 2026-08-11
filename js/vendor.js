@@ -1,7 +1,12 @@
 (function () {
   var api = window.ScholaxiaAPI;
   var status = null;
-  var uploadedImageUrl = "";
+  var uploadedImageUrls = [];
+  var uploadedFileUrl = "";
+  var uploadedFileName = "";
+  var productsCache = [];
+  var PLATFORM_FEE = 0.1;
+  var META_RE = /\n*---\nSIA_META:(\{[\s\S]*?\})\s*$/;
 
   function $(id) {
     return document.getElementById(id);
@@ -31,6 +36,43 @@
       .replace(/"/g, "&quot;");
   }
 
+  function parseMeta(description) {
+    var raw = String(description || "");
+    var m = raw.match(META_RE);
+    var meta = {};
+    if (m) {
+      try {
+        meta = JSON.parse(m[1]) || {};
+      } catch (e) {
+        meta = {};
+      }
+    }
+    return {
+      meta: meta,
+      description: raw.replace(META_RE, "").trim(),
+    };
+  }
+
+  function buildDescription(text, meta) {
+    var clean = String(text || "").replace(META_RE, "").trim();
+    return clean + "\n\n---\nSIA_META:" + JSON.stringify(meta || {});
+  }
+
+  function productImages(p) {
+    var parsed = parseMeta(p.description);
+    var imgs = [];
+    if (parsed.meta && Array.isArray(parsed.meta.images)) {
+      imgs = parsed.meta.images.filter(Boolean);
+    }
+    if (p.image_url) imgs.unshift(p.image_url);
+    var seen = {};
+    return imgs.filter(function (u) {
+      if (!u || seen[u]) return false;
+      seen[u] = true;
+      return true;
+    });
+  }
+
   function requireVendorSession() {
     var role = (localStorage.getItem("sia_role") || "").toLowerCase();
     var token = api.getToken();
@@ -44,11 +86,6 @@
   }
 
   function setSteps(approved, kyc, canSell) {
-    // Live status from API — not hardcoded:
-    // applied → always done once account exists
-    // approved → admin approved
-    // kyc → NIN submitted
-    // sell → can list products
     var current = "applied";
     if (!approved) current = "applied";
     else if (!kyc) current = "kyc";
@@ -70,7 +107,6 @@
         li.classList.add("is-on");
         li.classList.remove("is-done");
       }
-      // Approved is a completed gate before KYC current step
       if (key === "approved" && approved && current === "kyc") {
         li.classList.add("is-done");
         li.classList.remove("is-on");
@@ -146,7 +182,7 @@
 
     $("heroTitle").innerHTML = "Vendor Studio<br /><span>is live</span>";
     $("heroLead").textContent =
-      "List books, phones and gadgets. Paid orders show up under Orders for you to ship.";
+      "Manage listings, fulfill paid orders, and track your net balance after the 10% Scholaxia fee.";
     showPanel("panelStudio");
     loadProducts();
   }
@@ -204,6 +240,79 @@
     });
     if (tab === "orders") loadOrders();
     if (tab === "products") loadProducts();
+    if (tab === "new") updateFeeHint();
+  }
+
+  function conditionLabel(c) {
+    return c === "fairly_used" ? "Fairly used" : "New";
+  }
+
+  function categoryLabel(c) {
+    return String(c || "item")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, function (ch) {
+        return ch.toUpperCase();
+      });
+  }
+
+  function resetProductForm() {
+    $("productForm").reset();
+    $("pEditId").value = "";
+    $("formTitle").textContent = "New listing";
+    $("btnProduct").textContent = "Publish to Market";
+    $("btnCancelEdit").hidden = true;
+    uploadedImageUrls = [];
+    uploadedFileUrl = "";
+    uploadedFileName = "";
+    $("pPreview").hidden = true;
+    $("pPreview").innerHTML = "";
+    $("pFileName").hidden = true;
+    $("pFileName").textContent = "";
+    $("pFeeAgree").checked = false;
+    updateFeeHint();
+  }
+
+  function fillProductForm(p) {
+    var parsed = parseMeta(p.description);
+    var meta = parsed.meta || {};
+    $("pEditId").value = p.id || "";
+    $("formTitle").textContent = "Edit listing";
+    $("btnProduct").textContent = "Save changes";
+    $("btnCancelEdit").hidden = false;
+    $("pTitle").value = p.title || "";
+    $("pCategory").value = p.category || "other";
+    $("pCondition").value = meta.condition || "new";
+    $("pType").value = meta.product_type || "physical";
+    $("pPrice").value = p.price || "";
+    $("pStock").value = p.stock_qty != null ? p.stock_qty : 1;
+    $("pDesc").value = parsed.description || "";
+    uploadedImageUrls = productImages(p);
+    uploadedFileUrl = meta.digital_url || "";
+    uploadedFileName = meta.digital_name || "";
+    renderImagePreview(uploadedImageUrls);
+    if (uploadedFileName || uploadedFileUrl) {
+      $("pFileName").hidden = false;
+      $("pFileName").textContent =
+        "Attached: " + (uploadedFileName || uploadedFileUrl);
+    }
+    $("pFeeAgree").checked = true;
+    updateFeeHint();
+    setTab("new");
+  }
+
+  function renderImagePreview(urls) {
+    var preview = $("pPreview");
+    if (!urls || !urls.length) {
+      preview.hidden = true;
+      preview.innerHTML = "";
+      return;
+    }
+    preview.hidden = false;
+    preview.innerHTML = urls
+      .map(function (u) {
+        return '<img src="' + escapeHtml(u) + '" alt="" />';
+      })
+      .join("");
   }
 
   async function loadProducts() {
@@ -213,6 +322,7 @@
     try {
       var data = await api.api("/api/v1/vendor/marketplace/products");
       var list = Array.isArray(data) ? data : (data && data.products) || [];
+      productsCache = list;
       if (!list.length) {
         grid.innerHTML =
           '<div class="ven-empty">No products yet — open Add product to publish your first listing.</div>';
@@ -220,25 +330,49 @@
       }
       grid.innerHTML = list
         .map(function (p) {
-          var img = p.image_url || p.secure_url || "";
+          var parsed = parseMeta(p.description);
+          var imgs = productImages(p);
+          var img = imgs[0] || "";
+          var live = p.is_available !== false && p.is_active !== false;
+          var price = Number(p.price) || 0;
+          var net = Math.round(price * (1 - PLATFORM_FEE));
           return (
-            '<article class="ven-item">' +
+            '<article class="ven-item' +
+            (live ? "" : " is-unlisted") +
+            '" data-id="' +
+            escapeHtml(String(p.id || "")) +
+            '">' +
             '<div class="ven-item-media">' +
             (img
               ? '<img src="' + escapeHtml(img) + '" alt="" loading="lazy" />'
               : "") +
+            (imgs.length > 1
+              ? '<span class="ven-img-count">' + imgs.length + " photos</span>"
+              : "") +
+            (!live ? '<span class="ven-badge">Unlisted</span>' : "") +
             "</div>" +
             '<div class="ven-item-body">' +
             "<h3>" +
             escapeHtml(p.title || "Product") +
             "</h3>" +
             '<p class="ven-item-meta">' +
-            escapeHtml(p.category || "") +
-            (p.is_available === false ? " · unavailable" : " · live") +
+            escapeHtml(categoryLabel(p.category)) +
+            " · " +
+            escapeHtml(conditionLabel(parsed.meta.condition)) +
+            (parsed.meta.product_type === "digital" ? " · Digital" : "") +
             "</p>" +
             '<p class="ven-item-price">' +
-            money(p.price) +
-            "</p>" +
+            money(price) +
+            ' <small class="ven-net">you get ' +
+            money(net) +
+            "</small></p>" +
+            '<div class="ven-item-actions">' +
+            '<button type="button" class="ven-mini" data-act="edit">Edit</button>' +
+            '<button type="button" class="ven-mini" data-act="toggle">' +
+            (live ? "Unlist" : "List") +
+            "</button>" +
+            '<button type="button" class="ven-mini ven-mini-danger" data-act="remove">Remove</button>' +
+            "</div>" +
             "</div></article>"
           );
         })
@@ -251,36 +385,151 @@
     }
   }
 
+  function normalizeVendorOrders(data) {
+    var list = Array.isArray(data)
+      ? data
+      : (data &&
+          (data.orders ||
+            data.items ||
+            data.results ||
+            data.order_items ||
+            data.data)) ||
+        [];
+    var flat = [];
+    list.forEach(function (o) {
+      var nested = o.items || o.order_items || o.lines || o.products;
+      if (Array.isArray(nested) && nested.length) {
+        nested.forEach(function (it) {
+          flat.push(Object.assign({}, o, it, { _order: o }));
+        });
+      } else {
+        flat.push(o);
+      }
+    });
+    return flat;
+  }
+
+  function orderGross(o) {
+    return (
+      Number(
+        o.vendor_amount ||
+          o.seller_amount ||
+          o.line_total ||
+          o.amount ||
+          o.price ||
+          o.total_amount ||
+          o.subtotal ||
+          0
+      ) || 0
+    );
+  }
+
+  function orderNet(o) {
+    if (o.vendor_net != null || o.net_amount != null || o.seller_net != null) {
+      return Number(o.vendor_net || o.net_amount || o.seller_net || 0);
+    }
+    var gross = orderGross(o);
+    var fee =
+      o.platform_fee != null
+        ? Number(o.platform_fee)
+        : Math.round(gross * PLATFORM_FEE);
+    return Math.max(0, Math.round(gross - fee));
+  }
+
+  function isPaidOrder(o) {
+    var s = String(
+      o.payment_status || o.status || o.fulfillment_status || ""
+    ).toLowerCase();
+    if (!s) return true;
+    if (s.indexOf("fail") >= 0 || s.indexOf("cancel") >= 0 || s === "pending") {
+      return s === "pending" ? false : false;
+    }
+    return (
+      s.indexOf("paid") >= 0 ||
+      s.indexOf("success") >= 0 ||
+      s.indexOf("complete") >= 0 ||
+      s.indexOf("processing") >= 0 ||
+      s.indexOf("shipped") >= 0 ||
+      s.indexOf("delivered") >= 0 ||
+      s === "confirmed"
+    );
+  }
+
   async function loadOrders() {
     var wrap = $("orderList");
+    var earnings = $("orderEarnings");
     if (!wrap) return;
     wrap.innerHTML = '<div class="ven-empty">Loading orders…</div>';
+    if (earnings) earnings.hidden = true;
     try {
       var data = await api.api("/api/v1/vendor/marketplace/orders");
-      var list = Array.isArray(data) ? data : (data && data.orders) || [];
+      var list = normalizeVendorOrders(data);
       if (!list.length) {
         wrap.innerHTML =
-          '<div class="ven-empty">No paid orders yet. They appear here after buyers checkout.</div>';
+          '<div class="ven-empty">No paid orders yet. After a buyer pays with Paystack, refresh this Orders tab — amounts show your balance after the 10% Scholaxia fee.</div>';
         return;
       }
+
+      var totalGross = 0;
+      var totalNet = 0;
+      var totalFee = 0;
+      list.forEach(function (o) {
+        var g = orderGross(o);
+        var n = orderNet(o);
+        totalGross += g;
+        totalNet += n;
+        totalFee += Math.max(0, g - n);
+      });
+
+      if (earnings) {
+        earnings.hidden = false;
+        earnings.innerHTML =
+          "<div><span>Gross sales</span><strong>" +
+          money(totalGross) +
+          "</strong></div>" +
+          "<div><span>Platform 10%</span><strong>" +
+          money(totalFee) +
+          "</strong></div>" +
+          "<div class=\"is-net\"><span>Your balance</span><strong>" +
+          money(totalNet) +
+          "</strong></div>";
+      }
+
       wrap.innerHTML = list
         .map(function (o) {
           var title =
             (o.product && o.product.title) ||
             o.title ||
             o.product_title ||
+            o.name ||
             "Order item";
+          var buyer =
+            o.buyer_name ||
+            o.customer_name ||
+            (o.buyer && (o.buyer.full_name || o.buyer.email)) ||
+            o.contact_phone ||
+            "";
+          var gross = orderGross(o);
+          var net = orderNet(o);
+          var fee = Math.max(0, gross - net);
+          var st = o.status || o.fulfillment_status || o.payment_status || "processing";
           return (
             '<div class="ven-order">' +
             "<strong>" +
             escapeHtml(title) +
             "</strong>" +
             "<span>Status: " +
-            escapeHtml(o.status || o.fulfillment_status || "processing") +
+            escapeHtml(st) +
+            (isPaidOrder(o) ? "" : " · awaiting payment") +
             "</span>" +
-            "<span>" +
-            money(o.line_total || o.amount || o.price || 0) +
-            "</span>" +
+            (buyer ? "<span>Buyer: " + escapeHtml(buyer) + "</span>" : "") +
+            "<span>Buyer paid " +
+            money(gross) +
+            " · Fee " +
+            money(fee) +
+            " · <em class=\"ven-net-em\">Your balance " +
+            money(net) +
+            "</em></span>" +
             "</div>"
           );
         })
@@ -293,54 +542,150 @@
     }
   }
 
+  async function uploadImageFile(file) {
+    var fd = new FormData();
+    fd.append("file", file);
+    var up = await api.apiUpload("/api/v1/vendor/marketplace/upload-image", fd);
+    var url = (up && (up.image_url || up.secure_url || up.url || up.file_url)) || "";
+    if (!url) throw new Error("Upload failed for " + (file.name || "file"));
+    return url;
+  }
+
   async function submitProduct(e) {
     e.preventDefault();
     var err = $("pError");
     err.hidden = true;
     var btn = $("btnProduct");
-    var file = $("pImage").files && $("pImage").files[0];
-    if (!file && !uploadedImageUrl) {
+    var editId = ($("pEditId").value || "").trim();
+    var files = ($("pImage").files && Array.prototype.slice.call($("pImage").files)) || [];
+    var digital = $("pFile").files && $("pFile").files[0];
+    var listingType = $("pType").value;
+
+    if (!files.length && !uploadedImageUrls.length && listingType === "physical") {
       err.hidden = false;
-      err.textContent = "Add a product photo.";
+      err.textContent = "Add at least one product photo.";
       return;
     }
+    if (
+      listingType === "digital" &&
+      !digital &&
+      !uploadedFileUrl &&
+      !files.length &&
+      !uploadedImageUrls.length
+    ) {
+      err.hidden = false;
+      err.textContent = "Add a cover image and/or a digital file (PDF, ZIP, etc.).";
+      return;
+    }
+    if (!$("pFeeAgree").checked) {
+      err.hidden = false;
+      err.textContent = "Please confirm you accept the 10% Scholaxia platform fee.";
+      return;
+    }
+
     btn.disabled = true;
-    btn.textContent = "Publishing…";
+    btn.textContent = editId ? "Saving…" : "Publishing…";
     try {
-      var imageUrl = uploadedImageUrl;
-      if (file) {
-        var fd = new FormData();
-        fd.append("file", file);
-        var up = await api.apiUpload("/api/v1/vendor/marketplace/upload-image", fd);
-        imageUrl = (up && (up.image_url || up.secure_url)) || "";
-        if (!imageUrl) throw new Error("Image upload failed");
-        uploadedImageUrl = imageUrl;
+      var imageUrls = uploadedImageUrls.slice();
+      for (var i = 0; i < files.length; i++) {
+        imageUrls.push(await uploadImageFile(files[i]));
       }
-      await api.api("/api/v1/vendor/marketplace/products", {
-        method: "POST",
-        body: {
-          title: $("pTitle").value.trim(),
-          description: $("pDesc").value.trim(),
-          category: $("pCategory").value,
-          price: Number($("pPrice").value),
-          stock_qty: Number($("pStock").value || 0),
-          image_url: imageUrl,
-          is_available: true,
-        },
+      // unique
+      var seen = {};
+      imageUrls = imageUrls.filter(function (u) {
+        if (!u || seen[u]) return false;
+        seen[u] = true;
+        return true;
       });
-      toast("Product published on the market floor");
-      $("productForm").reset();
-      uploadedImageUrl = "";
-      $("pPreview").hidden = true;
-      $("pPreview").innerHTML = "";
+
+      var fileUrl = uploadedFileUrl;
+      var fileName = uploadedFileName;
+      if (digital) {
+        try {
+          fileUrl = await uploadImageFile(digital);
+          fileName = digital.name || "file";
+        } catch (upErr) {
+          throw new Error(
+            "Could not upload digital file. Try PDF/ZIP under 10MB, or contact support. (" +
+              (upErr.message || "upload error") +
+              ")"
+          );
+        }
+      }
+
+      if (!imageUrls.length && fileUrl) {
+        // digital-only: still need an image_url for API — use logo as fallback cover
+        imageUrls = ["media/logo-main.png"];
+      }
+      if (!imageUrls.length) throw new Error("Add at least one product photo.");
+
+      var meta = {
+        condition: $("pCondition").value,
+        product_type: listingType,
+        images: imageUrls,
+        digital_url: fileUrl || "",
+        digital_name: fileName || "",
+        platform_fee_percent: 10,
+      };
+
+      var body = {
+        title: $("pTitle").value.trim(),
+        description: buildDescription($("pDesc").value.trim(), meta),
+        category: $("pCategory").value,
+        price: Number($("pPrice").value),
+        stock_qty: Number($("pStock").value || 0),
+        image_url: imageUrls[0],
+        is_available: true,
+        is_active: true,
+      };
+
+      if (editId) {
+        await api.api("/api/v1/vendor/marketplace/products/" + encodeURIComponent(editId), {
+          method: "PATCH",
+          body: body,
+        });
+        toast("Product updated");
+      } else {
+        await api.api("/api/v1/vendor/marketplace/products", {
+          method: "POST",
+          body: body,
+        });
+        toast("Product published — remember: you receive 90% after Scholaxia’s 10% fee");
+      }
+      resetProductForm();
       setTab("products");
       await loadProducts();
     } catch (ex) {
       err.hidden = false;
-      err.textContent = ex.message || "Could not publish product";
+      err.textContent = ex.message || "Could not save product";
     } finally {
       btn.disabled = false;
-      btn.textContent = "Publish to Market";
+      btn.textContent = ($("pEditId").value ? "Save changes" : "Publish to Market");
+    }
+  }
+
+  async function patchProduct(id, body, okMsg) {
+    await api.api("/api/v1/vendor/marketplace/products/" + encodeURIComponent(id), {
+      method: "PATCH",
+      body: body,
+    });
+    toast(okMsg || "Updated");
+    await loadProducts();
+  }
+
+  function updateFeeHint() {
+    var price = Number($("pPrice").value) || 0;
+    var fee = Math.round(price * PLATFORM_FEE);
+    var net = Math.max(0, Math.round(price - fee));
+    var el = $("pFeeHint");
+    if (el) {
+      el.textContent =
+        "Buyer pays " +
+        money(price) +
+        " · Scholaxia 10% = " +
+        money(fee) +
+        " · You receive " +
+        money(net);
     }
   }
 
@@ -360,6 +705,11 @@
       });
     }
     $("productForm").addEventListener("submit", submitProduct);
+    $("btnCancelEdit").addEventListener("click", function () {
+      resetProductForm();
+      setTab("products");
+    });
+    $("pPrice").addEventListener("input", updateFeeHint);
 
     document.querySelectorAll(".ven-tab").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -368,19 +718,68 @@
     });
 
     $("pImage").addEventListener("change", function () {
-      uploadedImageUrl = "";
-      var file = $("pImage").files && $("pImage").files[0];
-      var preview = $("pPreview");
-      if (!file) {
-        preview.hidden = true;
-        preview.innerHTML = "";
+      var files = ($("pImage").files && Array.prototype.slice.call($("pImage").files)) || [];
+      if (!files.length) {
+        if (!uploadedImageUrls.length) {
+          $("pPreview").hidden = true;
+          $("pPreview").innerHTML = "";
+        }
         return;
       }
-      var url = URL.createObjectURL(file);
-      preview.hidden = false;
-      preview.innerHTML = '<img src="' + url + '" alt="" />';
+      var urls = files.map(function (f) {
+        return URL.createObjectURL(f);
+      });
+      renderImagePreview(uploadedImageUrls.concat(urls));
     });
 
+    $("pFile").addEventListener("change", function () {
+      var f = $("pFile").files && $("pFile").files[0];
+      if (!f) return;
+      $("pFileName").hidden = false;
+      $("pFileName").textContent = "Selected: " + f.name;
+    });
+
+    $("productGrid").addEventListener("click", async function (e) {
+      var btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      var card = btn.closest("[data-id]");
+      if (!card) return;
+      var id = card.getAttribute("data-id");
+      var product = productsCache.filter(function (p) {
+        return String(p.id) === String(id);
+      })[0];
+      if (!product) return;
+      var act = btn.getAttribute("data-act");
+      try {
+        if (act === "edit") {
+          fillProductForm(product);
+          return;
+        }
+        if (act === "toggle") {
+          var live = product.is_available !== false && product.is_active !== false;
+          await patchProduct(
+            id,
+            { is_available: !live },
+            live ? "Product unlisted from store" : "Product listed again"
+          );
+          return;
+        }
+        if (act === "remove") {
+          if (!window.confirm("Remove this product from your store? Buyers will no longer see it.")) {
+            return;
+          }
+          await patchProduct(
+            id,
+            { is_available: false, is_active: false },
+            "Product removed"
+          );
+        }
+      } catch (ex) {
+        toast(ex.message || "Action failed");
+      }
+    });
+
+    updateFeeHint();
     loadStatus();
   });
 })();

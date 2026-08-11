@@ -772,3 +772,193 @@ body.is-kyc .ven-hero {
 @media (max-width: 520px) {
   .ven-chip { display: none; }
 }
+
+.ven-fee-banner {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0 0 1.1rem;
+  padding: 0.95rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(196, 122, 44, 0.35);
+  background: linear-gradient(135deg, rgba(240, 201, 138, 0.35), rgba(247, 250, 247, 0.9));
+}
+
+.ven-fee-banner strong {
+  color: var(--forest);
+  font-size: 0.95rem;
+}
+
+.ven-fee-banner span {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+}
+
+.ven-fee-hint {
+  margin-top: -0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--forest);
+}
+
+.ven-fee-confirm {
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  background: rgba(13, 59, 46, 0.06);
+  border: 1px solid var(--line);
+}
+
+.ven-check {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start;
+  gap: 0.65rem !important;
+  font-weight: 500 !important;
+  color: var(--ink) !important;
+}
+
+.ven-check input {
+  margin-top: 0.2rem;
+  width: auto;
+  accent-color: var(--forest);
+}
+
+.ven-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.ven-preview-multi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 0.5rem;
+  aspect-ratio: auto;
+  min-height: 88px;
+  background: transparent;
+}
+
+.ven-preview-multi img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.ven-file-name {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.ven-item.is-unlisted {
+  opacity: 0.72;
+}
+
+.ven-item-media {
+  position: relative;
+}
+
+.ven-img-count,
+.ven-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(5, 31, 24, 0.8);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.ven-badge {
+  left: 0.5rem;
+  right: auto;
+  background: rgba(180, 35, 24, 0.9);
+}
+
+.ven-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.ven-mini {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ven-mini:hover {
+  border-color: var(--forest);
+  color: var(--forest);
+}
+
+.ven-mini-danger:hover {
+  border-color: #b42318;
+  color: #b42318;
+}
+
+.ven-net {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.ven-net-em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--forest);
+}
+
+.ven-earnings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.ven-earnings > div {
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  background: rgba(247, 250, 247, 0.9);
+  border: 1px solid var(--line);
+}
+
+.ven-earnings span {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+}
+
+.ven-earnings strong {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+.ven-earnings .is-net {
+  border-color: rgba(13, 59, 46, 0.35);
+  background: rgba(13, 59, 46, 0.08);
+}
+
+.ven-earnings .is-net strong {
+  color: var(--forest);
+}
+
+@media (max-width: 640px) {
+  .ven-earnings {
+    grid-template-columns: 1fr;
+  }
+}
+
