@@ -12,7 +12,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800&family=Sora:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/vendor.css?v=20260809a" />
+    <link rel="stylesheet" href="css/vendor.css?v=20260812b" />
   </head>
   <body class="ven-body">
     <div class="ven-grain" aria-hidden="true"></div>
@@ -37,7 +37,7 @@
     <main>
       <section class="ven-hero" id="venHero">
         <div class="ven-hero-media" aria-hidden="true">
-          <img src="media/feature-market.png" alt="" />
+          <img src="media/vendor-hero-bright.png" alt="" />
           <div class="ven-hero-scrim"></div>
         </div>
         <div class="ven-hero-copy">
@@ -142,15 +142,16 @@
           <div class="ven-tabs" role="tablist">
             <button type="button" class="ven-tab is-active" data-tab="products">Products</button>
             <button type="button" class="ven-tab" data-tab="orders">Orders</button>
+            <button type="button" class="ven-tab" data-tab="balance">Balance</button>
             <button type="button" class="ven-tab" data-tab="new">Add product</button>
           </div>
         </div>
 
         <div class="ven-fee-banner" role="note">
-          <strong>Scholaxia fee: 10%</strong>
+          <strong>Escrow + 10% fee</strong>
           <span>
-            On every successful purchase, Scholaxia deducts 10% automatically.
-            You only see your net balance (90%) after the platform charge.
+            After a buyer pays, Scholaxia holds the money. You see it as held balance.
+            When the buyer confirms delivery is okay, admin is notified and you can request a withdrawal (bank details).
           </span>
         </div>
 
@@ -165,6 +166,51 @@
           <div class="ven-list" id="orderList">
             <div class="ven-empty">Loading orders…</div>
           </div>
+        </div>
+
+        <div class="ven-tab-panel" id="tab-balance" hidden>
+          <div class="ven-balance-cards" id="balanceCards">
+            <article>
+              <span>Held in escrow</span>
+              <strong id="balHeld">₦0</strong>
+              <p>Paid by buyers — waiting for delivery confirmation</p>
+            </article>
+            <article>
+              <span>Available to withdraw</span>
+              <strong id="balAvailable">₦0</strong>
+              <p>Buyer confirmed OK — request payout below</p>
+            </article>
+            <article>
+              <span>Pending payout requests</span>
+              <strong id="balPending">₦0</strong>
+              <p>Sent to admin — waiting for bank transfer</p>
+            </article>
+          </div>
+          <form id="withdrawForm" class="ven-card ven-form ven-withdraw-form">
+            <h3>Request payment</h3>
+            <p class="ven-hint">
+              Fill your bank details. Admin receives the request and sends the money to your account.
+            </p>
+            <label>
+              Bank name
+              <input id="wdBank" type="text" required placeholder="e.g. GTBank" />
+            </label>
+            <label>
+              Account name
+              <input id="wdAccountName" type="text" required placeholder="Name on the account" />
+            </label>
+            <label>
+              Account number
+              <input id="wdAccountNumber" type="text" required inputmode="numeric" placeholder="10-digit NUBAN" />
+            </label>
+            <label>
+              Amount (₦)
+              <input id="wdAmount" type="number" required min="100" step="1" placeholder="How much to withdraw" />
+            </label>
+            <p class="ven-error" id="wdError" hidden></p>
+            <button type="submit" class="ven-primary" id="btnWithdraw">Send withdrawal request</button>
+          </form>
+          <div class="ven-list" id="withdrawList"></div>
         </div>
 
         <div class="ven-tab-panel" id="tab-new" hidden>
@@ -270,6 +316,6 @@
     <div class="ven-toast" id="venToast" hidden></div>
 
     <script src="js/api.js?v=20260809a"></script>
-    <script src="js/vendor.js?v=20260812a"></script>
+    <script src="js/vendor.js?v=20260812b"></script>
   </body>
 </html>

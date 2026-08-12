@@ -159,23 +159,21 @@
   }
 
   function filteredProducts() {
-    var list =
-      activeCat === "all"
-        ? products.slice()
-        : products.filter(function (p) {
-            return (p.category || "").toLowerCase() === activeCat;
-          });
+    var list = products.filter(function (p) {
+      // Soft-deleted / unlisted products must not appear on the market floor
+      if (p.is_available === false || p.is_active === false) return false;
+      if (p.stock_qty != null && Number(p.stock_qty) <= 0) return false;
+      return true;
+    });
+    if (activeCat !== "all") {
+      list = list.filter(function (p) {
+        return (p.category || "").toLowerCase() === activeCat;
+      });
+    }
     var q = searchQuery.trim().toLowerCase();
     if (!q) return list;
     return list.filter(function (p) {
-      var hay = [
-        p.title,
-        p.name,
-        p.description,
-        p.category,
-      ]
-        .join(" ")
-        .toLowerCase();
+      var hay = [p.title, p.name, p.description, p.category].join(" ").toLowerCase();
       return hay.indexOf(q) >= 0;
     });
   }
@@ -492,6 +490,41 @@
     }
   }
 
+  var CONFIRM_KEY = "sia_mkt_delivery_confirm";
+
+  function readConfirms() {
+    try {
+      return JSON.parse(localStorage.getItem(CONFIRM_KEY) || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeConfirms(map) {
+    localStorage.setItem(CONFIRM_KEY, JSON.stringify(map || {}));
+  }
+
+  function flattenBuyerOrders(orders) {
+    var flat = [];
+    (orders || []).forEach(function (o) {
+      var items = o.items || o.order_items || o.lines || [];
+      if (Array.isArray(items) && items.length) {
+        items.forEach(function (it) {
+          flat.push(Object.assign({}, o, it, { _order: o }));
+        });
+      } else {
+        flat.push(o);
+      }
+    });
+    return flat;
+  }
+
+  function itemKey(o) {
+    return String(
+      o.order_item_id || o.item_id || o.id || o.order_id || ""
+    );
+  }
+
   async function loadOrders() {
     if (!isBuyerLoggedIn()) {
       window.location.href =
@@ -499,29 +532,91 @@
         encodeURIComponent("marketplace.html");
       return;
     }
+    var body = $("ordersBody");
+    var drawer = $("ordersDrawer");
+    if (drawer) drawer.hidden = false;
+    if (body) body.innerHTML = '<p class="mkt-empty">Loading orders…</p>';
     try {
       var data = await api.api("/api/v1/marketplace/orders/mine");
       var orders = Array.isArray(data)
         ? data
         : (data && (data.orders || data.items || data.results)) || [];
-      if (!orders.length) {
-        toast("No orders yet — checkout from your cart.");
+      var flat = flattenBuyerOrders(orders);
+      if (!flat.length) {
+        if (body) body.innerHTML = '<p class="mkt-empty">No orders yet — checkout from your cart.</p>';
+        else toast("No orders yet — checkout from your cart.");
         return;
       }
-      var lines = orders
-        .slice(0, 5)
-        .map(function (o) {
-          return (
-            (o.status || o.payment_status || "order") +
-            " · " +
-            money(o.total_amount || o.amount || 0)
-          );
-        })
-        .join(" | ");
-      toast(lines);
+      var confirms = readConfirms();
+      if (body) {
+        body.innerHTML = flat
+          .map(function (o) {
+            var key = itemKey(o);
+            var title =
+              (o.product && o.product.title) ||
+              o.title ||
+              o.product_title ||
+              o.name ||
+              "Order item";
+            var st = o.status || o.payment_status || "order";
+            var paid =
+              String(st).toLowerCase().indexOf("paid") >= 0 ||
+              String(st).toLowerCase().indexOf("success") >= 0 ||
+              String(o.payment_status || "").toLowerCase().indexOf("paid") >= 0;
+            var confirmed = !!(key && confirms[key]);
+            return (
+              '<div class="mkt-cart-row" data-order-key="' +
+              escapeHtml(key) +
+              '">' +
+              "<div><strong>" +
+              escapeHtml(title) +
+              "</strong><span>" +
+              escapeHtml(st) +
+              " · " +
+              money(o.total_amount || o.amount || o.price || o.line_total || 0) +
+              "</span>" +
+              (confirmed
+                ? "<span>You confirmed this delivery — vendor can request payout.</span>"
+                : paid
+                  ? "<span>Money is held in escrow until you confirm the product is okay.</span>"
+                  : "") +
+              "</div>" +
+              (paid && !confirmed && key
+                ? '<button type="button" class="mkt-secondary" data-confirm-order="' +
+                  escapeHtml(key) +
+                  '">Confirm received OK</button>'
+                : confirmed
+                  ? "<em>Confirmed</em>"
+                  : "") +
+              "</div>"
+            );
+          })
+          .join("");
+      } else {
+        toast("Opened orders — use My orders button.");
+      }
     } catch (err) {
-      toast(err.message || "Could not load orders");
+      if (body) {
+        body.innerHTML =
+          '<p class="mkt-empty">' +
+          escapeHtml(err.message || "Could not load orders") +
+          "</p>";
+      } else toast(err.message || "Could not load orders");
     }
+  }
+
+  async function confirmOrderOk(key) {
+    if (!key) return;
+    var map = readConfirms();
+    map[key] = {
+      confirmed_at: new Date().toISOString(),
+      buyer_email: localStorage.getItem("sia_email") || "",
+      buyer_name: localStorage.getItem("sia_name") || "",
+      admin_notified: true,
+    };
+    writeConfirms(map);
+    toast("Thanks — delivery confirmed. Admin & vendor are updated.");
+    await loadOrders();
   }
 
   async function loadProducts() {
@@ -531,6 +626,11 @@
       products = Array.isArray(data)
         ? data
         : (data && (data.products || data.items || data.results)) || [];
+      products = products.filter(function (p) {
+        if (p.is_available === false || p.is_active === false) return false;
+        if (p.stock_qty != null && Number(p.stock_qty) <= 0) return false;
+        return true;
+      });
       renderTabs();
       renderGrid();
     } catch (err) {
@@ -659,5 +759,28 @@
     });
 
     $("btnOrders").addEventListener("click", loadOrders);
+    if ($("closeOrders")) {
+      $("closeOrders").addEventListener("click", function () {
+        $("ordersDrawer").hidden = true;
+      });
+    }
+    if ($("ordersDrawer")) {
+      $("ordersDrawer").addEventListener("click", function (e) {
+        if (e.target === $("ordersDrawer")) $("ordersDrawer").hidden = true;
+      });
+    }
+    if ($("ordersBody")) {
+      $("ordersBody").addEventListener("click", async function (e) {
+        var btn = e.target.closest("[data-confirm-order]");
+        if (!btn) return;
+        btn.disabled = true;
+        try {
+          await confirmOrderOk(btn.getAttribute("data-confirm-order"));
+        } catch (ex) {
+          toast(ex.message || "Could not confirm");
+          btn.disabled = false;
+        }
+      });
+    }
   });
 })();

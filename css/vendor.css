@@ -211,8 +211,8 @@ img {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(100deg, rgba(5, 31, 24, 0.92) 0%, rgba(5, 31, 24, 0.55) 50%, rgba(5, 31, 24, 0.25) 100%),
-    linear-gradient(0deg, rgba(5, 31, 24, 0.8) 0%, transparent 50%);
+    linear-gradient(100deg, rgba(5, 31, 24, 0.55) 0%, rgba(5, 31, 24, 0.28) 48%, rgba(5, 31, 24, 0.12) 100%),
+    linear-gradient(0deg, rgba(5, 31, 24, 0.45) 0%, transparent 55%);
 }
 
 .ven-hero-copy {
@@ -301,6 +301,10 @@ img {
 .ven-hero-cta {
   margin-top: 1rem;
   display: inline-flex;
+}
+
+.ven-hero-cta[hidden] {
+  display: none !important;
 }
 
 .ven-steps strong {
@@ -589,6 +593,60 @@ img {
 
 .ven-toast[hidden] {
   display: none !important;
+}
+
+.ven-balance-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.ven-balance-cards article {
+  background: rgba(247, 250, 247, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1rem 1.05rem;
+  box-shadow: 0 10px 28px rgba(5, 31, 24, 0.06);
+}
+
+.ven-balance-cards span {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #5b6b63;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ven-balance-cards strong {
+  display: block;
+  margin: 0.35rem 0;
+  font-family: var(--display);
+  font-size: 1.55rem;
+  color: var(--forest-deep);
+}
+
+.ven-balance-cards p {
+  font-size: 0.82rem;
+  color: #617066;
+  line-height: 1.4;
+}
+
+.ven-withdraw-form {
+  margin-bottom: 1.25rem;
+}
+
+.ven-hint {
+  color: #5b6b63;
+  font-size: 0.9rem;
+  margin-bottom: 0.85rem;
+}
+
+@media (max-width: 860px) {
+  .ven-balance-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ven-kyc-wrap {
