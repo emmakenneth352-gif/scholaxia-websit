@@ -559,11 +559,20 @@
               o.name ||
               "Order item";
             var st = o.status || o.payment_status || "order";
+            var confirmed =
+              !!(key && confirms[key]) ||
+              o.buyer_confirmed === true ||
+              o.escrow_status === "available";
             var paid =
               String(st).toLowerCase().indexOf("paid") >= 0 ||
               String(st).toLowerCase().indexOf("success") >= 0 ||
-              String(o.payment_status || "").toLowerCase().indexOf("paid") >= 0;
-            var confirmed = !!(key && confirms[key]);
+              String(st).toLowerCase().indexOf("held_escrow") >= 0 ||
+              String(st).toLowerCase().indexOf("processing") >= 0 ||
+              String(st).toLowerCase().indexOf("shipped") >= 0 ||
+              String(st).toLowerCase().indexOf("delivered") >= 0 ||
+              String(o.payment_status || "").toLowerCase().indexOf("paid") >= 0 ||
+              o.escrow_status === "held" ||
+              o.escrow_status === "available";
             return (
               '<div class="mkt-cart-row" data-order-key="' +
               escapeHtml(key) +
@@ -607,6 +616,13 @@
 
   async function confirmOrderOk(key) {
     if (!key) return;
+    await api.api(
+      "/api/v1/marketplace/orders/items/" + encodeURIComponent(key) + "/confirm-delivery",
+      {
+        method: "POST",
+        body: { note: "Buyer confirmed product received and OK" },
+      }
+    );
     var map = readConfirms();
     map[key] = {
       confirmed_at: new Date().toISOString(),
@@ -615,7 +631,7 @@
       admin_notified: true,
     };
     writeConfirms(map);
-    toast("Thanks — delivery confirmed. Admin & vendor are updated.");
+    toast("Thanks — delivery confirmed. Vendor can request payout.");
     await loadOrders();
   }
 

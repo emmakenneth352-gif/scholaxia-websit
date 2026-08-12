@@ -293,6 +293,7 @@
   }
 
   function isBuyerConfirmed(o) {
+    if (o && (o.buyer_confirmed === true || o.escrow_status === "available")) return true;
     var key = orderKey(o);
     if (!key) return false;
     var map = readConfirms();
@@ -302,9 +303,22 @@
     ).toLowerCase();
     return (
       st.indexOf("buyer_confirm") >= 0 ||
-      st.indexOf("confirmed") >= 0 ||
-      st.indexOf("delivered_ok") >= 0 ||
-      st === "completed"
+      st === "buyer_confirmed" ||
+      st.indexOf("delivered_ok") >= 0
+    );
+  }
+
+  function isHeldEscrow(o) {
+    if (!o) return false;
+    if (o.escrow_status === "held") return true;
+    if (isBuyerConfirmed(o)) return false;
+    var st = String(o.tracking_status || o.status || "").toLowerCase();
+    return (
+      st === "held_escrow" ||
+      st === "processing" ||
+      st === "paid" ||
+      st === "shipped" ||
+      st === "delivered"
     );
   }
 
@@ -503,19 +517,21 @@
 
   function isPaidOrder(o) {
     var s = String(
-      o.payment_status || o.status || o.fulfillment_status || ""
+      o.payment_status || o.status || o.fulfillment_status || o.tracking_status || ""
     ).toLowerCase();
+    var escrow = String(o.escrow_status || "").toLowerCase();
+    if (escrow === "held" || escrow === "available" || escrow === "withdrawn") return true;
     if (!s) return true;
-    if (s.indexOf("fail") >= 0 || s.indexOf("cancel") >= 0 || s === "pending") {
-      return s === "pending" ? false : false;
-    }
+    if (s.indexOf("fail") >= 0 || s.indexOf("cancel") >= 0) return false;
+    if (s === "pending" || s === "pending_payment") return false;
     return (
       s.indexOf("paid") >= 0 ||
       s.indexOf("success") >= 0 ||
-      s.indexOf("complete") >= 0 ||
+      s.indexOf("held_escrow") >= 0 ||
       s.indexOf("processing") >= 0 ||
       s.indexOf("shipped") >= 0 ||
       s.indexOf("delivered") >= 0 ||
+      s.indexOf("buyer_confirm") >= 0 ||
       s === "confirmed"
     );
   }
@@ -669,31 +685,30 @@
     var pendingEl = $("balPending");
     var listEl = $("withdrawList");
     try {
-      var paid = await fetchVendorOrderItems();
-      var held = 0;
-      var available = 0;
-      paid.forEach(function (o) {
-        var net = orderNet(o);
-        if (isBuyerConfirmed(o)) available += net;
-        else held += net;
-      });
-      var withdrawals = readWithdrawals().filter(function (w) {
-        return (w.vendor_email || "") === (localStorage.getItem("sia_email") || "");
-      });
-      var pendingAmt = withdrawals
-        .filter(function (w) {
-          return w.status === "pending";
-        })
-        .reduce(function (s, w) {
-          return s + (Number(w.amount) || 0);
-        }, 0);
+      var escrow = await api.api("/api/v1/vendor/marketplace/escrow");
+      var held = Number((escrow && escrow.held) || 0);
+      var available = Number((escrow && escrow.withdrawable) || (escrow && escrow.available) || 0);
+      var pendingAmt = Number((escrow && escrow.pending_withdrawals) || 0);
 
       if (heldEl) heldEl.textContent = money(held);
       if (availEl) availEl.textContent = money(available);
       if (pendingEl) pendingEl.textContent = money(pendingAmt);
-      if ($("wdAmount") && !$("wdAmount").value) {
+      if ($("wdAmount")) {
         $("wdAmount").max = String(Math.max(0, available));
-        $("wdAmount").placeholder = available > 0 ? "Max " + money(available) : "No available balance yet";
+        $("wdAmount").placeholder =
+          available > 0 ? "Max " + money(available) : "No available balance yet";
+      }
+
+      var withdrawals = [];
+      try {
+        var wdData = await api.api("/api/v1/vendor/marketplace/withdrawals");
+        withdrawals = Array.isArray(wdData)
+          ? wdData
+          : (wdData && (wdData.withdrawals || wdData.items || wdData.results)) || [];
+      } catch (eWd) {
+        withdrawals = readWithdrawals().filter(function (w) {
+          return (w.vendor_email || "") === (localStorage.getItem("sia_email") || "");
+        });
       }
 
       if (listEl) {
@@ -702,8 +717,6 @@
             '<div class="ven-empty">No withdrawal requests yet. After a buyer confirms delivery, request payment here.</div>';
         } else {
           listEl.innerHTML = withdrawals
-            .slice()
-            .reverse()
             .map(function (w) {
               return (
                 '<div class="ven-order">' +
@@ -720,7 +733,7 @@
                 escapeHtml(w.status || "pending") +
                 "</span>" +
                 "<span>Requested " +
-                escapeHtml(w.created_at || "") +
+                escapeHtml(w.requested_at || w.created_at || "") +
                 " · Admin will transfer when approved</span>" +
                 "</div>"
               );
@@ -760,63 +773,15 @@
     btn.disabled = true;
     btn.textContent = "Sending…";
     try {
-      var paid = await fetchVendorOrderItems();
-      var available = paid
-        .filter(isBuyerConfirmed)
-        .reduce(function (s, o) {
-          return s + orderNet(o);
-        }, 0);
-      var pendingAmt = readWithdrawals()
-        .filter(function (w) {
-          return (
-            (w.vendor_email || "") === (localStorage.getItem("sia_email") || "") &&
-            w.status === "pending"
-          );
-        })
-        .reduce(function (s, w) {
-          return s + (Number(w.amount) || 0);
-        }, 0);
-      var room = Math.max(0, available - pendingAmt);
-      if (amount > room + 0.01) {
-        throw new Error(
-          "Max you can request now is " + money(room) + " (buyer-confirmed, not already requested)."
-        );
-      }
-
-      try {
-        await api.api("/api/v1/wallet/withdraw", {
-          method: "POST",
-          body: {
-            amount: amount,
-            bank_name: bank,
-            account_number: accountNumber,
-            account_name: accountName,
-          },
-        });
-      } catch (apiErr) {
-        // Teacher-wallet endpoint may reject vendors — still queue for admin via local ledger.
-        if (!(apiErr && (apiErr.status === 403 || apiErr.status === 401 || apiErr.status === 404))) {
-          // keep going for other errors too after recording local request? Prefer show API error if not auth
-          if (apiErr && apiErr.status && apiErr.status !== 400) {
-            /* still record locally so admin flow works on this website */
-          }
-        }
-      }
-
-      var list = readWithdrawals();
-      list.push({
-        id: "wd_" + Date.now(),
-        vendor_email: localStorage.getItem("sia_email") || "",
-        vendor_name: localStorage.getItem("sia_name") || "",
-        amount: amount,
-        bank_name: bank,
-        account_name: accountName,
-        account_number: accountNumber,
-        status: "pending",
-        created_at: new Date().toLocaleString(),
-        admin_note: "Awaiting admin bank transfer to vendor",
+      await api.api("/api/v1/vendor/marketplace/withdraw", {
+        method: "POST",
+        body: {
+          amount: amount,
+          bank_name: bank,
+          account_number: accountNumber,
+          account_name: accountName,
+        },
       });
-      saveWithdrawals(list);
       toast("Withdrawal request sent to admin");
       $("withdrawForm").reset();
       await loadBalance();
