@@ -430,6 +430,28 @@ video {
   padding: 0 var(--pad) 0.5rem;
 }
 
+@media (max-width: 980px) {
+  .hero-banner {
+    justify-content: flex-start;
+  }
+
+  .hero-inner {
+    padding-bottom: clamp(1.5rem, 4vh, 2.5rem);
+    align-items: flex-end;
+  }
+
+  .hero-actions {
+    position: relative;
+    z-index: 4;
+  }
+
+  /* Keep stats below hero CTAs on mobile — do not overlap Join / Marketplace */
+  .trust-strip {
+    margin-top: 1.25rem;
+    padding-top: 0.25rem;
+  }
+}
+
 .trust-inner {
   max-width: var(--max);
   margin: 0 auto;

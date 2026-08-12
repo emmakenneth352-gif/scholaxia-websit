@@ -332,7 +332,7 @@
         body: { product_id: productId, quantity: 1 },
       });
       await syncServerCartCount();
-      toast("Added to cart");
+      toast("Added to cart. Vendor sees it after you checkout & pay.");
     } catch (err) {
       toast(err.message || "Could not add to cart");
     }

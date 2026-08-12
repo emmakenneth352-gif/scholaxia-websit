@@ -464,9 +464,39 @@
     try {
       var data = await api.api("/api/v1/vendor/marketplace/orders");
       var list = normalizeVendorOrders(data);
+
+      // Also surface buyer requests/bookings (cart alone is buyer-only until checkout).
+      try {
+        var bookings = await api.api("/api/v1/vendor/marketplace/bookings");
+        var bList = Array.isArray(bookings)
+          ? bookings
+          : (bookings &&
+              (bookings.bookings ||
+                bookings.items ||
+                bookings.results ||
+                bookings.data)) ||
+            [];
+        bList.forEach(function (b) {
+          list.push(
+            Object.assign({}, b, {
+              title:
+                (b.product && b.product.title) ||
+                b.product_title ||
+                b.title ||
+                b.name ||
+                "Buyer request",
+              status: b.status || b.booking_status || "request",
+              _isBooking: true,
+            })
+          );
+        });
+      } catch (eBook) {
+        /* bookings optional */
+      }
+
       if (!list.length) {
         wrap.innerHTML =
-          '<div class="ven-empty">No paid orders yet. After a buyer pays with Paystack, refresh this Orders tab — amounts show your balance after the 10% Scholaxia fee.</div>';
+          '<div class="ven-empty">No buyer orders yet.<br/><br/>Cart items stay private to the buyer. You see sales here after they <strong>checkout and pay</strong> with Paystack — then refresh this Orders tab. Amounts show your balance after the 10% Scholaxia fee.</div>';
         return;
       }
 
@@ -474,6 +504,7 @@
       var totalNet = 0;
       var totalFee = 0;
       list.forEach(function (o) {
+        if (o._isBooking) return;
         var g = orderGross(o);
         var n = orderNet(o);
         totalGross += g;
@@ -481,7 +512,7 @@
         totalFee += Math.max(0, g - n);
       });
 
-      if (earnings) {
+      if (earnings && (totalGross > 0 || totalNet > 0)) {
         earnings.hidden = false;
         earnings.innerHTML =
           "<div><span>Gross sales</span><strong>" +
@@ -513,6 +544,19 @@
           var net = orderNet(o);
           var fee = Math.max(0, gross - net);
           var st = o.status || o.fulfillment_status || o.payment_status || "processing";
+          if (o._isBooking) {
+            return (
+              '<div class="ven-order">' +
+              "<strong>" +
+              escapeHtml(title) +
+              "</strong>" +
+              "<span>Buyer request · Status: " +
+              escapeHtml(st) +
+              "</span>" +
+              (buyer ? "<span>Buyer: " + escapeHtml(buyer) + "</span>" : "") +
+              "</div>"
+            );
+          }
           return (
             '<div class="ven-order">' +
             "<strong>" +
