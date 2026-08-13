@@ -401,6 +401,10 @@
     try {
       var data = await api.api("/api/v1/vendor/marketplace/products");
       var list = Array.isArray(data) ? data : (data && data.products) || [];
+      // Soft-deleted products must not reappear after refresh.
+      list = list.filter(function (p) {
+        return p && p.is_active !== false;
+      });
       productsCache = list;
       if (!list.length) {
         grid.innerHTML =
@@ -1027,14 +1031,7 @@
           }
           await api.api(
             "/api/v1/vendor/marketplace/products/" + encodeURIComponent(id),
-            {
-              method: "PATCH",
-              body: {
-                is_available: false,
-                is_active: false,
-                stock_qty: 0,
-              },
-            }
+            { method: "DELETE" }
           );
           productsCache = productsCache.filter(function (p) {
             return String(p.id) !== String(id);
