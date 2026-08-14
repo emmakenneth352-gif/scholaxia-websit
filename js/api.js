@@ -11,8 +11,12 @@
 
   async function wakeServer(ms) {
     try {
-      await fetch(API_BASE + "/health", { signal: fetchTimeout(ms || 90000) });
-    } catch (e) { /* cold start or offline — login will surface the error */ }
+      await fetch(API_BASE + "/health", {
+        mode: "no-cors",
+        cache: "no-store",
+        signal: fetchTimeout(ms || 60000),
+      });
+    } catch (e) { /* cold start — login will retry */ }
   }
 
   function friendlyFetchError(err) {
@@ -22,7 +26,7 @@
       return "Server took too long. Wait 20 seconds and try again (it may be waking up).";
     }
     if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-      return "Cannot reach the server. Check your internet, then try again.";
+      return "Cannot reach the Scholaxia API. Wait a minute if the server is restarting, then try again.";
     }
     return msg || "Request failed";
   }
@@ -145,6 +149,7 @@
       method: options.method || "GET",
       headers: headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      credentials: "omit",
       signal: options.signal || fetchTimeout(45000),
     });
     return parseResponse(res);
@@ -161,6 +166,7 @@
       method: options.method || "POST",
       headers: headers,
       body: formData,
+      credentials: "omit",
       signal: options.signal || fetchTimeout(90000),
     });
     return parseResponse(res);
