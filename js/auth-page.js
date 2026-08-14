@@ -233,7 +233,8 @@
         method: "POST",
         noAuth: true,
         body: { email: email, password: password },
-        signal: api.fetchTimeout ? api.fetchTimeout(25000) : undefined,
+        timeout: 20000,
+        retries: 1,
       });
       if (!data || !data.access_token) {
         throw new Error("Login did not return a session. Try again.");

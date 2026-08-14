@@ -5,7 +5,10 @@
 
   function fetchTimeout(ms) {
     var ctrl = new AbortController();
-    setTimeout(function () { ctrl.abort(); }, ms || 45000);
+    var timer = setTimeout(function () {
+      try { ctrl.abort(); } catch (e) {}
+    }, ms || 25000);
+    ctrl.signal.addEventListener("abort", function () { clearTimeout(timer); });
     return ctrl.signal;
   }
 
@@ -151,21 +154,59 @@
       try {
         var res = await fetch(API_BASE + path, {
           method: options.method || "GET",
+          mode: "cors",
           headers: headers,
           body: options.body ? JSON.stringify(options.body) : undefined,
           credentials: "omit",
-          signal: options.signal || fetchTimeout(options.timeout || 25000),
+          cache: "no-store",
+          signal: fetchTimeout(options.timeout || 20000),
         });
         return await parseResponse(res);
       } catch (err) {
         lastErr = err;
         var msg = (err && err.message) || "";
         var retryable = /failed to fetch|networkerror|load failed|aborted/i.test(msg) || err.name === "AbortError";
-        if (!retryable || i === tries) throw err;
-        await new Promise(function (resolve) { setTimeout(resolve, 800); });
+        if (!retryable || i === tries) break;
+        await new Promise(function (resolve) { setTimeout(resolve, 600); });
+      }
+    }
+    if (lastErr && options.noAuth && (options.method || "GET").toUpperCase() === "POST") {
+      try {
+        return await xhrJson(path, headers, options);
+      } catch (xhrErr) {
+        throw lastErr;
       }
     }
     throw lastErr;
+  }
+
+  function xhrJson(path, headers, options) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(options.method || "POST", API_BASE + path, true);
+      xhr.timeout = options.timeout || 20000;
+      Object.keys(headers || {}).forEach(function (k) {
+        try { xhr.setRequestHeader(k, headers[k]); } catch (e) {}
+      });
+      xhr.onload = function () {
+        var data = null;
+        try { data = xhr.responseText ? JSON.parse(xhr.responseText) : null; } catch (e) {
+          data = { detail: xhr.responseText || "Invalid response" };
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+          return;
+        }
+        var msg = (data && (data.detail || data.message)) || ("Request failed (" + xhr.status + ")");
+        if (typeof msg === "object") msg = JSON.stringify(msg);
+        var err = new Error(msg);
+        err.status = xhr.status;
+        reject(err);
+      };
+      xhr.onerror = function () { reject(new Error("Failed to fetch")); };
+      xhr.ontimeout = function () { reject(new Error("The user aborted a request.")); };
+      xhr.send(options.body ? JSON.stringify(options.body) : null);
+    });
   }
 
   async function apiUpload(path, formData, options) {
