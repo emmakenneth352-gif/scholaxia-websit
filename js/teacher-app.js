@@ -1260,10 +1260,17 @@
     }
     var book = t.closest("[data-open-book]");
     if (book) {
-      api
-        .api("/api/v1/library/" + encodeURIComponent(book.getAttribute("data-open-book")) + "/read")
-        .then(function (data) {
-          if (data && data.read_url) window.open(data.read_url, "_blank", "noopener");
+      var bookId = book.getAttribute("data-open-book");
+      fetch(api.API_BASE + "/api/v1/library/" + encodeURIComponent(bookId) + "/file", {
+        headers: { Authorization: "Bearer " + api.getToken() },
+        credentials: "omit",
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("Could not open this material");
+          return res.blob();
+        })
+        .then(function (blob) {
+          window.open(URL.createObjectURL(blob), "_blank");
         })
         .catch(function (err) {
           alert(err.message);

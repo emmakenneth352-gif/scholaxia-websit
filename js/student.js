@@ -444,37 +444,88 @@
   }
 
   document.addEventListener("click", function (e) {
+    if (e.target.closest("#libReaderClose")) {
+      closeLibraryReader();
+      return;
+    }
     var openBtn = e.target.closest("[data-open-book]");
     if (openBtn) openLibraryRead(openBtn.dataset.openBook, openBtn);
   });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeLibraryReader();
+  });
+
+  var libReaderBlob = null;
+
+  function closeLibraryReader() {
+    var overlay = $("libReader");
+    var frame = $("libReaderFrame");
+    if (overlay) overlay.hidden = true;
+    if (frame) frame.removeAttribute("src");
+    if (libReaderBlob) {
+      try { URL.revokeObjectURL(libReaderBlob); } catch (e) {}
+      libReaderBlob = null;
+    }
+  }
+
+  function showLibraryReader(blobUrl, title) {
+    var overlay = $("libReader");
+    var frame = $("libReaderFrame");
+    var titleEl = $("libReaderTitle");
+    if (titleEl) titleEl.textContent = title || "Reading";
+    if (libReaderBlob && libReaderBlob !== blobUrl) {
+      try { URL.revokeObjectURL(libReaderBlob); } catch (e) {}
+    }
+    libReaderBlob = blobUrl;
+    if (!overlay || !frame) {
+      window.open(blobUrl, "_blank");
+      return;
+    }
+    frame.src = blobUrl;
+    overlay.hidden = false;
+  }
+
+  async function fetchLibraryPdf(id) {
+    var token = api.getToken();
+    var res = await fetch(api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file", {
+      headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
+      credentials: "omit",
+    });
+    if (res.status === 402) throw new Error("Pay to unlock this material.");
+    if (!res.ok) {
+      var data = await res.json().catch(function () { return {}; });
+      var detail = data && data.detail;
+      if (typeof detail === "object") detail = JSON.stringify(detail);
+      throw new Error(detail || "Could not open this material (" + res.status + ")");
+    }
+    return await res.blob();
+  }
 
   function openLibraryRead(id, btn) {
     if (!id) return;
+    var prevText = btn ? btn.textContent : "";
     if (btn) {
       btn.disabled = true;
-      var prevText = btn.textContent;
       btn.textContent = "Opening…";
-      var reset = function () {
-        btn.disabled = false;
-        btn.textContent = prevText;
-      };
     }
-    api
-      .api("/api/v1/library/" + id + "/read")
-      .then(function (res) {
-        var url =
-          (res && (res.read_url || res.file_url || res.url)) ||
-          (typeof res === "string" ? res : "");
-        if (url) {
-          window.open(url, "_blank");
-        } else {
-          alert("This resource has no readable file yet.");
-        }
-        if (btn) reset();
+    var reset = function () {
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = prevText || "Read";
+    };
+    var title = "";
+    if (btn && btn.closest(".card")) {
+      var h = btn.closest(".card").querySelector("h4");
+      title = (h && h.textContent) || "";
+    }
+    fetchLibraryPdf(id)
+      .then(function (blob) {
+        showLibraryReader(URL.createObjectURL(blob), title);
+        reset();
       })
       .catch(function (err) {
         alert("Could not open resource: " + errMsg(err));
-        if (btn) reset();
+        reset();
       });
   }
 

@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/app.css?v=12" />
-    <link rel="stylesheet" href="css/student-pretty.css?v=13" />
+    <link rel="stylesheet" href="css/student-pretty.css?v=20260814h" />
   </head>
   <body class="app-body student-shell">
     <div class="app-shell" id="appShell">
@@ -696,8 +696,18 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260805c"></script>
+    <div id="libReader" class="lib-reader" hidden>
+      <div class="lib-reader-panel">
+        <div class="lib-reader-bar">
+          <strong id="libReaderTitle">Reading</strong>
+          <button type="button" class="btn btn-secondary btn-mini" id="libReaderClose">Close</button>
+        </div>
+        <iframe id="libReaderFrame" title="Library PDF"></iframe>
+      </div>
+    </div>
+
+    <script src="js/api.js?v=20260814h"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260805c"></script>
+    <script src="js/student.js?v=20260814h"></script>
   </body>
 </html>
