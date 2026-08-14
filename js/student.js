@@ -455,34 +455,63 @@
     if (e.key === "Escape") closeLibraryReader();
   });
 
-  var libReaderBlob = null;
+  var libReaderTask = 0;
 
   function closeLibraryReader() {
+    libReaderTask += 1;
     var overlay = $("libReader");
-    var frame = $("libReaderFrame");
+    var pages = $("libReaderPages");
     if (overlay) overlay.hidden = true;
-    if (frame) frame.removeAttribute("src");
-    if (libReaderBlob) {
-      try { URL.revokeObjectURL(libReaderBlob); } catch (e) {}
-      libReaderBlob = null;
-    }
+    if (pages) pages.innerHTML = "";
   }
 
-  function showLibraryReader(blobUrl, title) {
-    var overlay = $("libReader");
-    var frame = $("libReaderFrame");
-    var titleEl = $("libReaderTitle");
-    if (titleEl) titleEl.textContent = title || "Reading";
-    if (libReaderBlob && libReaderBlob !== blobUrl) {
-      try { URL.revokeObjectURL(libReaderBlob); } catch (e) {}
+  function loadPdfJs() {
+    return new Promise(function (resolve, reject) {
+      if (window.pdfjsLib) {
+        resolve(window.pdfjsLib);
+        return;
+      }
+      var s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = function () {
+        if (!window.pdfjsLib) {
+          reject(new Error("PDF reader failed to load"));
+          return;
+        }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      s.onerror = function () {
+        reject(new Error("Could not load the PDF reader. Check your connection."));
+      };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function renderPdfPages(bytes, taskId) {
+    var pages = $("libReaderPages");
+    if (!pages) return;
+    pages.innerHTML = '<p class="lib-reader-status">Opening pages…</p>';
+    var pdfjs = await loadPdfJs();
+    if (taskId !== libReaderTask) return;
+    var pdf = await pdfjs.getDocument({ data: bytes }).promise;
+    if (taskId !== libReaderTask) return;
+    pages.innerHTML = "";
+    var maxW = Math.max(280, pages.clientWidth - 16);
+    for (var n = 1; n <= pdf.numPages; n++) {
+      if (taskId !== libReaderTask) return;
+      var page = await pdf.getPage(n);
+      var base = page.getViewport({ scale: 1 });
+      var scale = Math.min(1.6, maxW / base.width);
+      var viewport = page.getViewport({ scale: scale * (window.devicePixelRatio || 1) });
+      var canvas = document.createElement("canvas");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      canvas.style.width = Math.floor(base.width * scale) + "px";
+      pages.appendChild(canvas);
+      await page.render({ canvasContext: canvas.getContext("2d"), viewport: viewport }).promise;
     }
-    libReaderBlob = blobUrl;
-    if (!overlay || !frame) {
-      window.open(blobUrl, "_blank");
-      return;
-    }
-    frame.src = blobUrl;
-    overlay.hidden = false;
   }
 
   async function fetchLibraryPdf(id) {
@@ -490,6 +519,7 @@
     var res = await fetch(api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file", {
       headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
       credentials: "omit",
+      cache: "no-store",
     });
     if (res.status === 402) throw new Error("Pay to unlock this material.");
     if (!res.ok) {
@@ -498,7 +528,7 @@
       if (typeof detail === "object") detail = JSON.stringify(detail);
       throw new Error(detail || "Could not open this material (" + res.status + ")");
     }
-    return await res.blob();
+    return new Uint8Array(await res.arrayBuffer());
   }
 
   function openLibraryRead(id, btn) {
@@ -518,13 +548,26 @@
       var h = btn.closest(".card").querySelector("h4");
       title = (h && h.textContent) || "";
     }
+    var overlay = $("libReader");
+    var titleEl = $("libReaderTitle");
+    var pages = $("libReaderPages");
+    if (titleEl) titleEl.textContent = title || "Reading";
+    if (pages) pages.innerHTML = '<p class="lib-reader-status">Loading PDF…</p>';
+    if (overlay) overlay.hidden = false;
+    var taskId = ++libReaderTask;
     fetchLibraryPdf(id)
-      .then(function (blob) {
-        showLibraryReader(URL.createObjectURL(blob), title);
-        reset();
+      .then(function (bytes) {
+        if (taskId !== libReaderTask) return;
+        return renderPdfPages(bytes, taskId);
       })
+      .then(function () { reset(); })
       .catch(function (err) {
-        alert("Could not open resource: " + errMsg(err));
+        if (pages) {
+          pages.innerHTML =
+            '<p class="lib-reader-status">' + esc(errMsg(err) || "Could not open this PDF on this phone.") + "</p>";
+        } else {
+          alert("Could not open resource: " + errMsg(err));
+        }
         reset();
       });
   }
