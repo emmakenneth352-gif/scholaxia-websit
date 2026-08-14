@@ -9,6 +9,24 @@
     return ctrl.signal;
   }
 
+  async function wakeServer(ms) {
+    try {
+      await fetch(API_BASE + "/health", { signal: fetchTimeout(ms || 90000) });
+    } catch (e) { /* cold start or offline — login will surface the error */ }
+  }
+
+  function friendlyFetchError(err) {
+    var name = (err && err.name) || "";
+    var msg = (err && err.message) || "";
+    if (name === "AbortError" || /aborted|abort/i.test(msg)) {
+      return "Server took too long. Wait 20 seconds and try again (it may be waking up).";
+    }
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      return "Cannot reach the server. Check your internet, then try again.";
+    }
+    return msg || "Request failed";
+  }
+
   function getToken() {
     var teacherTok = localStorage.getItem("sia_teacher_token") || localStorage.getItem("sia_admin_token") || "";
     var studentTok = localStorage.getItem("sia_token") || "";
@@ -173,12 +191,14 @@
     API_BASE: API_BASE,
     api: api,
     apiUpload: apiUpload,
+    wakeServer: wakeServer,
+    friendlyFetchError: friendlyFetchError,
+    fetchTimeout: fetchTimeout,
     getToken: getToken,
     getUser: getUser,
     saveSession: saveSession,
     clearSession: clearSession,
     dashboardForRole: dashboardForRole,
     requireAuth: requireAuth,
-    fetchTimeout: fetchTimeout,
   };
 })(window);

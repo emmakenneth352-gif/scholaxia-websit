@@ -203,23 +203,6 @@
 
     api.saveSession(data, email, name);
 
-    if (actual === "kind") {
-      try {
-        var kd = await api.api("/api/v1/kind/me");
-        if (kd && kd.full_name) localStorage.setItem("sia_name", kd.full_name);
-        if (kd && kd.age_group) localStorage.setItem("sia_age_group", kd.age_group);
-      } catch (e) { /* ignore */ }
-    } else if (actual === "student") {
-      try {
-        var st = await api.api("/api/v1/students/me");
-        if (st && st.full_name) localStorage.setItem("sia_name", st.full_name);
-        if (st && st.exam_type) localStorage.setItem("sia_exam_type", st.exam_type);
-        if (st && st.selected_subjects) {
-          localStorage.setItem("sia_subjects", JSON.stringify(st.selected_subjects));
-        }
-      } catch (e) { /* ignore */ }
-    }
-
     if (actual === "teacher" && data && data.user && data.user.is_approved === false) {
       localStorage.setItem("sia_teacher_pending_approval", "1");
       window.location.href = "teacher.html#profile";
@@ -244,16 +227,26 @@
     var btn = $("btnLogin");
     showErr($("loginError"));
     btn.disabled = true;
-    btn.textContent = "Logging in…";
+    btn.textContent = "Connecting…";
     try {
+      if (api.wakeServer) await api.wakeServer(90000);
+      btn.textContent = "Logging in…";
       var data = await api.api("/api/v1/auth/login", {
         method: "POST",
         noAuth: true,
         body: { email: email, password: password },
+        signal: api.fetchTimeout ? api.fetchTimeout(90000) : undefined,
       });
+      if (!data || !data.access_token) {
+        throw new Error("Login did not return a session. Try again.");
+      }
       await afterAuth(data, email, data.user && data.user.full_name);
     } catch (err) {
-      showErr($("loginError"), err.message || "Login failed");
+      var msg =
+        (api.friendlyFetchError && api.friendlyFetchError(err)) ||
+        err.message ||
+        "Login failed";
+      showErr($("loginError"), msg);
       btn.disabled = false;
       btn.textContent = "Log in";
     }
@@ -275,8 +268,8 @@
       showErr($("signupError"), "Enter your email");
       return;
     }
-    if (!password || password.length < 6) {
-      showErr($("signupError"), "Password must be at least 6 characters");
+    if (!password || password.length < 8) {
+      showErr($("signupError"), "Password must be at least 8 characters");
       return;
     }
     btn.disabled = true;
