@@ -14,9 +14,9 @@
       await fetch(API_BASE + "/health", {
         mode: "no-cors",
         cache: "no-store",
-        signal: fetchTimeout(ms || 60000),
+        signal: fetchTimeout(ms || 8000),
       });
-    } catch (e) { /* cold start — login will retry */ }
+    } catch (e) { /* ignore */ }
   }
 
   function friendlyFetchError(err) {
@@ -145,14 +145,27 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var res = await fetch(API_BASE + path, {
-      method: options.method || "GET",
-      headers: headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
-      credentials: "omit",
-      signal: options.signal || fetchTimeout(45000),
-    });
-    return parseResponse(res);
+    var tries = options.retries == null ? 1 : options.retries;
+    var lastErr = null;
+    for (var i = 0; i <= tries; i++) {
+      try {
+        var res = await fetch(API_BASE + path, {
+          method: options.method || "GET",
+          headers: headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
+          credentials: "omit",
+          signal: options.signal || fetchTimeout(options.timeout || 25000),
+        });
+        return await parseResponse(res);
+      } catch (err) {
+        lastErr = err;
+        var msg = (err && err.message) || "";
+        var retryable = /failed to fetch|networkerror|load failed|aborted/i.test(msg) || err.name === "AbortError";
+        if (!retryable || i === tries) throw err;
+        await new Promise(function (resolve) { setTimeout(resolve, 800); });
+      }
+    }
+    throw lastErr;
   }
 
   async function apiUpload(path, formData, options) {

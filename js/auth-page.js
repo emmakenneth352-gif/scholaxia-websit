@@ -227,15 +227,13 @@
     var btn = $("btnLogin");
     showErr($("loginError"));
     btn.disabled = true;
-    btn.textContent = "Connecting…";
+    btn.textContent = "Logging in…";
     try {
-      if (api.wakeServer) await api.wakeServer(90000);
-      btn.textContent = "Logging in…";
       var data = await api.api("/api/v1/auth/login", {
         method: "POST",
         noAuth: true,
         body: { email: email, password: password },
-        signal: api.fetchTimeout ? api.fetchTimeout(90000) : undefined,
+        signal: api.fetchTimeout ? api.fetchTimeout(25000) : undefined,
       });
       if (!data || !data.access_token) {
         throw new Error("Login did not return a session. Try again.");
