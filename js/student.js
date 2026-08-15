@@ -520,6 +520,7 @@
       headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
       credentials: "omit",
       cache: "no-store",
+      signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
     });
     if (res.status === 402) throw new Error("Pay to unlock this material.");
     if (!res.ok) {
