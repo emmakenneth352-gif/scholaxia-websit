@@ -230,7 +230,6 @@
   function showPage(id, opts) {
     opts = opts || {};
     if (id === "access-code") id = "live";
-    if (id === "past-questions") id = "cbt";
     if (!PAGE_TITLES.hasOwnProperty(id)) id = "home";
 
     if (!opts.replace && currentPageId && currentPageId !== id) {
@@ -628,7 +627,7 @@
   }
 
   /* =====================================================================
-     PAST QUESTIONS — library filtered to "past" category
+     PAST QUESTIONS — timed CBT papers (not library PDFs, not CBT Practice)
      ===================================================================== */
 
   var pastQuestionsCache = null;
@@ -637,16 +636,20 @@
   function loadPastQuestions() {
     var wrap = $("pastQuestionsList");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading past questions…");
-    api
-      .api("/api/v1/library/student")
+    wrap.innerHTML = loadingHtml("Loading past question papers…");
+    fetchExamsForMe("past_questions")
       .then(function (data) {
-        var items = firstArray(data, ["items", "results", "library"]);
-        pastQuestionsCache = items.filter(function (it) {
-          var cat = (it.category || it.type || "").toString().toLowerCase();
-          var title = (it.title || "").toString().toLowerCase();
-          return cat.indexOf("past") > -1 || title.indexOf("past question") > -1;
-        });
+        var seen = {};
+        pastQuestionsCache = []
+          .concat((data && data.practice_exams) || [])
+          .concat((data && data.jamb_exams) || [])
+          .concat((data && data.ssce_exams) || [])
+          .filter(function (exam) {
+            var id = exam && (exam.id || exam.exam_id);
+            if (!id || seen[id]) return false;
+            seen[id] = true;
+            return true;
+          });
         renderPastQuestions();
       })
       .catch(function (err) {
@@ -660,15 +663,22 @@
     var items = pastQuestionsCache;
     if (pqActiveCat !== "all") {
       items = items.filter(function (it) {
-        var hay = ((it.category || "") + " " + (it.title || "")).toLowerCase();
+        var hay = ((it.exam_type || "") + " " + (it.title || "") + " " + (it.subject || "")).toLowerCase();
         return hay.indexOf(pqActiveCat) > -1 || (pqActiveCat === "post" && hay.indexOf("utme") > -1);
       });
     }
     if (!items.length) {
-      wrap.innerHTML = emptyHtml("📄", "No past questions found for this filter yet.");
+      wrap.innerHTML = emptyHtml(
+        "📄",
+        "No past-question papers yet. Admin uploads them under CBT → Past Questions. You sit them here as timed CBT — not as library PDFs, and not mixed with CBT Practice."
+      );
       return;
     }
-    wrap.innerHTML = items.map(renderLibraryCard).join("");
+    wrap.innerHTML = items
+      .map(function (exam) {
+        return renderExamCard(exam, { badge: exam.exam_type || "PAST" });
+      })
+      .join("");
   }
 
   var pqTabs = $("pqFilterTabs");
@@ -786,16 +796,23 @@
 
   var examsForMeCache = null;
 
+  var examsCacheByKind = {};
+
   function cacheExamsForMe(data) {
     examsForMeCache = data || {};
+    examsCacheByKind.cbt_practice = examsForMeCache;
   }
 
-  function fetchExamsForMe() {
-    if (examsForMeCache) return Promise.resolve(examsForMeCache);
-    return api.api("/api/v1/cbt/exams/for-me").then(function (data) {
-      cacheExamsForMe(data);
-      return examsForMeCache;
-    });
+  function fetchExamsForMe(paperKind) {
+    paperKind = paperKind || "cbt_practice";
+    if (examsCacheByKind[paperKind]) return Promise.resolve(examsCacheByKind[paperKind]);
+    return api
+      .api("/api/v1/cbt/exams/for-me?paper_kind=" + encodeURIComponent(paperKind))
+      .then(function (data) {
+        examsCacheByKind[paperKind] = data || {};
+        if (paperKind === "cbt_practice") examsForMeCache = examsCacheByKind[paperKind];
+        return examsCacheByKind[paperKind];
+      });
   }
 
   function packKey(id, isExternal) {
