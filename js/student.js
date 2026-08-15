@@ -451,6 +451,8 @@
     }
     var openBtn = e.target.closest("[data-open-book]");
     if (openBtn) openLibraryRead(openBtn.dataset.openBook, openBtn);
+    var dlBtn = e.target.closest("[data-download-book]");
+    if (dlBtn) downloadLibraryPdf(dlBtn.dataset.downloadBook, dlBtn);
   });
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape") closeLibraryReader();
@@ -531,6 +533,57 @@
       throw new Error(detail || "Could not open this material (" + res.status + ")");
     }
     return new Uint8Array(await res.arrayBuffer());
+  }
+
+  function isLibraryDownloadable(it) {
+    if (!it) return false;
+    if (it.is_downloadable === true) return true;
+    return !!(it.drm && it.drm.is_downloadable);
+  }
+
+  async function downloadLibraryPdf(id, btn) {
+    if (!id) return;
+    var prev = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+    }
+    try {
+      var token = api.getToken();
+      var res = await fetch(
+        api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file?download=1",
+        {
+          headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
+          credentials: "omit",
+          cache: "no-store",
+          signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
+        }
+      );
+      if (res.status === 402) throw new Error("Pay to unlock this material.");
+      if (res.status === 403) throw new Error("This file is not downloadable.");
+      if (!res.ok) {
+        var data = await res.json().catch(function () { return {}; });
+        var detail = data && data.detail;
+        if (typeof detail === "object") detail = JSON.stringify(detail);
+        throw new Error(detail || "Could not download this material.");
+      }
+      var blob = await res.blob();
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "scholaxia-material.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    } catch (err) {
+      alert(err && err.message ? err.message : "Download failed.");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prev || "Download";
+      }
+    }
   }
 
   function openLibraryRead(id, btn) {
@@ -637,12 +690,19 @@
     var desc = it.description || it.subject || "";
     var price = Number(it.price || 0);
     var hasAccess = !!(it.has_access || it.is_free || price <= 0);
+    var canDownload = isLibraryDownloadable(it);
     var foot;
     if (hasAccess) {
       foot =
         '<button type="button" class="btn btn-primary btn-mini" data-open-book="' +
         esc(it.id) +
         '">Read</button>';
+      if (canDownload) {
+        foot +=
+          '<button type="button" class="btn btn-secondary btn-mini" data-download-book="' +
+          esc(it.id) +
+          '">Download</button>';
+      }
     } else {
       foot =
         "<strong>₦" +
@@ -655,7 +715,9 @@
       '<div class="card">' +
       '<span class="card-tag">' +
       esc(cat) +
-      "</span><h4>" +
+      "</span>" +
+      (canDownload ? '<span class="card-tag is-downloadable">Downloadable</span>' : "") +
+      "<h4>" +
       esc(title) +
       "</h4>" +
       (desc ? "<p>" + esc(desc) + "</p>" : "") +

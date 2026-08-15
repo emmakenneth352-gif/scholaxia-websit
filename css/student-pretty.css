@@ -620,6 +620,13 @@ body.app-body {
   letter-spacing: 0.04em;
 }
 
+.card-tag.is-downloadable {
+  margin-left: 6px;
+  background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+  color: #166534;
+  border-color: #86efac;
+}
+
 .card-meta-row span {
   background: #f8fafc;
   border: 1px solid #eef2f7;
