@@ -191,7 +191,9 @@
   }
 
   async function afterAuth(data, email, name) {
-    var actual = (data && data.role) || "student";
+    var actual = String((data && data.role) || "student")
+      .replace(/^UserRole\./i, "")
+      .toLowerCase();
     if (role === "teacher" && actual !== "teacher" && actual !== "admin") {
       throw new Error(roleMismatch(role, actual));
     }
@@ -203,10 +205,14 @@
     }
     if (
       role === "student" &&
+      actual &&
+      actual !== "student" &&
       (actual === "teacher" || actual === "kind" || actual === "admin" || actual === "vendor")
     ) {
       throw new Error(roleMismatch(role, actual));
     }
+
+    if (data) data.role = actual;
 
     api.saveSession(data, email, name);
 

@@ -89,23 +89,22 @@
   }
 
   async function loginApi(email, password) {
+    var last = null;
     try {
-      return await formPost("/api/v1/auth/login-form", { email: email, password: password }, 60000);
+      return await api("/api/v1/auth/login", {
+        method: "POST",
+        noAuth: true,
+        body: { email: email, password: password },
+        timeout: 60000,
+        retries: 1,
+      });
+    } catch (err) {
+      last = err;
+    }
+    try {
+      return await formPost("/api/v1/auth/login", { email: email, password: password }, 60000);
     } catch (formErr) {
-      if (formErr && formErr.status && formErr.status !== 404 && formErr.status !== 405) {
-        throw new Error(friendlyFetchError(formErr));
-      }
-      try {
-        return await api("/api/v1/auth/login", {
-          method: "POST",
-          noAuth: true,
-          body: { email: email, password: password },
-          timeout: 60000,
-          retries: 1,
-        });
-      } catch (err) {
-        throw new Error(friendlyFetchError(err));
-      }
+      throw new Error(friendlyFetchError(last || formErr));
     }
   }
 
