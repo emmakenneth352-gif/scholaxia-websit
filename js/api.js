@@ -35,15 +35,9 @@
     }
   }
 
-  function friendlyFetchError(err, health) {
+  function friendlyFetchError(err) {
     var name = (err && err.name) || "";
     var msg = (err && err.message) || "";
-    var network =
-      name === "AbortError" ||
-      /aborted|abort|failed to fetch|networkerror|load failed/i.test(msg);
-    if (network && health && health.database === "unavailable") {
-      return "The Scholaxia server is up, but the database is offline. Wait a minute and try again.";
-    }
     if (name === "AbortError" || /aborted|abort/i.test(msg)) {
       return "Server took too long. Wait 30 seconds and try again (Render may be waking up).";
     }
@@ -53,18 +47,65 @@
     return msg || "Request failed";
   }
 
+  function formPost(path, fields, timeout) {
+    return new Promise(function (resolve, reject) {
+      var body = Object.keys(fields)
+        .map(function (k) {
+          return encodeURIComponent(k) + "=" + encodeURIComponent(fields[k] == null ? "" : String(fields[k]));
+        })
+        .join("&");
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", API_BASE + path, true);
+      xhr.timeout = timeout || 60000;
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      xhr.onload = function () {
+        var data = null;
+        try {
+          data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+        } catch (e) {
+          data = { detail: xhr.responseText || "Invalid response" };
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(data);
+          return;
+        }
+        var msg = (data && (data.detail || data.message)) || ("Request failed (" + xhr.status + ")");
+        if (typeof msg === "object") msg = JSON.stringify(msg);
+        var err = new Error(msg);
+        err.status = xhr.status;
+        reject(err);
+      };
+      xhr.onerror = function () {
+        var err = new Error("Failed to fetch");
+        err.status = 0;
+        reject(err);
+      };
+      xhr.ontimeout = function () {
+        var err = new Error("The user aborted a request.");
+        reject(err);
+      };
+      xhr.send(body);
+    });
+  }
+
   async function loginApi(email, password) {
-    await wakeServer(12000);
     try {
-      return await api("/api/v1/auth/login", {
-        method: "POST",
-        noAuth: true,
-        body: { email: email, password: password },
-        timeout: 60000,
-        retries: 2,
-      });
-    } catch (err) {
-      throw new Error(friendlyFetchError(err));
+      return await formPost("/api/v1/auth/login-form", { email: email, password: password }, 60000);
+    } catch (formErr) {
+      if (formErr && formErr.status && formErr.status !== 404 && formErr.status !== 405) {
+        throw new Error(friendlyFetchError(formErr));
+      }
+      try {
+        return await api("/api/v1/auth/login", {
+          method: "POST",
+          noAuth: true,
+          body: { email: email, password: password },
+          timeout: 60000,
+          retries: 1,
+        });
+      } catch (err) {
+        throw new Error(friendlyFetchError(err));
+      }
     }
   }
 
@@ -290,7 +331,7 @@
     var role = localStorage.getItem("sia_role") || "";
     var token = getToken();
     if (!token) {
-      window.location.href = "auth.html";
+      window.location.href = "portal.html";
       return false;
     }
     if (expectedRoles && expectedRoles.indexOf(role) < 0) {

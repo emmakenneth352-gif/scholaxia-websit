@@ -250,11 +250,7 @@
       }
       await afterAuth(data, email, data.user && data.user.full_name);
     } catch (err) {
-      var msg =
-        (api.friendlyFetchError && api.friendlyFetchError(err)) ||
-        err.message ||
-        "Login failed";
-      showErr($("loginError"), msg);
+      showErr($("loginError"), (err && err.message) || "Login failed");
       btn.disabled = false;
       btn.textContent = "Log in";
     }
