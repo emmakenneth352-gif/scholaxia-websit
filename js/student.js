@@ -189,7 +189,7 @@
     school: "Scholaxia Exam",
     "access-code": "Live Class",
     live: "Live Class",
-    "school-portal": "External School Exam",
+    "school-portal": "Examinations",
     subscription: "Subscription",
     skills: "Skills",
     library: "Library",
@@ -943,6 +943,11 @@
 
   // Delegated handlers for exam cards (download / start) across cbt / school / school-portal
   document.addEventListener("click", function (e) {
+    var openSchool = e.target.closest("[data-open-school-exam]");
+    if (openSchool) {
+      window.location.href = "external-exam.html?exam=" + encodeURIComponent(openSchool.getAttribute("data-open-school-exam"));
+      return;
+    }
     var btn = e.target.closest("[data-action]");
     if (!btn) return;
     var action = btn.dataset.action;
@@ -1454,19 +1459,34 @@
 
   function loadSchoolPortal() {
     var wrap = $("schoolPortalList");
+    var idCard = $("examIdentityCard");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading external exams…");
+    wrap.innerHTML = loadingHtml("Loading exams…");
     api
-      .api("/api/v1/cbt/external-exams/for-me")
+      .api("/api/v1/external-exams/mine")
       .then(function (data) {
-        externalExamsCache = firstArray(data, ["exams", "items", "results", "external_exams"]);
-        if (!externalExamsCache.length) {
-          wrap.innerHTML = emptyHtml("🏫", "No external school exams available right now.");
+        var st = (data && data.student) || {};
+        if (idCard) {
+          idCard.style.display = "block";
+          idCard.innerHTML =
+            "<strong>" + esc(st.full_name || api.getUser().name) + "</strong> · " +
+            esc(st.school_name || "") + " · " + esc(st.class_name || "") +
+            (st.school_student_id ? " · ID " + esc(st.school_student_id) : "");
+        }
+        var exams = (data && data.exams) || [];
+        if (!exams.length) {
+          wrap.innerHTML = emptyHtml("🏫", "No exam is published for your class yet.");
           return;
         }
-        wrap.innerHTML = externalExamsCache
-          .map(function (exam) { return renderExamCard(exam, { isExternal: true, badge: "EXTERNAL" }); })
-          .join("");
+        wrap.innerHTML = exams.map(function (exam) {
+          return (
+            '<div class="card"><span class="card-tag">EXAM</span><h4>' + esc(exam.title) + "</h4><p>" +
+            esc(exam.subject) + " · " + esc(exam.total_questions || 0) + " questions · " +
+            esc(exam.duration_minutes) + " min · " + esc(exam.total_marks) + " marks</p>" +
+            '<div class="card-foot"><button type="button" class="btn btn-primary btn-mini" data-open-school-exam="' +
+            esc(exam.id) + '">View exam</button></div></div>'
+          );
+        }).join("");
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "school-portal");

@@ -108,6 +108,12 @@
       email ||
       "User";
     localStorage.setItem("sia_name", name);
+    if (data.user) {
+      if (data.user.school_id) localStorage.setItem("sia_user_school_id", data.user.school_id);
+      if (data.user.school_name) localStorage.setItem("sia_user_school_name", data.user.school_name);
+      if (data.user.education_level) localStorage.setItem("sia_class", data.user.education_level);
+      if (data.user.school_student_id) localStorage.setItem("sia_school_student_id", data.user.school_student_id);
+    }
   }
 
   function clearSession() {

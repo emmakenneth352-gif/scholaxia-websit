@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>External Exam Hall — Scholaxia</title>
+    <link rel="icon" type="image/png" href="media/logo-main.png" />
+    <link rel="manifest" href="external-exam-manifest.json" />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/external-exam.css?v=1" />
+  </head>
+  <body class="hall">
+    <header class="hall-bar">
+      <a href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
+      <span>External exam hall</span>
+    </header>
+    <main class="wrap">
+      <section class="card" id="step-login">
+        <div class="kicker">Student login</div>
+        <h1>Sign in with your Scholaxia account</h1>
+        <p class="lead">Use the email and password your school created for you. School, class and student ID are already on your account — you do not type them here.</p>
+        <label class="hidden">Unused <input id="hall-id" /></label>
+        <label class="hidden">Unused <input id="hall-access" /></label>
+        <p class="err" id="hall-err"></p>
+        <button type="button" class="btn btn-gold full" id="btn-identify">Go to student login</button>
+      </section>
+
+      <section class="card hidden" id="step-id">
+        <div class="kicker">Your account</div>
+        <h1>These details are read-only</h1>
+        <div class="id-grid">
+          <div class="id-box"><span>Student</span><strong id="id-name">—</strong></div>
+          <div class="id-box"><span>Student ID</span><strong id="id-cid">—</strong></div>
+          <div class="id-box"><span>School</span><strong id="id-school">—</strong></div>
+          <div class="id-box"><span>Class</span><strong id="id-class">—</strong></div>
+        </div>
+        <div class="exam-list" id="exam-list"></div>
+        <p class="err" id="id-err"></p>
+      </section>
+
+      <section class="card hidden" id="step-ready">
+        <div class="kicker">Start exam</div>
+        <h1 id="ready-title">Preparing exam</h1>
+        <div class="id-grid">
+          <div class="id-box"><span>Student</span><strong id="ready-name">—</strong></div>
+          <div class="id-box"><span>Class</span><strong id="ready-class">—</strong></div>
+          <div class="id-box"><span>School</span><strong id="ready-school">—</strong></div>
+          <div class="id-box"><span>Student ID</span><strong id="ready-sid">—</strong></div>
+        </div>
+        <p class="lead" id="ready-sub">Downloading questions to this computer so the exam can continue if the internet drops.</p>
+        <div class="progress"><i id="ready-bar"></i></div>
+        <p id="ready-pct">0%</p>
+        <p class="err" id="ready-err"></p>
+        <button type="button" class="btn btn-gold full hidden" id="btn-start">Start exam</button>
+      </section>
+
+      <section class="hidden" id="step-exam">
+        <div class="exam-top">
+          <div>
+            <div class="kicker" id="exam-cand"></div>
+            <strong id="exam-title">Exam</strong>
+          </div>
+          <div class="timer" id="exam-timer">2:00:00</div>
+        </div>
+        <div class="card">
+          <div class="q-num" id="q-count">Question 1 of 1</div>
+          <p class="q-text" id="q-text"></p>
+          <button type="button" class="opt" data-opt="A" id="opt-a"></button>
+          <button type="button" class="opt" data-opt="B" id="opt-b"></button>
+          <button type="button" class="opt" data-opt="C" id="opt-c"></button>
+          <button type="button" class="opt" data-opt="D" id="opt-d"></button>
+          <div class="nav-q" id="q-nav"></div>
+          <div class="actions">
+            <button type="button" class="btn btn-ghost" id="btn-prev">Previous</button>
+            <button type="button" class="btn btn-navy" id="btn-next">Next</button>
+            <button type="button" class="btn btn-gold" id="btn-submit">Submit exam</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card hidden" id="step-done">
+        <div class="kicker">Submitted</div>
+        <h1>Answers locked</h1>
+        <p class="lead" id="done-copy">Your answers are saved on this computer and sent to your school when the internet is available. Official marks are calculated by Scholaxia, not on this PC.</p>
+        <div class="id-grid" id="done-grid"></div>
+      </section>
+    </main>
+    <script src="js/api.js?v=20260819t"></script>
+    <script src="js/external-exam.js?v=20260819e"></script>
+  </body>
+</html>

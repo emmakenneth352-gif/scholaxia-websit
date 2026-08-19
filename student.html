@@ -21,10 +21,10 @@
           <button class="side-link is-active" data-page="home" type="button"><span class="ico">⌂</span>Home</button>
           <button class="side-link" data-page="study-materials" type="button"><span class="ico">▶</span>Video Tutorials</button>
           <button class="side-link" data-page="past-questions" type="button"><span class="ico">📄</span>Past Questions</button>
-          <button class="side-link" data-page="cbt" type="button"><span class="ico">📝</span>CBT Practice</button>
+          <button class="side-link" data-page="cbt" type="button"><span class="ico">📝</span>My CBT</button>
+          <button class="side-link" data-page="school-portal" type="button"><span class="ico">🏫</span>Examinations</button>
           <button class="side-link" data-page="school" type="button"><span class="ico">⏱</span>Scholaxia Exam</button>
           <button class="side-link" data-page="live" type="button"><span class="ico">📺</span>Live Class</button>
-          <button class="side-link" data-page="school-portal" type="button"><span class="ico">🏫</span>External School Exam</button>
           <button class="side-link" data-page="subscription" type="button"><span class="ico">💳</span>Subscription</button>
           <button class="side-link" data-page="skills" type="button"><span class="ico">🎓</span>Skills</button>
           <button class="side-link" data-page="library" type="button"><span class="ico">📚</span>Library</button>
@@ -111,7 +111,7 @@
               <button type="button" class="quick action qa-past" data-goto="past-questions"><span>📘</span><strong>Past Questions</strong><small>JAMB, WAEC &amp; NECO</small></button>
               <button type="button" class="quick action qa-assign" data-goto="assignments"><span>📋</span><strong>Assignments</strong><small>Submit work &amp; notices</small></button>
               <button type="button" class="quick action qa-cbt" data-goto="cbt"><span>📝</span><strong>CBT Packages</strong><small>Annual CBT access</small></button>
-              <button type="button" class="quick action qa-school" data-goto="school-portal"><span>🏫</span><strong>External School Exam</strong><small>Download &amp; submit later</small></button>
+              <button type="button" class="quick action qa-school" data-goto="school-portal"><span>🏫</span><strong>Examinations</strong><small>Papers your school published for your class</small></button>
               <button type="button" class="quick action qa-library" data-goto="library"><span>📚</span><strong>Library</strong><small>Notes &amp; resources</small></button>
             </div>
           </section>
@@ -263,9 +263,11 @@
           <!-- ================= EXTERNAL SCHOOL EXAM ================= -->
           <section class="page" id="page-school-portal">
             <div class="panel">
-              <h2>External School Exam</h2>
-              <p>Download offline school exams and submit answers when you’re ready.</p>
-              <div class="card-grid" id="schoolPortalList"><div class="loading-state">Loading external exams…</div></div>
+              <h2>Examinations</h2>
+              <p>Your school and class are already on your account. You only see exams published for you.</p>
+              <div id="examIdentityCard" class="info-banner" style="display:none"></div>
+              <div class="card-grid" id="schoolPortalList"><div class="loading-state">Loading exams…</div></div>
+              <div id="examConfirmBox" class="panel" hidden></div>
             </div>
           </section>
 
@@ -733,8 +735,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260815a"></script>
+    <script src="js/api.js?v=20260819t"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260819c"></script>
+    <script src="js/student.js?v=20260819e"></script>
   </body>
 </html>
