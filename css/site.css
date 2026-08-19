@@ -137,9 +137,9 @@ video {
   transition: color 0.2s ease;
 }
 
-.nav a:hover,
-.nav a.is-active {
-  color: var(--ink);
+.nav a.is-hot {
+  color: #7c3aed;
+  font-weight: 800;
 }
 
 .top-actions {
