@@ -65,20 +65,40 @@ img { display: block; max-width: 100%; }
   border: 2px solid #7c3aed !important;
   box-shadow: none;
 }
-body.is-office { background: #f3e8ff; }
-body.is-office .workspace { background: #f3e8ff; }
-.panel-head .kicker {
-  color: #7c3aed;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 11px;
-  margin-bottom: 6px;
-}
+body.is-office { background: #f7f8fc; }
+body.is-office .workspace { background: #f7f8fc; }
 .block {
-  border-top: 6px solid #7c3aed;
+  border-top: 3px solid #7c3aed;
 }
-.block h3 { color: #6d28d9; }
+.block h3 { color: #4c1d95; }
+.class-picks { margin-top: 18px; max-width: 640px; }
+.field-label { font-size: 13px; font-weight: 700; color: #334155; margin-bottom: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4c1d95;
+  cursor: pointer;
+  width: auto;
+}
+.chip input {
+  width: auto !important;
+  margin: 0 !important;
+  accent-color: #7c3aed;
+}
+.chip:has(input:checked) {
+  background: #7c3aed;
+  color: #fff;
+  border-color: #7c3aed;
+}
 
 .login-hero {
   display: grid;

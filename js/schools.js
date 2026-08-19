@@ -464,7 +464,7 @@
             title: $("ee-title").value.trim(),
             subject: $("ee-subject").value.trim(),
             class_name: $("ee-class").value,
-            extra_classes: Array.prototype.map.call($("ee-extra") ? $("ee-extra").selectedOptions : [], function (o) { return o.value; }),
+            extra_classes: Array.prototype.map.call(document.querySelectorAll(".ee-extra-chip:checked"), function (el) { return el.value; }),
             instructions: $("ee-notes").value.trim(),
             duration_minutes: Number($("ee-duration").value) || 120,
             total_marks: Number($("ee-marks").value) || 100,

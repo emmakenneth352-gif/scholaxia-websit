@@ -10,19 +10,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/office-purple.css?v=20260819k" />
+    <link rel="stylesheet" href="css/office-purple.css?v=20260819l" />
     <style>
-      body.is-office { background:#f3e8ff !important; }
+      body.is-office { background:#f7f8fc !important; }
       body.is-office .topbar { background:#fff !important; }
       #app-screen.office { display:grid !important; grid-template-columns:272px minmax(0,1fr) !important; max-width:none !important; margin:0 !important; padding:0 !important; }
       #app-screen.office.hidden { display:none !important; }
       .rail { background:#fff !important; }
       .rail-nav button.active { background:#7c3aed !important; color:#fff !important; }
-      .workspace { background:#f3e8ff !important; padding:24px !important; }
+      .workspace { background:#f7f8fc !important; padding:24px !important; }
       .panel-head h2 { color:#7c3aed !important; background:none !important; -webkit-text-fill-color:#7c3aed !important; }
-      .panel-head .kicker { color:#7c3aed !important; font-weight:800; letter-spacing:.14em; text-transform:uppercase; font-size:11px; }
-      .block { border-top:6px solid #7c3aed !important; }
-      .block h3 { color:#6d28d9 !important; }
+      .block { border-top:3px solid #7c3aed !important; }
+      .block h3 { color:#4c1d95 !important; }
       .btn, .btn-navy, .btn-gold, .btn-purple {
         background:#7c3aed !important;
         background-image:linear-gradient(135deg,#7c3aed,#6d28d9) !important;
@@ -30,6 +29,11 @@
         border:0 !important;
       }
       .btn-ghost { background:#fff !important; color:#6d28d9 !important; border:2px solid #7c3aed !important; }
+      .class-picks { max-width:640px; margin-top:16px; }
+      .chips { display:flex; flex-wrap:wrap; gap:8px; }
+      .chip { display:inline-flex; align-items:center; gap:8px; width:auto; margin:0; padding:8px 14px; border:1px solid #ddd6fe; border-radius:999px; background:#fff; font-weight:700; font-size:13px; color:#4c1d95; cursor:pointer; }
+      .chip input { width:auto !important; margin:0 !important; }
+      .chip:has(input:checked) { background:#7c3aed; color:#fff; border-color:#7c3aed; }
       .row-tabs, .office-hero { display:none !important; }
     </style>
     <script>
@@ -112,7 +116,6 @@
           <section class="panel tab-panel" id="tab-students">
             <header class="panel-head">
               <div>
-                <p class="kicker">School office</p>
                 <h2>Students</h2>
                 <p class="hint">Each student gets their own login. Class and student ID stay on the account.</p>
               </div>
@@ -157,7 +160,6 @@
           <section class="panel tab-panel hidden" id="tab-external">
             <header class="panel-head">
               <div>
-                <p class="kicker">School office</p>
                 <h2>External exams</h2>
                 <p class="hint">Post-UTME and school papers. Upload PDF or Word, review every question, then publish to a class. Students never see the paper until you approve it.</p>
               </div>
@@ -192,14 +194,19 @@
                 <label>Start <input id="ee-start" type="datetime-local" /></label>
                 <label>End <input id="ee-end" type="datetime-local" /></label>
               </div>
-              <label class="wide">Also include classes
-                <select id="ee-extra" multiple size="6">
-                  <option value="ALL">All students</option>
-                  <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-                  <option>SS1</option><option>SS2</option><option>SS3</option>
-                  <option>POST-UTME</option>
-                </select>
-              </label>
+              <div class="class-picks">
+                <p class="field-label">Who can take it</p>
+                <div class="chips">
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="ALL" /> All</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="JSS1" /> JSS1</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="JSS2" /> JSS2</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="JSS3" /> JSS3</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS1" /> SS1</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS2" /> SS2</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS3" /> SS3</label>
+                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="POST-UTME" /> POST-UTME</label>
+                </div>
+              </div>
               <label class="wide">Class note / instructions <textarea id="ee-notes" rows="3" placeholder="Arrive 30 minutes early. No phones."></textarea></label>
               <label class="wide">Exam paper (PDF or DOCX) <input id="ee-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" /></label>
               <div class="actions">
@@ -225,7 +232,6 @@
           <section class="panel tab-panel hidden" id="tab-results">
             <header class="panel-head">
               <div>
-                <p class="kicker">School office</p>
                 <h2>Results</h2>
                 <p class="hint">Official scores are marked on the server. Filter the class, then reprint the whole sheet or one student slip.</p>
               </div>
@@ -249,7 +255,6 @@
           <section class="panel tab-panel hidden" id="tab-teachers">
             <header class="panel-head">
               <div>
-                <p class="kicker">School office</p>
                 <h2>Teachers</h2>
                 <p class="hint">Create teacher logins for the teacher portal.</p>
               </div>
@@ -277,7 +282,6 @@
           <section class="panel tab-panel hidden" id="tab-live">
             <header class="panel-head">
               <div>
-                <p class="kicker">School office</p>
                 <h2>Live class</h2>
                 <p class="hint">Host a class for one year group, or open it to the whole school.</p>
               </div>
@@ -311,6 +315,6 @@
     </main>
 
     <script src="js/api.js?v=20260819i"></script>
-    <script src="js/office.js?v=20260819k"></script>
+    <script src="js/office.js?v=20260819l"></script>
   </body>
 </html>
