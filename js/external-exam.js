@@ -97,16 +97,19 @@
 
   function renderIdentity(data) {
     fillIdentity(data.candidate || data.student);
+    var st = state.candidate || {};
+    if ($("exam-hello")) {
+      $("exam-hello").textContent = "Hello, " + (st.full_name || "student");
+    }
     var exams = data.exams || [];
     if (!exams.length) {
-      $("exam-list").innerHTML = "<p>No published exam for your class yet.</p>";
+      $("exam-list").innerHTML = '<div class="empty-exam">No exam yet</div>';
       return;
     }
     $("exam-list").innerHTML = exams.map(function (e) {
-      return '<div class="exam-item"><div><strong>' + esc(e.title) + "</strong><p>" +
-        esc(e.subject) + " · " + esc(e.total_questions) + " questions · " +
-        esc(e.duration_minutes) + " min · " + esc(e.total_marks) + " marks</p></div>" +
-        '<button type="button" class="btn btn-navy" data-exam="' + esc(e.id) + '">View exam</button></div>';
+      return '<div class="take-box"><h3>' + esc(e.title) + "</h3><p>" +
+        esc(e.subject || "") + (e.duration_minutes ? " · " + esc(e.duration_minutes) + " min" : "") +
+        "</p><button type=\"button\" class=\"btn btn-gold\" data-exam=\"" + esc(e.id) + "\">Take exam</button></div>";
     }).join("");
   }
 
@@ -252,40 +255,64 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("external-exam-sw.js").catch(function () {});
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      });
+    }
+
+    async function showExams() {
+      var data = await api.api("/api/v1/external-exams/mine");
+      renderIdentity({ candidate: data.student, exams: data.exams || [] });
+      show("step-id");
+      if ($("btn-hall-out")) $("btn-hall-out").hidden = false;
     }
 
     async function bootStudent() {
       try {
-        var data = await api.api("/api/v1/external-exams/mine");
-        renderIdentity({ candidate: data.student, exams: data.exams || [] });
-        show("step-id");
-        var params = new URLSearchParams(window.location.search);
-        var examId = params.get("exam");
-        if (examId) downloadPack(examId);
+        await showExams();
       } catch (e) {
-        $("hall-err").textContent = e.message || "Sign in on the student site first.";
         show("step-login");
-        $("step-login").querySelector("h1").textContent = "Sign in as a student";
-        $("step-login").querySelector(".lead").textContent = "Use your Scholaxia email and password on the student login page. Your school, class and ID are already on your account.";
-        $("hall-id").closest("label").classList.add("hidden");
-        $("hall-access").closest("label").classList.add("hidden");
-        $("btn-identify").textContent = "Go to student login";
-        $("btn-identify").onclick = function () { window.location.href = "auth.html?mode=login&next=external-exam.html"; };
+        $("hall-err").textContent = e.message || "Log in with the details your school gave you.";
       }
     }
 
-    if (isStudent()) bootStudent();
-    else {
-      $("btn-identify").addEventListener("click", function () {
-        window.location.href = "auth.html?mode=login&next=external-exam.html";
+    $("btn-identify").addEventListener("click", async function () {
+      $("hall-err").textContent = "";
+      var email = ($("hall-email") && $("hall-email").value.trim()) || "";
+      var password = ($("hall-password") && $("hall-password").value) || "";
+      if (!email || !password) {
+        $("hall-err").textContent = "Enter the email and password your school gave you.";
+        return;
+      }
+      try {
+        if (api.wakeServer) await api.wakeServer(8000);
+        var data = await api.api("/api/v1/auth/login", {
+          method: "POST",
+          noAuth: true,
+          timeout: 45000,
+          body: { email: email, password: password },
+        });
+        if (data.role !== "student") {
+          $("hall-err").textContent = "This exam login is for students only. Use the account your school created.";
+          return;
+        }
+        api.saveSession(data, email, data.user && data.user.full_name);
+        await showExams();
+      } catch (e) {
+        $("hall-err").textContent = e.message || "Login failed.";
+      }
+    });
+
+    if ($("btn-hall-out")) {
+      $("btn-hall-out").addEventListener("click", function () {
+        localStorage.removeItem("sia_token");
+        if (localStorage.getItem("sia_role") === "student") localStorage.removeItem("sia_role");
+        window.location.reload();
       });
-      $("step-login").querySelector("h1").textContent = "Student login";
-      $("step-login").querySelector(".lead").textContent = "Sign in with the email and password your school created for you. Do not type a student ID here.";
-      $("hall-id").closest("label").classList.add("hidden");
-      $("hall-access").closest("label").classList.add("hidden");
-      $("btn-identify").textContent = "Go to student login";
     }
+
+    if (isStudent()) bootStudent();
+    else show("step-login");
     if ($("exam-list")) $("exam-list").addEventListener("click", function (e) {
       var b = e.target.closest("[data-exam]");
       if (!b) return;

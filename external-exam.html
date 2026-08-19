@@ -7,33 +7,28 @@
     <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link rel="manifest" href="external-exam-manifest.json" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/external-exam.css?v=1" />
+    <link rel="stylesheet" href="css/external-exam.css?v=2" />
   </head>
   <body class="hall">
     <header class="hall-bar">
       <a href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
-      <span>External exam hall</span>
+      <button type="button" class="btn btn-ghost" id="btn-hall-out" hidden>Log out</button>
     </header>
     <main class="wrap">
       <section class="card" id="step-login">
-        <div class="kicker">Student login</div>
-        <h1>Sign in with your Scholaxia account</h1>
-        <p class="lead">Use the email and password your school created for you. School, class and student ID are already on your account — you do not type them here.</p>
+        <div class="kicker">External exam</div>
+        <h1>Exam login</h1>
+        <p class="lead">Use the email and password your school gave you. You do not pick a class or type a student ID.</p>
+        <label>Email <input id="hall-email" type="email" autocomplete="username" /></label>
+        <label>Password <input id="hall-password" type="password" autocomplete="current-password" /></label>
         <label class="hidden">Unused <input id="hall-id" /></label>
         <label class="hidden">Unused <input id="hall-access" /></label>
         <p class="err" id="hall-err"></p>
-        <button type="button" class="btn btn-gold full" id="btn-identify">Go to student login</button>
+        <button type="button" class="btn btn-gold full" id="btn-identify">Log in</button>
       </section>
 
       <section class="card hidden" id="step-id">
-        <div class="kicker">Your account</div>
-        <h1>These details are read-only</h1>
-        <div class="id-grid">
-          <div class="id-box"><span>Student</span><strong id="id-name">—</strong></div>
-          <div class="id-box"><span>Student ID</span><strong id="id-cid">—</strong></div>
-          <div class="id-box"><span>School</span><strong id="id-school">—</strong></div>
-          <div class="id-box"><span>Class</span><strong id="id-class">—</strong></div>
-        </div>
+        <p class="hello" id="exam-hello">Welcome</p>
         <div class="exam-list" id="exam-list"></div>
         <p class="err" id="id-err"></p>
       </section>
@@ -85,7 +80,7 @@
         <div class="id-grid" id="done-grid"></div>
       </section>
     </main>
-    <script src="js/api.js?v=20260819t"></script>
-    <script src="js/external-exam.js?v=20260819e"></script>
+    <script src="js/api.js?v=20260819m"></script>
+    <script src="js/external-exam.js?v=20260819m"></script>
   </body>
 </html>

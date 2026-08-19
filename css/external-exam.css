@@ -55,7 +55,25 @@ input {
   font-weight: 800;
   cursor: pointer;
 }
-.btn-gold { background: var(--gold); color: var(--navy); }
+.btn-gold { background: #7c3aed; color: #fff; }
+.take-box {
+  border: 1px solid #ddd6fe;
+  border-radius: 20px;
+  padding: 28px 22px;
+  text-align: center;
+  background: #faf7ff;
+}
+.take-box h3 { font-size: 22px; margin-bottom: 8px; color: #4c1d95; }
+.take-box p { color: var(--muted); margin-bottom: 18px; }
+.empty-exam {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+}
+.hello { font-weight: 700; color: #4c1d95; margin-bottom: 16px; }
+.hall-bar .btn-ghost { background: rgba(255,255,255,0.12); color: #fff; }
 .btn-navy { background: var(--navy); color: #fff; }
 .btn-ghost { background: #eef2ff; color: var(--navy); }
 .full { width: 100%; }

@@ -44,7 +44,10 @@
     } catch (e) {}
     try {
       var path = String(window.location.pathname || "");
-      if (/schools(\.html)?$/i.test(path)) {
+      if (/external-exam(\.html)?$/i.test(path)) {
+        return studentTok;
+      }
+      if (/schools(\.html)?$/i.test(path) || /office(\.html)?$/i.test(path)) {
         return schoolTok || teacherTok;
       }
       var onClassroom = /classroom(\.html)?$/i.test(path) || /\/classroom/i.test(path);
