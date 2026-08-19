@@ -42,7 +42,7 @@ img { display: block; max-width: 100%; }
   border-bottom: 1px solid var(--line);
 }
 .logo img { height: 40px; width: auto; }
-.nav { display: flex; gap: 22px; font-weight: 600; font-size: 14px; color: #4b5a70; }
+.nav { display: none !important; }
 .nav a.is-active { color: var(--purple); }
 .top-actions { display: flex; gap: 10px; align-items: center; }
 .btn {

@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/office-purple.css?v=20260819l" />
+    <link rel="stylesheet" href="css/office-purple.css?v=20260819m" />
     <style>
       body.is-office { background:#f7f8fc !important; }
       body.is-office .topbar { background:#fff !important; }
@@ -34,7 +34,7 @@
       .chip { display:inline-flex; align-items:center; gap:8px; width:auto; margin:0; padding:8px 14px; border:1px solid #ddd6fe; border-radius:999px; background:#fff; font-weight:700; font-size:13px; color:#4c1d95; cursor:pointer; }
       .chip input { width:auto !important; margin:0 !important; }
       .chip:has(input:checked) { background:#7c3aed; color:#fff; border-color:#7c3aed; }
-      .row-tabs, .office-hero { display:none !important; }
+      .nav { display:none !important; }
     </style>
     <script>
       (function () {
@@ -56,16 +56,10 @@
   <body class="schools-body">
     <header class="topbar">
       <a class="logo" href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
-      <nav class="nav" aria-label="Primary">
-        <a href="index.html">Home</a>
-        <a class="is-active" href="office.html">Schools</a>
-        <a href="marketplace.html">Marketplace</a>
-        <a href="index.html#contact">Contact</a>
-      </nav>
       <div class="top-actions">
         <span class="user-chip hidden" id="sch-user-label"></span>
         <button type="button" class="btn btn-ghost hidden" id="sch-logout">Log out</button>
-        <a class="btn btn-navy" href="auth.html">Student sign in</a>
+        <a class="btn btn-navy" id="btn-student-signin" href="auth.html?mode=login&role=student&switch=1">Student sign in</a>
       </div>
     </header>
 
@@ -128,8 +122,7 @@
                 <label>Class *
                   <select id="st-class">
                     <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-                    <option>SS1</option><option>SS2</option><option>SS3</option>
-                    <option>POST-UTME</option>
+                    <option>SS1</option><option>SS2</option>                    <option>SS3</option>
                   </select>
                 </label>
                 <label>Student ID <input id="st-sid" placeholder="ABC001 (auto if empty)" /></label>
@@ -161,17 +154,16 @@
             <header class="panel-head">
               <div>
                 <h2>External exams</h2>
-                <p class="hint">Post-UTME and school papers. Upload PDF or Word, review every question, then publish to a class. Students never see the paper until you approve it.</p>
+                <p class="hint">Upload a PDF or Word paper, review the questions, then publish to a class.</p>
               </div>
             </header>
             <div class="block">
               <h3>Create examination</h3>
               <div class="grid grid-3">
-                <label>Exam title * <input id="ee-title" placeholder="First Term Mathematics / Post-UTME 2026" /></label>
+                <label>Exam title * <input id="ee-title" placeholder="First Term Mathematics" /></label>
                 <label>Subject * <input id="ee-subject" /></label>
                 <label>Class *
                   <select id="ee-class">
-                    <option>POST-UTME</option>
                     <option>JSS1</option><option>JSS2</option><option>JSS3</option>
                     <option>SS1</option><option>SS2</option><option>SS3</option>
                   </select>
@@ -204,7 +196,6 @@
                   <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS1" /> SS1</label>
                   <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS2" /> SS2</label>
                   <label class="chip"><input type="checkbox" class="ee-extra-chip" value="SS3" /> SS3</label>
-                  <label class="chip"><input type="checkbox" class="ee-extra-chip" value="POST-UTME" /> POST-UTME</label>
                 </div>
               </div>
               <label class="wide">Class note / instructions <textarea id="ee-notes" rows="3" placeholder="Arrive 30 minutes early. No phones."></textarea></label>
@@ -241,7 +232,7 @@
                 <label>External exam
                   <select id="ee-result-exam"></select>
                 </label>
-                <label>Class filter <input id="so-res-class" placeholder="JSS1 or POST-UTME" /></label>
+                <label>Class filter <input id="so-res-class" placeholder="JSS1" /></label>
                 <label>Search <input id="ee-result-q" placeholder="Name or student ID" /></label>
               </div>
               <div class="actions">
@@ -315,6 +306,6 @@
     </main>
 
     <script src="js/api.js?v=20260819i"></script>
-    <script src="js/office.js?v=20260819l"></script>
+    <script src="js/office.js?v=20260819m"></script>
   </body>
 </html>
