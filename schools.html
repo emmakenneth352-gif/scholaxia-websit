@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/schools.css?v=20260819f" />
+    <link rel="stylesheet" href="css/schools.css?v=20260819h" />
   </head>
   <body class="schools-body">
     <header class="topbar">
@@ -55,30 +55,21 @@
     </section>
 
     <main id="app-screen" class="office hidden">
-      <div class="office-hero">
-        <div>
-          <div class="kicker">School dashboard</div>
-          <h1 id="school-title">School office</h1>
-          <p>Add students, create <strong>external exams</strong> (PDF or Word), publish to a class, then reprint results. Students sign in on the main Scholaxia site with the account you created.</p>
+      <aside class="rail">
+        <div class="rail-brand">
+          <span>School office</span>
+          <strong id="school-title">School</strong>
+          <p>Students · External exams · Results</p>
         </div>
-        <div class="hero-stats">
-          <button type="button" class="hero-chip" data-goto-tab="students"><span>1</span>Students</button>
-          <button type="button" class="hero-chip" data-goto-tab="external"><span>2</span>External exams</button>
-          <button type="button" class="hero-chip" data-goto-tab="results"><span>3</span>Results</button>
-        </div>
-      </div>
-
-      <div class="office-shell">
-        <nav class="side-tabs" id="sch-tabs" aria-label="School office">
-          <p class="side-label">Office</p>
-          <button type="button" class="active" data-tab="students">Students</button>
-          <button type="button" data-tab="external">External exams</button>
-          <button type="button" data-tab="results">Results</button>
-          <button type="button" data-tab="teachers">Teachers</button>
-          <button type="button" data-tab="live">Live class</button>
+        <nav class="rail-nav" id="sch-tabs" aria-label="School office">
+          <button type="button" class="active" data-tab="students"><i></i>Students</button>
+          <button type="button" data-tab="external"><i></i>External exams</button>
+          <button type="button" data-tab="results"><i></i>Results</button>
+          <button type="button" data-tab="teachers"><i></i>Teachers</button>
+          <button type="button" data-tab="live"><i></i>Live class</button>
         </nav>
-
-        <div class="office-main">
+      </aside>
+      <div class="workspace">
           <section class="panel tab-panel" id="tab-students">
             <header class="panel-head">
               <div>
@@ -272,11 +263,10 @@
               <p class="hint" id="so-live-msg"></p>
             </div>
           </section>
-        </div>
       </div>
     </main>
 
     <script src="js/api.js?v=20260819t"></script>
-    <script src="js/schools.js?v=20260819f"></script>
+    <script src="js/schools.js?v=20260819h"></script>
   </body>
 </html>

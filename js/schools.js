@@ -20,6 +20,7 @@
   }
 
   function showLogin() {
+    document.body.classList.remove("is-office");
     $("login-screen").classList.remove("hidden");
     $("app-screen").classList.add("hidden");
     $("sch-logout").classList.add("hidden");
@@ -27,6 +28,7 @@
   }
 
   function showApp() {
+    document.body.classList.add("is-office");
     $("login-screen").classList.add("hidden");
     $("app-screen").classList.remove("hidden");
     $("sch-logout").classList.remove("hidden");
