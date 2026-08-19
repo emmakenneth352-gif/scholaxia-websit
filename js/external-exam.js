@@ -288,13 +288,15 @@
         return;
       }
       try {
-        if (api.wakeServer) await api.wakeServer(8000);
-        var data = await api.api("/api/v1/auth/login", {
-          method: "POST",
-          noAuth: true,
-          timeout: 45000,
-          body: { email: email, password: password },
-        });
+        var data = api.loginApi
+          ? await api.loginApi(email, password)
+          : await api.api("/api/v1/auth/login", {
+              method: "POST",
+              noAuth: true,
+              timeout: 60000,
+              retries: 3,
+              body: { email: email, password: password },
+            });
         if (data.role !== "student") {
           $("hall-err").textContent = "This exam login is for students only. Use the account your school created.";
           return;

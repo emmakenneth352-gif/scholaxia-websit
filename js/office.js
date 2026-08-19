@@ -180,16 +180,17 @@
       err.textContent = "";
       btn.disabled = true;
       try {
-        if (api.wakeServer) await api.wakeServer(8000);
-        var data = await api.api("/api/v1/auth/login", {
-          method: "POST",
-          noAuth: true,
-          timeout: 45000,
-          body: {
-            email: $("login-email").value.trim(),
-            password: $("login-password").value,
-          },
-        });
+        var email = $("login-email").value.trim();
+        var password = $("login-password").value;
+        var data = api.loginApi
+          ? await api.loginApi(email, password)
+          : await api.api("/api/v1/auth/login", {
+              method: "POST",
+              noAuth: true,
+              timeout: 60000,
+              retries: 3,
+              body: { email: email, password: password },
+            });
         if (data.role !== "school_admin") {
           err.textContent = "This login is for school admins only. Students use Sign in on the home page. Main admin uses the main admin site.";
           return;

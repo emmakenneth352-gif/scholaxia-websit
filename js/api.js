@@ -12,26 +12,60 @@
     return ctrl.signal;
   }
 
-  async function wakeServer(ms) {
+  async function readHealth(ms) {
+    var res = await fetch(API_BASE + "/health", {
+      method: "GET",
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+      signal: fetchTimeout(ms || 45000),
+    });
     try {
-      await fetch(API_BASE + "/health", {
-        mode: "no-cors",
-        cache: "no-store",
-        signal: fetchTimeout(ms || 8000),
-      });
-    } catch (e) { /* ignore */ }
+      return await res.json();
+    } catch (e) {
+      return { status: res.ok ? "ok" : "error" };
+    }
   }
 
-  function friendlyFetchError(err) {
+  async function wakeServer(ms) {
+    try {
+      return await readHealth(ms || 45000);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function friendlyFetchError(err, health) {
     var name = (err && err.name) || "";
     var msg = (err && err.message) || "";
+    var network =
+      name === "AbortError" ||
+      /aborted|abort|failed to fetch|networkerror|load failed/i.test(msg);
+    if (network && health && health.database === "unavailable") {
+      return "The Scholaxia server is up, but the database is offline. Wait a minute and try again.";
+    }
     if (name === "AbortError" || /aborted|abort/i.test(msg)) {
-      return "Server took too long. Wait 20 seconds and try again (it may be waking up).";
+      return "Server took too long. Wait 30 seconds and try again (Render may be waking up).";
     }
     if (/failed to fetch|networkerror|load failed/i.test(msg)) {
       return "Cannot reach the Scholaxia API. Wait a minute if the server is restarting, then try again.";
     }
     return msg || "Request failed";
+  }
+
+  async function loginApi(email, password) {
+    var health = await wakeServer(45000);
+    try {
+      return await api("/api/v1/auth/login", {
+        method: "POST",
+        noAuth: true,
+        body: { email: email, password: password },
+        timeout: 60000,
+        retries: 3,
+      });
+    } catch (err) {
+      throw new Error(friendlyFetchError(err, health));
+    }
   }
 
   function getToken() {
@@ -271,6 +305,7 @@
     api: api,
     apiUpload: apiUpload,
     wakeServer: wakeServer,
+    loginApi: loginApi,
     friendlyFetchError: friendlyFetchError,
     fetchTimeout: fetchTimeout,
     getToken: getToken,

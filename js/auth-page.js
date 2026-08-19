@@ -232,13 +232,15 @@
     btn.disabled = true;
     btn.textContent = "Logging in…";
     try {
-      var data = await api.api("/api/v1/auth/login", {
-        method: "POST",
-        noAuth: true,
-        body: { email: email, password: password },
-        timeout: 20000,
-        retries: 1,
-      });
+      var data = api.loginApi
+        ? await api.loginApi(email, password)
+        : await api.api("/api/v1/auth/login", {
+            method: "POST",
+            noAuth: true,
+            body: { email: email, password: password },
+            timeout: 60000,
+            retries: 3,
+          });
       if (!data || !data.access_token) {
         throw new Error("Login did not return a session. Try again.");
       }
