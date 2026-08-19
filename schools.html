@@ -8,15 +8,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/schools.css?v=2" />
+    <link rel="stylesheet" href="css/schools.css?v=20260819f" />
   </head>
   <body class="schools-body">
     <header class="topbar">
       <a class="logo" href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
       <nav class="nav" aria-label="Primary">
         <a href="index.html">Home</a>
-        <a href="auth.html">CBT Practice</a>
-        <a href="auth.html">Past questions</a>
         <a class="is-active" href="schools.html">Schools</a>
         <a href="marketplace.html">Marketplace</a>
         <a href="index.html#contact">Contact</a>
@@ -24,8 +22,7 @@
       <div class="top-actions">
         <span class="user-chip hidden" id="sch-user-label"></span>
         <button type="button" class="btn btn-ghost hidden" id="sch-logout">Log out</button>
-        <a class="btn btn-ghost" href="index.html">Home</a>
-        <a class="btn btn-purple" href="auth.html">Student login</a>
+        <a class="btn btn-navy" href="auth.html">Student sign in</a>
       </div>
     </header>
 
@@ -34,8 +31,15 @@
         <img src="media/banner-3.png" alt="" />
         <div class="login-copy">
           <span>School office</span>
-          <h1>Your students log in as themselves.</h1>
-          <p>Create each student account (or import CSV). They sign in on the student site with their own email and password. Class, school and student ID stay on the account — they never pick a class to sit an exam.</p>
+          <h1>Run your school from one desk.</h1>
+          <p>Students keep their own email and password. You own the class list, external exams, results, teachers and live classes.</p>
+          <ul class="intro-points">
+            <li>Students</li>
+            <li>External exams</li>
+            <li>Results reprint</li>
+            <li>Teachers</li>
+            <li>Live class</li>
+          </ul>
         </div>
       </div>
       <div class="login-panel">
@@ -55,188 +59,224 @@
         <div>
           <div class="kicker">School dashboard</div>
           <h1 id="school-title">School office</h1>
-          <p>Add students with their own logins, create class exams, and reprint results. Students sign in on the main Scholaxia site.</p>
+          <p>Add students, create <strong>external exams</strong> (PDF or Word), publish to a class, then reprint results. Students sign in on the main Scholaxia site with the account you created.</p>
         </div>
-        <a class="btn btn-gold" href="auth.html">Student login</a>
+        <div class="hero-stats">
+          <button type="button" class="hero-chip" data-goto-tab="students"><span>1</span>Students</button>
+          <button type="button" class="hero-chip" data-goto-tab="external"><span>2</span>External exams</button>
+          <button type="button" class="hero-chip" data-goto-tab="results"><span>3</span>Results</button>
+        </div>
       </div>
 
-      <nav class="row-tabs" id="sch-tabs">
-        <button type="button" class="active" data-tab="students">Students</button>
-        <button type="button" data-tab="external">Exams</button>
-        <button type="button" data-tab="results">Results</button>
-        <button type="button" data-tab="teachers">Teachers</button>
-        <button type="button" data-tab="live">Live class</button>
-        <button type="button" data-tab="exams">School CBT</button>
-      </nav>
+      <div class="office-shell">
+        <nav class="side-tabs" id="sch-tabs" aria-label="School office">
+          <p class="side-label">Office</p>
+          <button type="button" class="active" data-tab="students">Students</button>
+          <button type="button" data-tab="external">External exams</button>
+          <button type="button" data-tab="results">Results</button>
+          <button type="button" data-tab="teachers">Teachers</button>
+          <button type="button" data-tab="live">Live class</button>
+        </nav>
 
-      <section class="panel tab-panel" id="tab-students">
-        <h2>Students</h2>
-        <p class="hint">Create a real Scholaxia login for each student. They sign in with their own email and password. Class and student ID are stored on the account — they never pick a school or class at login.</p>
-        <div class="grid">
-          <label>Full name * <input id="st-name" /></label>
-          <label>Email * <input id="st-email" type="email" /></label>
-          <label>Class *
-            <select id="st-class">
-              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-              <option>SS1</option><option>SS2</option><option>SS3</option>
-              <option>POST-UTME</option>
-            </select>
-          </label>
-          <label>Student ID <input id="st-sid" placeholder="ABC001 (auto if empty)" /></label>
-          <label>Password <input id="st-pass" placeholder="Leave blank to auto-create" /></label>
-        </div>
-        <p><button type="button" class="btn btn-navy" id="btn-st-add">Add student</button></p>
-        <p class="hint">Bulk upload CSV columns: name, email, class, student_id, password</p>
-        <input type="file" id="st-csv" accept=".csv,text/csv" />
-        <p><button type="button" class="btn-sm" id="btn-st-import">Import CSV</button></p>
-        <p class="hint" id="st-msg"></p>
-        <input type="search" id="st-search" placeholder="Search name, email, student ID" />
-        <div id="st-list" class="empty">Loading…</div>
-      </section>
+        <div class="office-main">
+          <section class="panel tab-panel" id="tab-students">
+            <header class="panel-head">
+              <div>
+                <h2>Students</h2>
+                <p class="hint">Each student gets their own login. Class and student ID stay on the account.</p>
+              </div>
+            </header>
+            <div class="block">
+              <h3>Add one student</h3>
+              <div class="grid grid-3">
+                <label>Full name * <input id="st-name" /></label>
+                <label>Email * <input id="st-email" type="email" /></label>
+                <label>Class *
+                  <select id="st-class">
+                    <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+                    <option>SS1</option><option>SS2</option><option>SS3</option>
+                    <option>POST-UTME</option>
+                  </select>
+                </label>
+                <label>Student ID <input id="st-sid" placeholder="ABC001 (auto if empty)" /></label>
+                <label>Password <input id="st-pass" placeholder="Leave blank to auto-create" /></label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-st-add">Add student</button>
+              </div>
+            </div>
+            <div class="block">
+              <h3>Import CSV</h3>
+              <p class="hint">Columns: name, email, class, student_id, password</p>
+              <div class="import-row">
+                <input type="file" id="st-csv" accept=".csv,text/csv" />
+                <button type="button" class="btn btn-ghost" id="btn-st-import">Import CSV</button>
+              </div>
+              <p class="hint" id="st-msg"></p>
+            </div>
+            <div class="block">
+              <div class="list-head">
+                <h3>Class list</h3>
+                <input type="search" id="st-search" placeholder="Search name, email, student ID" />
+              </div>
+              <div id="st-list" class="table-wrap empty">Loading…</div>
+            </div>
+          </section>
 
-      <section class="panel tab-panel hidden" id="tab-exams">
-        <h2>School CBT exams</h2>
-        <p class="hint">Timed school tests. One question per line: Question | A | B | C | D | Correct</p>
-        <div class="grid">
-          <label>Title * <input id="ex-title" /></label>
-          <label>Subject * <input id="ex-subject" /></label>
-          <label>Duration (minutes) <input id="ex-duration" type="number" value="45" min="5" /></label>
-          <label>Start <input id="ex-start" type="datetime-local" /></label>
-          <label>End <input id="ex-end" type="datetime-local" /></label>
-        </div>
-        <label>Questions <textarea id="ex-questions" rows="6"></textarea></label>
-        <p><button type="button" class="btn btn-navy" id="btn-exam">Save exam</button></p>
-        <p class="hint" id="ex-msg"></p>
-        <div id="so-exam-counts"></div>
-      </section>
+          <section class="panel tab-panel hidden" id="tab-external">
+            <header class="panel-head">
+              <div>
+                <h2>External exams</h2>
+                <p class="hint">Post-UTME and school papers. Upload PDF or Word, review every question, then publish to a class. Students never see the paper until you approve it.</p>
+              </div>
+            </header>
+            <div class="block">
+              <h3>Create examination</h3>
+              <div class="grid grid-3">
+                <label>Exam title * <input id="ee-title" placeholder="First Term Mathematics / Post-UTME 2026" /></label>
+                <label>Subject * <input id="ee-subject" /></label>
+                <label>Class *
+                  <select id="ee-class">
+                    <option>POST-UTME</option>
+                    <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+                    <option>SS1</option><option>SS2</option><option>SS3</option>
+                  </select>
+                </label>
+                <label>Duration
+                  <select id="ee-duration">
+                    <option value="120">2 hours</option>
+                    <option value="90">1 hour 30 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="45">45 min</option>
+                  </select>
+                </label>
+                <label>Total marks
+                  <select id="ee-marks">
+                    <option value="100">100</option>
+                    <option value="50">50</option>
+                  </select>
+                </label>
+                <label>Pass mark <input id="ee-pass" type="number" value="50" /></label>
+                <label>Start <input id="ee-start" type="datetime-local" /></label>
+                <label>End <input id="ee-end" type="datetime-local" /></label>
+              </div>
+              <label class="wide">Also include classes
+                <select id="ee-extra" multiple size="6">
+                  <option value="ALL">All students</option>
+                  <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+                  <option>SS1</option><option>SS2</option><option>SS3</option>
+                  <option>POST-UTME</option>
+                </select>
+              </label>
+              <label class="wide">Class note / instructions <textarea id="ee-notes" rows="3" placeholder="Arrive 30 minutes early. No phones."></textarea></label>
+              <label class="wide">Exam paper (PDF or DOCX) <input id="ee-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" /></label>
+              <div class="actions">
+                <button type="button" class="btn btn-gold" id="btn-ee-create">Create, upload &amp; extract</button>
+              </div>
+              <p class="hint" id="ee-msg"></p>
+            </div>
+            <div class="block">
+              <h3>Your external exams</h3>
+              <div id="ee-list" class="table-wrap empty"></div>
+            </div>
+            <div id="ee-review" class="block hidden">
+              <h3>Review extracted questions</h3>
+              <p class="hint">Correct any extraction mistakes, set the right answer, then approve. Students never see this paper until you publish.</p>
+              <div id="ee-questions"></div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-ee-save">Save review</button>
+                <button type="button" class="btn btn-gold" id="btn-ee-publish">Approve &amp; publish</button>
+              </div>
+            </div>
+          </section>
 
-      <section class="panel tab-panel hidden" id="tab-external">
-        <h2>External exam (Post-UTME style)</h2>
-        <p class="hint">Upload PDF or Word. Questions are extracted for review — they are never shown to students until you approve and publish. Pick whether the paper is over 50 or 100 marks.</p>
-        <div class="grid">
-          <label>Exam title * <input id="ee-title" placeholder="ABC College Post-UTME 2026" /></label>
-          <label>Subject * <input id="ee-subject" /></label>
-          <label>Class *
-            <select id="ee-class">
-              <option>POST-UTME</option>
-              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-              <option>SS1</option><option>SS2</option><option>SS3</option>
-            </select>
-          </label>
-          <label>Also include classes
-            <select id="ee-extra" multiple size="5">
-              <option value="ALL">All students</option>
-              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-              <option>SS1</option><option>SS2</option><option>SS3</option>
-              <option>POST-UTME</option>
-            </select>
-          </label>
-          <label>Duration
-            <select id="ee-duration">
-              <option value="120">2 hours</option>
-              <option value="90">1 hour 30 min</option>
-              <option value="60">1 hour</option>
-              <option value="45">45 min</option>
-            </select>
-          </label>
-          <label>Total marks
-            <select id="ee-marks">
-              <option value="100">100</option>
-              <option value="50">50</option>
-            </select>
-          </label>
-          <label>Pass mark <input id="ee-pass" type="number" value="50" /></label>
-          <label>Start <input id="ee-start" type="datetime-local" /></label>
-          <label>End <input id="ee-end" type="datetime-local" /></label>
-        </div>
-        <label>Class note / instructions <textarea id="ee-notes" rows="3" placeholder="Arrive 30 minutes early. No phones."></textarea></label>
-        <label>Exam paper (PDF or DOCX) <input id="ee-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" /></label>
-        <p><button type="button" class="btn btn-gold" id="btn-ee-create">Create, upload &amp; extract</button></p>
-        <p class="hint" id="ee-msg"></p>
-        <h3>Your external exams</h3>
-        <div id="ee-list" class="empty"></div>
-        <div id="ee-review" class="hidden">
-          <h3>Review extracted questions</h3>
-          <p class="hint">Correct any extraction mistakes, set the right answer, then approve. Students never see this paper until you publish.</p>
-          <div id="ee-questions"></div>
-          <p>
-            <button type="button" class="btn btn-navy" id="btn-ee-save">Save review</button>
-            <button type="button" class="btn btn-gold" id="btn-ee-publish">Approve &amp; publish</button>
-          </p>
-        </div>
-      </section>
+          <section class="panel tab-panel hidden" id="tab-results">
+            <header class="panel-head">
+              <div>
+                <h2>Results</h2>
+                <p class="hint">Official scores are marked on the server. Filter the class, then reprint the whole sheet or one student slip.</p>
+              </div>
+            </header>
+            <div class="block">
+              <div class="grid grid-3">
+                <label>External exam
+                  <select id="ee-result-exam"></select>
+                </label>
+                <label>Class filter <input id="so-res-class" placeholder="JSS1 or POST-UTME" /></label>
+                <label>Search <input id="ee-result-q" placeholder="Name or student ID" /></label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-ee-results">Load results</button>
+                <button type="button" class="btn btn-ghost" id="btn-print-results">Reprint class sheet</button>
+              </div>
+              <div id="ee-results" class="table-wrap"></div>
+            </div>
+          </section>
 
-      <section class="panel tab-panel hidden" id="tab-results">
-        <h2>Results</h2>
-        <p class="hint">Official scores are marked on the server. Filter the class, then reprint the whole sheet or one student slip.</p>
-        <div class="grid">
-          <label>External exam
-            <select id="ee-result-exam"></select>
-          </label>
-          <label>Class filter <input id="so-res-class" placeholder="JSS1 or POST-UTME" /></label>
-          <label>Search <input id="ee-result-q" placeholder="Name or candidate ID" /></label>
-        </div>
-        <p>
-          <button type="button" class="btn-sm" id="btn-ee-results">Load results</button>
-          <button type="button" class="btn-sm" id="btn-print-results">Reprint / print</button>
-        </p>
-        <div id="ee-results"></div>
-        <h3 style="margin-top:24px">School CBT results &amp; retake</h3>
-        <div class="grid">
-          <label>Subject filter <input id="so-res-subject" /></label>
-        </div>
-        <p><button type="button" class="btn-sm" id="btn-results">Load school CBT results</button></p>
-        <div id="so-results"></div>
-        <div class="grid" style="margin-top:12px">
-          <label>Student email <input id="so-retake-email" /></label>
-          <label>Exam ID <input id="so-retake-exam" /></label>
-        </div>
-        <p><button type="button" class="btn-sm" id="btn-retake">Allow retake</button></p>
-        <p class="hint" id="so-retake-msg"></p>
-      </section>
+          <section class="panel tab-panel hidden" id="tab-teachers">
+            <header class="panel-head">
+              <div>
+                <h2>Teachers</h2>
+                <p class="hint">Create teacher logins for the teacher portal.</p>
+              </div>
+            </header>
+            <div class="block">
+              <h3>Add teacher</h3>
+              <div class="grid grid-3">
+                <label>Full name * <input id="so-t-name" /></label>
+                <label>Email * <input id="so-t-email" type="email" /></label>
+                <label>Password * <input id="so-t-pass" type="password" minlength="8" /></label>
+                <label>Subjects (comma) <input id="so-t-subjects" /></label>
+                <label>Classes (comma) <input id="so-t-classes" placeholder="JSS1, JSS2" /></label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-teacher">Create teacher</button>
+              </div>
+              <p class="hint" id="so-t-msg"></p>
+            </div>
+            <div class="block">
+              <h3>Staff list</h3>
+              <div id="so-teachers" class="table-wrap"></div>
+            </div>
+          </section>
 
-      <section class="panel tab-panel hidden" id="tab-teachers">
-        <h2>Add teacher</h2>
-        <div class="grid">
-          <label>Full name * <input id="so-t-name" /></label>
-          <label>Email * <input id="so-t-email" type="email" /></label>
-          <label>Password * <input id="so-t-pass" type="password" minlength="8" /></label>
-          <label>Subjects (comma) <input id="so-t-subjects" /></label>
-          <label>Classes (comma) <input id="so-t-classes" placeholder="JSS1, JSS2" /></label>
+          <section class="panel tab-panel hidden" id="tab-live">
+            <header class="panel-head">
+              <div>
+                <h2>Live class</h2>
+                <p class="hint">Host a class for one year group, or open it to the whole school.</p>
+              </div>
+            </header>
+            <div class="block">
+              <div class="grid grid-2">
+                <label>Title * <input id="so-live-title" /></label>
+                <label>Subject * <input id="so-live-subject" /></label>
+                <label>Audience
+                  <select id="so-live-vis">
+                    <option value="class_level">One class</option>
+                    <option value="private">Private</option>
+                    <option value="public">All students</option>
+                  </select>
+                </label>
+                <label>Class
+                  <select id="so-live-class">
+                    <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+                    <option>SS1</option><option>SS2</option><option>SS3</option>
+                  </select>
+                </label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-ghost" id="btn-live-sched">Create class</button>
+                <button type="button" class="btn btn-gold" id="btn-live-now">Go live now</button>
+              </div>
+              <p class="hint" id="so-live-msg"></p>
+            </div>
+          </section>
         </div>
-        <p><button type="button" class="btn btn-navy" id="btn-teacher">Create teacher</button></p>
-        <p class="hint" id="so-t-msg"></p>
-        <div id="so-teachers"></div>
-      </section>
-
-      <section class="panel tab-panel hidden" id="tab-live">
-        <h2>School live class</h2>
-        <div class="grid">
-          <label>Title * <input id="so-live-title" /></label>
-          <label>Subject * <input id="so-live-subject" /></label>
-          <label>Audience
-            <select id="so-live-vis">
-              <option value="class_level">One class</option>
-              <option value="private">Private</option>
-              <option value="public">All students</option>
-            </select>
-          </label>
-          <label>Class
-            <select id="so-live-class">
-              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-              <option>SS1</option><option>SS2</option><option>SS3</option>
-            </select>
-          </label>
-        </div>
-        <p>
-          <button type="button" class="btn-sm" id="btn-live-sched">Create class</button>
-          <button type="button" class="btn btn-gold" id="btn-live-now">Go live now</button>
-        </p>
-        <p class="hint" id="so-live-msg"></p>
-      </section>
+      </div>
     </main>
 
     <script src="js/api.js?v=20260819t"></script>
-    <script src="js/schools.js?v=20260819e"></script>
+    <script src="js/schools.js?v=20260819f"></script>
   </body>
 </html>

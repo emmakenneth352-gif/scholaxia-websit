@@ -73,17 +73,13 @@
         localStorage.setItem("sia_school_campus", me.school_name);
         $("school-title").textContent = me.school_name;
       }
-    } catch (e) {
-      $("so-reg-msg").textContent = e.message || "Could not load school.";
-    }
-    loadCandidates();
-    loadResults();
-    loadExamCounts();
+    } catch (e) {}
     loadTeachers();
   }
 
   async function loadCandidates() {
     var el = $("so-candidates");
+    if (!el) return;
     var q = ($("so-search") && $("so-search").value) || "";
     try {
       var data = await office("/candidates" + (q ? "?q=" + encodeURIComponent(q) : ""));
@@ -102,6 +98,7 @@
 
   async function loadExamCounts() {
     var el = $("so-exam-counts");
+    if (!el) return;
     try {
       var data = await office("/exam-counts");
       var rows = (data && data.exams) || [];
@@ -118,9 +115,10 @@
 
   async function loadResults() {
     var el = $("so-results");
+    if (!el) return;
     var qs = [];
-    var cls = $("so-res-class").value.trim();
-    var sub = $("so-res-subject").value.trim();
+    var cls = ($("so-res-class") && $("so-res-class").value.trim()) || "";
+    var sub = ($("so-res-subject") && $("so-res-subject").value.trim()) || "";
     if (cls) qs.push("class_name=" + encodeURIComponent(cls));
     if (sub) qs.push("subject=" + encodeURIComponent(sub));
     try {
@@ -216,19 +214,27 @@
       showLogin();
     });
 
-    document.getElementById("sch-tabs").addEventListener("click", function (e) {
-      var btn = e.target.closest("button[data-tab]");
-      if (!btn) return;
-      document.querySelectorAll("#sch-tabs button").forEach(function (b) { b.classList.toggle("active", b === btn); });
-      document.querySelectorAll(".tab-panel").forEach(function (p) {
-        p.classList.toggle("hidden", p.id !== "tab-" + btn.getAttribute("data-tab"));
+    function switchTab(name) {
+      document.querySelectorAll("#sch-tabs button").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-tab") === name);
       });
-      if (btn.getAttribute("data-tab") === "students") loadSchoolStudents();
-      if (btn.getAttribute("data-tab") === "external") loadExternalExams();
-      if (btn.getAttribute("data-tab") === "results") {
+      document.querySelectorAll(".tab-panel").forEach(function (p) {
+        p.classList.toggle("hidden", p.id !== "tab-" + name);
+      });
+      if (name === "students") loadSchoolStudents();
+      if (name === "external") loadExternalExams();
+      if (name === "results") {
         loadExternalExams();
         loadEeResults();
       }
+    }
+    document.getElementById("sch-tabs").addEventListener("click", function (e) {
+      var btn = e.target.closest("button[data-tab]");
+      if (!btn) return;
+      switchTab(btn.getAttribute("data-tab"));
+    });
+    document.querySelectorAll("[data-goto-tab]").forEach(function (chip) {
+      chip.addEventListener("click", function () { switchTab(chip.getAttribute("data-goto-tab")); });
     });
 
     if ($("btn-register")) $("btn-register").addEventListener("click", async function () {
@@ -261,7 +267,7 @@
       } catch (err) { alert(err.message); }
     });
 
-    $("btn-exam").addEventListener("click", async function () {
+    if ($("btn-exam")) $("btn-exam").addEventListener("click", async function () {
       var msg = $("ex-msg");
       try {
         var questions = parseQuestions($("ex-questions").value);
@@ -318,7 +324,7 @@
       var school = localStorage.getItem("sia_school_campus") || "School";
       openPrintWindow("Reprint results", "<h1>" + esc(school) + "</h1><h2>" + esc(examName) + "</h2>" + html);
     });
-    $("btn-retake").addEventListener("click", async function () {
+    if ($("btn-retake")) $("btn-retake").addEventListener("click", async function () {
       var msg = $("so-retake-msg");
       try {
         var data = await office("/retake", {
