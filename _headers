@@ -1,12 +1,14 @@
 /*
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
+  Cache-Control: no-cache
 
-/*.html
-  Cache-Control: public, max-age=0, must-revalidate
+/schools.html
+  Cache-Control: no-store
 
-/js/*
-  Cache-Control: public, max-age=0, must-revalidate
+/office.html
+  Cache-Control: no-store
 
-/css/*
-  Cache-Control: public, max-age=0, must-revalidate
+/css/office.css
+  Cache-Control: no-store
+
+/js/office.js
+  Cache-Control: no-store

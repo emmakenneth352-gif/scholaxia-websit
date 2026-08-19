@@ -242,7 +242,7 @@
   }
 
   function dashboardForRole(role) {
-    if (role === "school_admin") return "schools.html";
+    if (role === "school_admin") return "office.html";
     if (role === "teacher" || role === "admin") return "teacher.html";
     if (role === "kind") return "kind.html";
     if (role === "vendor") return "vendor.html";
