@@ -884,6 +884,63 @@
     return (list || []).filter(function (e) { return String(e.id || e.exam_id) === String(id); })[0];
   }
 
+  var cbtUnlockAfter = null;
+
+  function resetCbtUnlockModal() {
+    if ($("cbtUnlockChoice")) $("cbtUnlockChoice").hidden = false;
+    if ($("cbtUnlockCoupon")) $("cbtUnlockCoupon").hidden = true;
+    if ($("cbtUnlockPay")) $("cbtUnlockPay").hidden = true;
+    if ($("cbtUnlockStatus")) {
+      $("cbtUnlockStatus").textContent = "";
+      $("cbtUnlockStatus").className = "form-status";
+    }
+    if ($("cbtUnlockCode")) $("cbtUnlockCode").value = "";
+  }
+
+  function closeCbtUnlockModal() {
+    var modal = $("cbtUnlockModal");
+    if (modal) modal.classList.remove("is-on");
+    cbtUnlockAfter = null;
+    resetCbtUnlockModal();
+  }
+
+  function openCbtUnlockModal(afterUnlock) {
+    cbtUnlockAfter = afterUnlock;
+    resetCbtUnlockModal();
+    var modal = $("cbtUnlockModal");
+    if (!modal) {
+      if (confirm("CBT package required. Open CBT packages to pay?")) showPage("cbt");
+      return;
+    }
+    modal.classList.add("is-on");
+  }
+
+  function loadCbtUnlockPackages() {
+    var list = $("cbtUnlockPayList");
+    if (!list) return;
+    list.innerHTML = loadingHtml("Loading packages…");
+    api.api("/api/v1/payments/paystack/cbt-packages").then(function (catalog) {
+      var packages = firstArray(catalog, ["packages", "items"]);
+      if (!packages.length) {
+        list.innerHTML = emptyHtml("📝", "No CBT packages listed yet.");
+        return;
+      }
+      list.innerHTML = packages.map(function (p) {
+        var id = p.id || p.package_id;
+        var price = Number(p.price || p.amount || 0);
+        return (
+          '<div class="card-foot" style="margin-bottom:8px">' +
+          "<strong>" + esc(p.name || p.title || id) + " · ₦" + price.toLocaleString("en-NG") + "</strong>" +
+          '<button type="button" class="btn btn-primary btn-mini" data-pay-type="cbt_package" data-pay-id="' +
+          esc(id) +
+          '">Pay</button></div>'
+        );
+      }).join("");
+    }).catch(function (err) {
+      list.innerHTML = errorHtml(errMsg(err));
+    });
+  }
+
   // Delegated handlers for exam cards (download / start) across cbt / school / school-portal
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-action]");
@@ -928,9 +985,7 @@
           btn.textContent = "Download";
         }
         if (isCbtPackageError(err)) {
-          if (confirm("Your CBT package is inactive or expired. Open CBT packages to pay with Paystack?")) {
-            showPage("cbt");
-          }
+          openCbtUnlockModal(function () { downloadExam(examId, isExternal, btn); });
           return;
         }
         alert("Download failed: " + errMsg(err));
@@ -946,54 +1001,67 @@
     var exam = findExamById(currentExamSourceList(), examId) || {};
     var title = exam.title || exam.name || pack.title || pack.name || "Exam";
 
-    if (isExternal) {
-      openExam({
-        examId: examId,
-        title: title,
-        pack: pack,
-        isExternal: true,
-      });
-      return;
-    }
-
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Starting…";
-    }
-    api
-      .api("/api/v1/cbt/sessions/" + examId + "/start", {
-        method: "POST",
-        body: { is_school: !!isSchool },
-      })
-      .then(function (res) {
-        var sessionId =
-          (res && (res.session_id || res.id || (res.session && res.session.id))) || null;
-        var questions = (res && (res.questions || (res.session && res.session.questions))) || null;
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "Start exam";
-        }
+    function proceed() {
+      if (isExternal) {
         openExam({
           examId: examId,
           title: title,
-          pack: questions ? { questions: questions, duration_minutes: examMinutes(exam) } : pack,
-          sessionId: sessionId,
-          isSchool: isSchool,
+          pack: pack,
+          isExternal: true,
         });
-      })
-      .catch(function (err) {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "Start exam";
-        }
-        if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
-          if (confirm("CBT package required. Open CBT packages to pay with Paystack?")) {
-            showPage("cbt");
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Starting…";
+      }
+      api
+        .api("/api/v1/cbt/sessions/" + examId + "/start", {
+          method: "POST",
+          body: { is_school: !!isSchool },
+        })
+        .then(function (res) {
+          var sessionId =
+            (res && (res.session_id || res.id || (res.session && res.session.id))) || null;
+          var questions = (res && (res.questions || (res.session && res.session.questions))) || null;
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Start exam";
           }
-          return;
-        }
-        // Offline fallback — still let the student practice with the local pack.
-        openExam({ examId: examId, title: title, pack: pack, isSchool: isSchool });
+          openExam({
+            examId: examId,
+            title: title,
+            pack: questions ? { questions: questions, duration_minutes: examMinutes(exam) } : pack,
+            sessionId: sessionId,
+            isSchool: isSchool,
+          });
+        })
+        .catch(function (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Start exam";
+          }
+          if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
+            openCbtUnlockModal(proceed);
+            return;
+          }
+          openExam({ examId: examId, title: title, pack: pack, isSchool: isSchool });
+        });
+    }
+
+    if (isSchool) {
+      proceed();
+      return;
+    }
+    api
+      .api("/api/v1/payments/paystack/cbt-access")
+      .then(function (access) {
+        if (access && access.has_access) proceed();
+        else openCbtUnlockModal(proceed);
+      })
+      .catch(function () {
+        openCbtUnlockModal(proceed);
       });
   }
 
@@ -2004,7 +2072,7 @@
           banner.style.display = "block";
           banner.className = "info-banner warn-banner";
           banner.textContent =
-            "No active CBT package yet. Pick a plan below and pay with Paystack to unlock downloads.";
+            "No active CBT package yet. When you tap Start exam you can use a coupon or pay with Paystack.";
         }
       }
       if (!packages.length) {
@@ -2038,23 +2106,6 @@
           );
         })
         .join("");
-      wrap.innerHTML +=
-        '<div class="card" style="grid-column:1/-1"><h4>Have a coupon?</h4><p>Admin can give you a code to unlock CBT without Paystack.</p>' +
-        '<div class="card-foot"><input id="cbtCouponCode" placeholder="SX-XXXX" style="flex:1;min-width:140px" />' +
-        '<button type="button" class="btn btn-primary btn-mini" id="cbtCouponBtn">Redeem</button></div></div>';
-      var cbtn = $("cbtCouponBtn");
-      if (cbtn) {
-        cbtn.addEventListener("click", function () {
-          var code = ($("cbtCouponCode") && $("cbtCouponCode").value || "").trim();
-          if (!code) return;
-          api.api("/api/v1/cbt/coupons/redeem", { method: "POST", body: { code: code } })
-            .then(function () {
-              loadCbtPackages(opts);
-              if (typeof fetchExamsForMe === "function") fetchExamsForMe();
-            })
-            .catch(function (err) { alert(errMsg(err)); });
-        });
-      }
     });
   }
 
@@ -2209,6 +2260,42 @@
     if (enrollBtn) openSkillEnroll(enrollBtn.dataset.enrollSkill);
     if (e.target.id === "skillEnrollClose" || e.target === $("skillEnrollModal")) {
       if ($("skillEnrollModal")) $("skillEnrollModal").classList.remove("is-on");
+    }
+    if (e.target.id === "cbtUnlockClose" || e.target === $("cbtUnlockModal")) {
+      closeCbtUnlockModal();
+    }
+    if (e.target.id === "cbtUnlockPickCoupon") {
+      $("cbtUnlockChoice").hidden = true;
+      $("cbtUnlockCoupon").hidden = false;
+      $("cbtUnlockPay").hidden = true;
+    }
+    if (e.target.id === "cbtUnlockPickPay") {
+      $("cbtUnlockChoice").hidden = true;
+      $("cbtUnlockCoupon").hidden = true;
+      $("cbtUnlockPay").hidden = false;
+      loadCbtUnlockPackages();
+    }
+    if (e.target.id === "cbtUnlockRedeem") {
+      var code = (($("cbtUnlockCode") && $("cbtUnlockCode").value) || "").trim();
+      var statusEl = $("cbtUnlockStatus");
+      if (!code) {
+        if (statusEl) statusEl.textContent = "Enter your coupon code.";
+        return;
+      }
+      e.target.disabled = true;
+      api.api("/api/v1/cbt/coupons/redeem", { method: "POST", body: { code: code } })
+        .then(function () {
+          var next = cbtUnlockAfter;
+          closeCbtUnlockModal();
+          loadCbtPackages();
+          loadCbtPackages({ gridId: "cbtPagePackagesGrid", bannerId: "cbtPageAccessBanner" });
+          if (typeof fetchExamsForMe === "function") fetchExamsForMe();
+          if (typeof next === "function") next();
+        })
+        .catch(function (err) {
+          if (statusEl) statusEl.textContent = errMsg(err);
+        })
+        .finally(function () { e.target.disabled = false; });
     }
   });
   if ($("skillPayMode")) $("skillPayMode").addEventListener("change", updateSkillFeeCopy);

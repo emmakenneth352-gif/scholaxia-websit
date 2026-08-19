@@ -35,6 +35,7 @@
   }
 
   function getToken() {
+    var schoolTok = localStorage.getItem("sia_school_token") || "";
     var teacherTok = localStorage.getItem("sia_teacher_token") || localStorage.getItem("sia_admin_token") || "";
     var studentTok = localStorage.getItem("sia_token") || "";
     var role = "";
@@ -43,6 +44,9 @@
     } catch (e) {}
     try {
       var path = String(window.location.pathname || "");
+      if (/schools(\.html)?$/i.test(path)) {
+        return schoolTok || teacherTok;
+      }
       var onClassroom = /classroom(\.html)?$/i.test(path) || /\/classroom/i.test(path);
       var sess = null;
       try {
@@ -51,25 +55,26 @@
         sess = null;
       }
       var sessRole = (sess && sess.role) || "";
-      // Host classroom must never send a leftover student JWT — presence/students will 403.
       if (onClassroom && (sessRole === "teacher" || sessRole === "admin")) {
-        return teacherTok || studentTok;
+        return teacherTok || schoolTok || studentTok;
       }
       if (onClassroom && sessRole === "student") {
         return studentTok || teacherTok;
+      }
+      if (role === "school_admin") {
+        return schoolTok || teacherTok || studentTok;
       }
       if (role === "teacher" || role === "admin") {
         return teacherTok || studentTok;
       }
       if (role === "vendor") {
-        // Vendors store JWT in sia_token — never prefer a leftover teacher token.
         return studentTok || teacherTok;
       }
       if (role === "student" || role === "kind") {
         return studentTok || teacherTok;
       }
     } catch (e) {}
-    return teacherTok || studentTok;
+    return schoolTok || teacherTok || studentTok;
   }
 
   function getUser() {
@@ -86,7 +91,10 @@
     var token = data && data.access_token;
     if (!token) return;
 
-    if (role === "teacher" || role === "admin") {
+    if (role === "school_admin") {
+      localStorage.setItem("sia_school_token", token);
+      localStorage.setItem("sia_teacher_token", token);
+    } else if (role === "teacher" || role === "admin") {
       localStorage.setItem("sia_teacher_token", token);
     } else {
       localStorage.setItem("sia_token", token);
@@ -106,6 +114,7 @@
     [
       "sia_token",
       "sia_teacher_token",
+      "sia_school_token",
       "sia_role",
       "sia_name",
       "sia_email",
@@ -227,6 +236,7 @@
   }
 
   function dashboardForRole(role) {
+    if (role === "school_admin") return "schools.html";
     if (role === "teacher" || role === "admin") return "teacher.html";
     if (role === "kind") return "kind.html";
     if (role === "vendor") return "vendor.html";

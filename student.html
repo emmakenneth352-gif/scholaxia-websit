@@ -604,6 +604,33 @@
       </div>
     </div>
 
+    <!-- ================= CBT UNLOCK MODAL ================= -->
+    <div class="modal-overlay" id="cbtUnlockModal">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Start this exam</h3>
+          <button type="button" class="modal-close" id="cbtUnlockClose">✕</button>
+        </div>
+        <p class="modal-sub">Do you have a coupon code, or do you want to pay?</p>
+        <div class="btn-row" id="cbtUnlockChoice" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+          <button type="button" class="btn btn-secondary" id="cbtUnlockPickCoupon">I have a coupon</button>
+          <button type="button" class="btn btn-primary" id="cbtUnlockPickPay">I want to pay</button>
+        </div>
+        <div id="cbtUnlockCoupon" hidden>
+          <div class="form-field">
+            <label>Coupon code</label>
+            <input id="cbtUnlockCode" placeholder="SX-XXXX" autocomplete="off" />
+          </div>
+          <button type="button" class="btn btn-primary" id="cbtUnlockRedeem">Redeem &amp; continue</button>
+        </div>
+        <div id="cbtUnlockPay" hidden>
+          <p class="modal-sub">Choose a CBT package and pay with Paystack.</p>
+          <div id="cbtUnlockPayList"></div>
+        </div>
+        <span class="form-status" id="cbtUnlockStatus"></span>
+      </div>
+    </div>
+
     <!-- ================= SKILL ENROLL MODAL ================= -->
     <div class="modal-overlay" id="skillEnrollModal">
       <div class="modal">
@@ -708,6 +735,6 @@
 
     <script src="js/api.js?v=20260815a"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260819a"></script>
+    <script src="js/student.js?v=20260819c"></script>
   </body>
 </html>

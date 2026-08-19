@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Schools — Scholaxia</title>
+    <link rel="icon" type="image/png" href="media/logo-main.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/schools.css?v=1" />
+  </head>
+  <body class="schools-body">
+    <header class="sch-top">
+      <a class="sch-brand" href="index.html">
+        <img src="media/logo-main.png" alt="" />
+        Schools
+      </a>
+      <div id="sch-signed" class="hidden">
+        <span class="sch-user" id="sch-user-label"></span>
+        <button type="button" class="btn btn-ghost" id="sch-logout">Log out</button>
+      </div>
+      <a class="btn-ghost" href="index.html" id="sch-home">Home</a>
+    </header>
+
+    <section id="login-screen" class="login-wrap">
+      <h1>School admin</h1>
+      <p>Use the email and password the main Scholaxia admin created for your school. Students sign in from the Home Sign in button, not here.</p>
+      <form id="sch-login">
+        <label>Email <input id="login-email" type="email" required autocomplete="username" /></label>
+        <label>Password <input id="login-password" type="password" required autocomplete="current-password" /></label>
+        <p class="err" id="login-error"></p>
+        <button class="btn" type="submit" id="btn-login">Enter school office</button>
+      </form>
+    </section>
+
+    <main id="app-screen" class="sch-app hidden">
+      <h1 id="school-title">School office</h1>
+      <p class="hint">Register exam students, print slips, upload and schedule exams, print results, grant retakes, add teachers, and host live class by class or private.</p>
+      <nav class="tabs" id="sch-tabs">
+        <button type="button" class="active" data-tab="register">Register &amp; slips</button>
+        <button type="button" data-tab="exams">Exams</button>
+        <button type="button" data-tab="results">Results &amp; retake</button>
+        <button type="button" data-tab="teachers">Teachers</button>
+        <button type="button" data-tab="live">Live class</button>
+      </nav>
+
+      <section class="panel tab-panel" id="tab-register">
+        <h2>Register student for exam</h2>
+        <div class="grid">
+          <label>Class *
+            <select id="so-class">
+              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+              <option>SS1</option><option>SS2</option><option>SS3</option>
+            </select>
+          </label>
+          <label>Full name * <input id="so-name" /></label>
+          <label>Email <input id="so-email" type="email" placeholder="needed to retake" /></label>
+          <label>Phone <input id="so-phone" /></label>
+          <label>Subjects (comma) <input id="so-subjects" placeholder="English, Mathematics" /></label>
+        </div>
+        <p><button type="button" class="btn" id="btn-register">Register &amp; print slip</button></p>
+        <p class="hint" id="so-reg-msg"></p>
+        <h3>Find registered students</h3>
+        <input type="search" id="so-search" placeholder="Email, name, rec number, access code…" />
+        <div id="so-candidates" class="empty">Loading…</div>
+      </section>
+
+      <section class="panel tab-panel hidden" id="tab-exams">
+        <h2>Upload &amp; schedule exam</h2>
+        <p class="hint">One question per line: Question | Option A | Option B | Option C | Option D | Correct (A/B/C/D)</p>
+        <div class="grid">
+          <label>Title * <input id="ex-title" /></label>
+          <label>Subject * <input id="ex-subject" /></label>
+          <label>Duration (minutes) <input id="ex-duration" type="number" value="45" min="5" /></label>
+          <label>Start <input id="ex-start" type="datetime-local" /></label>
+          <label>End <input id="ex-end" type="datetime-local" /></label>
+        </div>
+        <label>Questions <textarea id="ex-questions" rows="8" placeholder="What is 2+2? | 3 | 4 | 5 | 6 | B"></textarea></label>
+        <p><button type="button" class="btn" id="btn-exam">Save exam</button></p>
+        <p class="hint" id="ex-msg"></p>
+        <h3>How many sat</h3>
+        <div id="so-exam-counts"></div>
+      </section>
+
+      <section class="panel tab-panel hidden" id="tab-results">
+        <h2>Results</h2>
+        <div class="grid">
+          <label>Class filter <input id="so-res-class" placeholder="JSS1" /></label>
+          <label>Subject filter <input id="so-res-subject" /></label>
+        </div>
+        <p>
+          <button type="button" class="btn-sm" id="btn-results">Load results</button>
+          <button type="button" class="btn-sm" id="btn-print-results">Print</button>
+        </p>
+        <div id="so-results"></div>
+        <h3>Allow retake</h3>
+        <div class="grid">
+          <label>Student email <input id="so-retake-email" /></label>
+          <label>Exam ID <input id="so-retake-exam" placeholder="from exam list" /></label>
+        </div>
+        <p><button type="button" class="btn-sm" id="btn-retake">Allow retake</button></p>
+        <p class="hint" id="so-retake-msg"></p>
+      </section>
+
+      <section class="panel tab-panel hidden" id="tab-teachers">
+        <h2>Add teacher</h2>
+        <div class="grid">
+          <label>Full name * <input id="so-t-name" /></label>
+          <label>Email * <input id="so-t-email" type="email" /></label>
+          <label>Password * <input id="so-t-pass" type="password" minlength="8" /></label>
+          <label>Subjects (comma) <input id="so-t-subjects" /></label>
+          <label>Classes (comma) <input id="so-t-classes" placeholder="JSS1, JSS2" /></label>
+        </div>
+        <p><button type="button" class="btn" id="btn-teacher">Create teacher</button></p>
+        <p class="hint" id="so-t-msg"></p>
+        <div id="so-teachers"></div>
+      </section>
+
+      <section class="panel tab-panel hidden" id="tab-live">
+        <h2>School live class</h2>
+        <p class="hint">Class-based (JSS1, SS2) or private (invite only).</p>
+        <div class="grid">
+          <label>Title * <input id="so-live-title" /></label>
+          <label>Subject * <input id="so-live-subject" /></label>
+          <label>Audience
+            <select id="so-live-vis">
+              <option value="class_level">One class (JSS1 / SS1…)</option>
+              <option value="private">Private (invite only)</option>
+              <option value="public">All students</option>
+            </select>
+          </label>
+          <label>Class
+            <select id="so-live-class">
+              <option>JSS1</option><option>JSS2</option><option>JSS3</option>
+              <option>SS1</option><option>SS2</option><option>SS3</option>
+            </select>
+          </label>
+        </div>
+        <p>
+          <button type="button" class="btn-sm" id="btn-live-sched">Create class</button>
+          <button type="button" class="btn" id="btn-live-now">Go live now</button>
+        </p>
+        <p class="hint" id="so-live-msg"></p>
+      </section>
+    </main>
+
+    <script src="js/api.js?v=20260819s"></script>
+    <script src="js/schools.js?v=1"></script>
+  </body>
+</html>
