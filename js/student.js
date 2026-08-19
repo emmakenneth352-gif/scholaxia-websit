@@ -183,7 +183,7 @@
 
   var PAGE_TITLES = {
     home: "Home",
-    "study-materials": "Study Materials",
+    "study-materials": "Video Tutorials",
     "past-questions": "Past Questions",
     cbt: "CBT Practice",
     school: "Scholaxia Exam",
@@ -400,40 +400,43 @@
      STUDY MATERIALS  — recommendations feed
      ===================================================================== */
 
+  function youtubeEmbed(url) {
+    var u = String(url || "").trim();
+    var m = u.match(/(?:youtu\.be\/|v=)([A-Za-z0-9_-]{6,})/);
+    if (m) return "https://www.youtube.com/embed/" + m[1];
+    return u;
+  }
+
   function loadStudyMaterials() {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading recommendations…");
+    wrap.innerHTML = loadingHtml("Loading video tutorials…");
     api
-      .api("/api/v1/recommendations/feed")
+      .api("/api/v1/videos")
       .then(function (data) {
-        var items = firstArray(data, ["items", "results", "feed", "recommendations"]);
+        var items = firstArray(data, ["videos", "items", "results"]);
         if (!items.length) {
-          wrap.innerHTML = emptyHtml("📘", "No recommendations yet. Set up your subjects in Profile to get personalised study picks.");
+          wrap.innerHTML = emptyHtml("▶", "No video tutorials yet. Admin will post YouTube lessons here.");
           return;
         }
         wrap.innerHTML = items
           .map(function (it) {
-            var title = it.title || it.name || it.subject || "Study material";
-            var desc = it.description || it.summary || it.reason || "";
-            var tag = it.subject || it.category || "Recommended";
-            var bookId = it.book_id || it.library_id || it.id;
-            var canOpen = !!it.book_id || !!it.library_id;
+            var src = youtubeEmbed(it.video_url || it.url || "");
             return (
               '<div class="card">' +
               '<span class="card-tag">' +
-              esc(tag) +
+              esc(it.subject || "Tutorial") +
               "</span><h4>" +
-              esc(title) +
+              esc(it.title || "Video") +
               "</h4>" +
-              (desc ? "<p>" + esc(desc) + "</p>" : "") +
-              '<div class="card-foot">' +
-              (canOpen
-                ? '<button type="button" class="btn btn-primary btn-mini" data-open-book="' +
-                  esc(bookId) +
-                  '">Open</button>'
-                : '<span class="muted">Recommended for you</span>') +
-              "</div></div>"
+              (src
+                ? '<div class="video-frame"><iframe src="' +
+                  esc(src) +
+                  '" title="' +
+                  esc(it.title || "Video") +
+                  '" allowfullscreen loading="lazy"></iframe></div>'
+                : "") +
+              "</div>"
             );
           })
           .join("");
@@ -2035,6 +2038,23 @@
           );
         })
         .join("");
+      wrap.innerHTML +=
+        '<div class="card" style="grid-column:1/-1"><h4>Have a coupon?</h4><p>Admin can give you a code to unlock CBT without Paystack.</p>' +
+        '<div class="card-foot"><input id="cbtCouponCode" placeholder="SX-XXXX" style="flex:1;min-width:140px" />' +
+        '<button type="button" class="btn btn-primary btn-mini" id="cbtCouponBtn">Redeem</button></div></div>';
+      var cbtn = $("cbtCouponBtn");
+      if (cbtn) {
+        cbtn.addEventListener("click", function () {
+          var code = ($("cbtCouponCode") && $("cbtCouponCode").value || "").trim();
+          if (!code) return;
+          api.api("/api/v1/cbt/coupons/redeem", { method: "POST", body: { code: code } })
+            .then(function () {
+              loadCbtPackages(opts);
+              if (typeof fetchExamsForMe === "function") fetchExamsForMe();
+            })
+            .catch(function (err) { alert(errMsg(err)); });
+        });
+      }
     });
   }
 

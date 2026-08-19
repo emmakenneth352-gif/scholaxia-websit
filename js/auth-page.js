@@ -151,22 +151,25 @@
   function switchMode(next) {
     mode = next;
     var login = mode === "login";
+    var reset = mode === "reset";
 
     $("tabLogin").classList.toggle("is-active", login);
-    $("tabSignup").classList.toggle("is-active", !login);
+    $("tabSignup").classList.toggle("is-active", !login && !reset);
     $("tabLogin").setAttribute("aria-selected", login ? "true" : "false");
     $("tabSignup").setAttribute("aria-selected", login ? "false" : "true");
     var tabs = document.querySelector(".mode-tabs");
-    if (tabs) tabs.classList.toggle("is-signup", !login);
+    if (tabs) tabs.classList.toggle("is-signup", !login && !reset);
     var title = $("authTitle");
-    if (title) title.textContent = login ? "Welcome back" : "Create account";
+    if (title) title.textContent = reset ? "Reset password" : login ? "Welcome back" : "Create account";
 
     setVisible($("formLogin"), login);
-    setVisible($("formSignup"), !login);
+    setVisible($("formSignup"), !login && !reset);
+    setVisible($("formReset"), reset);
 
     showErr($("loginError"));
     showErr($("signupError"));
     showErr($("otpError"));
+    showErr($("resetError"));
 
     setVisible($("signupStepDetails"), true);
     setVisible($("signupStepOtp"), false);
@@ -417,6 +420,67 @@
     $("gotoLogin").addEventListener("click", function () {
       switchMode("login");
     });
+    if ($("gotoForgot")) {
+      $("gotoForgot").addEventListener("click", function () {
+        var em = $("loginEmail").value.trim();
+        if (em) $("resetEmail").value = em;
+        switchMode("reset");
+      });
+    }
+    if ($("gotoLoginFromReset")) {
+      $("gotoLoginFromReset").addEventListener("click", function () {
+        switchMode("login");
+      });
+    }
+    if ($("btnResetSend")) {
+      $("btnResetSend").addEventListener("click", async function () {
+        var email = $("resetEmail").value.trim();
+        var hint = $("resetHint");
+        showErr($("resetError"));
+        if (!email) {
+          showErr($("resetError"), "Enter your email");
+          return;
+        }
+        try {
+          var data = await api.api("/api/v1/auth/otp/send", {
+            method: "POST",
+            noAuth: true,
+            body: { email: email, purpose: "reset_password" },
+          });
+          if (hint) {
+            hint.hidden = false;
+            hint.textContent = (data && data.message) || "OTP sent to your email.";
+          }
+        } catch (err) {
+          showErr($("resetError"), err.message || "Could not send OTP");
+        }
+      });
+    }
+    if ($("formReset")) {
+      $("formReset").addEventListener("submit", async function (e) {
+        e.preventDefault();
+        var email = $("resetEmail").value.trim();
+        var otp = $("resetOtp").value.trim();
+        var password = $("resetPassword").value;
+        showErr($("resetError"));
+        if (!email || !otp || !password) {
+          showErr($("resetError"), "Email, OTP and new password are required");
+          return;
+        }
+        try {
+          await api.api("/api/v1/auth/password/reset", {
+            method: "POST",
+            noAuth: true,
+            body: { email: email, otp: otp, new_password: password },
+          });
+          switchMode("login");
+          showErr($("loginError"), "Password updated. Log in with your new password.");
+          $("loginError").hidden = false;
+        } catch (err) {
+          showErr($("resetError"), err.message || "Could not reset password");
+        }
+      });
+    }
 
     $("formLogin").addEventListener("submit", onLogin);
     $("formSignup").addEventListener("submit", onSignup);
