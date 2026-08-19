@@ -52,27 +52,33 @@ img { display: block; max-width: 100%; }
   cursor: pointer;
   font-weight: 700;
 }
-.btn-gold,
-.btn-navy {
-  background: linear-gradient(135deg, #7c3aed, #6d28d9);
-  color: #fff;
+.btn, .btn-gold, .btn-navy, .btn-purple, .btn-sm {
+  background: #7c3aed !important;
+  background-image: linear-gradient(135deg, #7c3aed, #6d28d9) !important;
+  color: #fff !important;
+  border: 0;
   box-shadow: 0 10px 20px rgba(124, 58, 237, 0.28);
 }
 .btn-ghost {
-  background: #fff;
-  color: var(--purple-dark);
-  border: 1px solid #ddd6fe;
+  background: #fff !important;
+  color: #6d28d9 !important;
+  border: 2px solid #7c3aed !important;
+  box-shadow: none;
 }
-.btn-sm {
-  padding: 8px 12px;
-  font-size: 13px;
-  border-radius: 10px;
-  background: var(--purple-soft);
-  color: var(--purple-dark);
-  border: 0;
-  cursor: pointer;
-  font-weight: 700;
+body.is-office { background: #f3e8ff; }
+body.is-office .workspace { background: #f3e8ff; }
+.panel-head .kicker {
+  color: #7c3aed;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 11px;
+  margin-bottom: 6px;
 }
+.block {
+  border-top: 6px solid #7c3aed;
+}
+.block h3 { color: #6d28d9; }
 
 .login-hero {
   display: grid;
@@ -266,10 +272,7 @@ body.is-office .btn-ghost {
 .panel-head h2 {
   font-size: 30px;
   margin-bottom: 6px;
-  background: linear-gradient(120deg, #7c3aed, #db2777);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #7c3aed;
 }
 .block {
   background: #fff;

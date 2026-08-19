@@ -10,22 +10,27 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/office.css?v=20260819j" />
+    <link rel="stylesheet" href="css/office-purple.css?v=20260819k" />
     <style>
-      body.is-office { background:#f4f6fb !important; }
-      body.is-office .topbar { background:rgba(255,255,255,.94) !important; }
-      #app-screen.office { display:grid !important; grid-template-columns:272px minmax(0,1fr) !important; max-width:none !important; margin:0 !important; padding:0 !important; min-height:calc(100vh - 61px); }
+      body.is-office { background:#f3e8ff !important; }
+      body.is-office .topbar { background:#fff !important; }
+      #app-screen.office { display:grid !important; grid-template-columns:272px minmax(0,1fr) !important; max-width:none !important; margin:0 !important; padding:0 !important; }
       #app-screen.office.hidden { display:none !important; }
-      .rail { background:linear-gradient(180deg,#fff,#faf8ff) !important; color:#0f172a !important; padding:18px 12px; }
-      .rail-nav { display:flex !important; flex-direction:column !important; gap:8px; }
-      .rail-nav button { width:100%; text-align:left; border:0; background:transparent; color:#64748b; padding:12px; border-radius:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:12px; }
-      .rail-nav button.active { background:linear-gradient(135deg,#7c3aed,#6d28d9) !important; color:#fff !important; box-shadow:0 12px 24px rgba(124,58,237,.28); }
-      .workspace { padding:28px; }
-      .row-tabs, .office-hero { display:none !important; }
-      @media (max-width:900px) {
-        #app-screen.office { grid-template-columns:1fr !important; }
-        .rail-nav { flex-direction:row !important; overflow-x:auto; }
+      .rail { background:#fff !important; }
+      .rail-nav button.active { background:#7c3aed !important; color:#fff !important; }
+      .workspace { background:#f3e8ff !important; padding:24px !important; }
+      .panel-head h2 { color:#7c3aed !important; background:none !important; -webkit-text-fill-color:#7c3aed !important; }
+      .panel-head .kicker { color:#7c3aed !important; font-weight:800; letter-spacing:.14em; text-transform:uppercase; font-size:11px; }
+      .block { border-top:6px solid #7c3aed !important; }
+      .block h3 { color:#6d28d9 !important; }
+      .btn, .btn-navy, .btn-gold, .btn-purple {
+        background:#7c3aed !important;
+        background-image:linear-gradient(135deg,#7c3aed,#6d28d9) !important;
+        color:#fff !important;
+        border:0 !important;
       }
+      .btn-ghost { background:#fff !important; color:#6d28d9 !important; border:2px solid #7c3aed !important; }
+      .row-tabs, .office-hero { display:none !important; }
     </style>
     <script>
       (function () {
@@ -107,6 +112,7 @@
           <section class="panel tab-panel" id="tab-students">
             <header class="panel-head">
               <div>
+                <p class="kicker">School office</p>
                 <h2>Students</h2>
                 <p class="hint">Each student gets their own login. Class and student ID stay on the account.</p>
               </div>
@@ -151,6 +157,7 @@
           <section class="panel tab-panel hidden" id="tab-external">
             <header class="panel-head">
               <div>
+                <p class="kicker">School office</p>
                 <h2>External exams</h2>
                 <p class="hint">Post-UTME and school papers. Upload PDF or Word, review every question, then publish to a class. Students never see the paper until you approve it.</p>
               </div>
@@ -218,6 +225,7 @@
           <section class="panel tab-panel hidden" id="tab-results">
             <header class="panel-head">
               <div>
+                <p class="kicker">School office</p>
                 <h2>Results</h2>
                 <p class="hint">Official scores are marked on the server. Filter the class, then reprint the whole sheet or one student slip.</p>
               </div>
@@ -241,6 +249,7 @@
           <section class="panel tab-panel hidden" id="tab-teachers">
             <header class="panel-head">
               <div>
+                <p class="kicker">School office</p>
                 <h2>Teachers</h2>
                 <p class="hint">Create teacher logins for the teacher portal.</p>
               </div>
@@ -268,6 +277,7 @@
           <section class="panel tab-panel hidden" id="tab-live">
             <header class="panel-head">
               <div>
+                <p class="kicker">School office</p>
                 <h2>Live class</h2>
                 <p class="hint">Host a class for one year group, or open it to the whole school.</p>
               </div>
@@ -301,6 +311,6 @@
     </main>
 
     <script src="js/api.js?v=20260819i"></script>
-    <script src="js/office.js?v=20260819j"></script>
+    <script src="js/office.js?v=20260819k"></script>
   </body>
 </html>
