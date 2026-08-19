@@ -7,7 +7,7 @@
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/exam-portal.css?v=20260819n" />
+    <link rel="stylesheet" href="css/exam-portal.css?v=20260819o" />
     <style>
       body.hall { background:#f7f8fc !important; }
       h1, .kicker, .hello, .take-box h3 { color:#7c3aed !important; }
@@ -17,21 +17,43 @@
   </head>
   <body class="hall">
     <header class="hall-bar">
-      <a href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
+      <a class="logo" href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
+      <nav class="exam-nav" id="exam-site-nav">
+        <a href="index.html">Home</a>
+        <a href="auth.html">CBT Practice</a>
+        <a href="auth.html">Past questions</a>
+        <a class="is-on" href="external-exam.html">External exam</a>
+        <a href="office.html">Schools</a>
+        <a href="marketplace.html">Marketplace</a>
+        <a href="index.html#contact">Contact</a>
+        <a href="index.html#about">About</a>
+      </nav>
       <button type="button" class="btn btn-ghost" id="btn-hall-out" hidden>Log out</button>
     </header>
+    <section class="login-hero" id="step-login">
+      <div class="login-visual">
+        <img src="media/banner-3.png" alt="" />
+        <div class="login-copy">
+          <span>External exam</span>
+          <h2>Sit your school exam here.</h2>
+          <p>Log in with the email and password your school gave you. If a paper is published, you will see Take exam.</p>
+        </div>
+      </div>
+      <div class="login-panel">
+        <div class="card">
+          <div class="kicker">External exam</div>
+          <h1>Exam login</h1>
+          <p class="lead">Use the email and password your school gave you. You do not pick a class or type a student ID.</p>
+          <label>Email <input id="hall-email" type="email" autocomplete="username" /></label>
+          <label>Password <input id="hall-password" type="password" autocomplete="current-password" /></label>
+          <label class="hidden">Unused <input id="hall-id" /></label>
+          <label class="hidden">Unused <input id="hall-access" /></label>
+          <p class="err" id="hall-err"></p>
+          <button type="button" class="btn btn-gold full" id="btn-identify">Log in</button>
+        </div>
+      </div>
+    </section>
     <main class="wrap">
-      <section class="card" id="step-login">
-        <div class="kicker">External exam</div>
-        <h1>Exam login</h1>
-        <p class="lead">Use the email and password your school gave you. You do not pick a class or type a student ID.</p>
-        <label>Email <input id="hall-email" type="email" autocomplete="username" /></label>
-        <label>Password <input id="hall-password" type="password" autocomplete="current-password" /></label>
-        <label class="hidden">Unused <input id="hall-id" /></label>
-        <label class="hidden">Unused <input id="hall-access" /></label>
-        <p class="err" id="hall-err"></p>
-        <button type="button" class="btn btn-gold full" id="btn-identify">Log in</button>
-      </section>
 
       <section class="card hidden" id="step-id">
         <p class="hello" id="exam-hello">Welcome</p>
@@ -87,6 +109,6 @@
       </section>
     </main>
     <script src="js/api.js?v=20260819m"></script>
-    <script src="js/external-exam.js?v=20260819n"></script>
+    <script src="js/external-exam.js?v=20260819o"></script>
   </body>
 </html>

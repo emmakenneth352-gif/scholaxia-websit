@@ -24,15 +24,74 @@ button, input { font: inherit; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 22px;
+  gap: 16px;
+  padding: 10px 22px;
   background: #fff;
   border-bottom: 1px solid var(--line);
 }
-.hall-bar img { height: 40px; }
+.hall-bar .logo img { height: 40px; }
+.exam-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: #4b5563;
+}
+.exam-nav a.is-on { color: #7c3aed; font-weight: 800; }
+.login-hero {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  min-height: calc(100vh - 62px);
+}
+.login-visual { position: relative; overflow: hidden; min-height: 420px; }
+.login-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.login-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(88, 28, 135, 0.2), rgba(49, 16, 89, 0.82));
+}
+.login-copy {
+  position: absolute;
+  z-index: 1;
+  left: 36px;
+  right: 36px;
+  bottom: 40px;
+  color: #fff;
+}
+.login-copy span {
+  display: inline-block;
+  background: linear-gradient(120deg, #7c3aed, #db2777);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+.login-copy h2 { font-size: clamp(28px, 4vw, 44px); line-height: 1.1; margin-bottom: 10px; color: #fff; }
+.login-copy p { max-width: 460px; color: rgba(255,255,255,0.88); }
+.login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background: #f7f8fc;
+}
+.login-panel .card { width: min(440px, 100%); }
 .wrap {
-  max-width: 560px;
+  max-width: 640px;
   margin: 0 auto;
-  padding: 40px 16px 64px;
+  padding: 32px 16px 64px;
+}
+@media (max-width: 900px) {
+  .exam-nav { display: none; }
+  .login-hero { grid-template-columns: 1fr; }
+  .login-visual { min-height: 240px; }
 }
 .card {
   background: #fff;

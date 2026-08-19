@@ -19,8 +19,11 @@
   function $(id) { return document.getElementById(id); }
   function show(id) {
     ["step-login", "step-id", "step-ready", "step-exam", "step-done"].forEach(function (s) {
-      $(s).classList.toggle("hidden", s !== id);
+      if ($(s)) $(s).classList.toggle("hidden", s !== id);
     });
+    var nav = $("exam-site-nav");
+    if (nav) nav.classList.toggle("hidden", id !== "step-login");
+    document.body.classList.toggle("is-exam-live", id === "step-exam");
   }
   function esc(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
