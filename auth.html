@@ -13,7 +13,7 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/auth.css?v=20260805d" />
+    <link rel="stylesheet" href="css/auth.css?v=20260820b" />
   </head>
   <body class="auth-body">
     <div class="auth-fx" aria-hidden="true">
@@ -85,11 +85,34 @@
               <p class="auth-error" id="loginError" hidden></p>
               <button class="auth-submit" type="submit" id="btnLogin">Log in</button>
               <p class="auth-switch">
-                <button type="button" id="gotoForgot">Forgot password?</button>
+                <button type="button" class="auth-forgot" id="gotoForgot">Forgot password?</button>
               </p>
               <p class="auth-switch" id="loginSwitch">
                 New here?
                 <button type="button" id="gotoSignup">Create an account</button>
+              </p>
+            </form>
+
+            <form id="formReset" class="auth-form is-off" hidden>
+              <label>
+                Email
+                <input id="resetEmail" type="email" autocomplete="email" required placeholder="you@email.com" />
+              </label>
+              <p class="auth-hint" id="resetHint" hidden></p>
+              <button class="auth-linkish" type="button" id="btnResetSend">Send OTP to email</button>
+              <label>
+                OTP code
+                <input id="resetOtp" type="text" inputmode="numeric" maxlength="8" placeholder="6-digit code" />
+              </label>
+              <label>
+                New password
+                <input id="resetPassword" type="password" autocomplete="new-password" minlength="8" required placeholder="At least 8 characters" />
+              </label>
+              <p class="auth-error" id="resetError" hidden></p>
+              <button class="auth-submit" type="submit">Save new password</button>
+              <p class="auth-switch">
+                Remembered it?
+                <button type="button" id="gotoLoginFromReset">Back to log in</button>
               </p>
             </form>
 
@@ -186,7 +209,7 @@
       </section>
     </main>
 
-    <script src="js/api.js?v=20260820a"></script>
-    <script src="js/auth-page.js?v=20260820a"></script>
+    <script src="js/api.js?v=20260820b"></script>
+    <script src="js/auth-page.js?v=20260820b"></script>
   </body>
 </html>

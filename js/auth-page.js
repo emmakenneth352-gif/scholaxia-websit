@@ -93,7 +93,11 @@
   function updateCopy() {
     var metaMap = marketMode ? MARKET_ROLE_META : ROLE_META;
     var meta = metaMap[role] || metaMap.student || ROLE_META.student;
-    $("portalSub").textContent = mode === "login" ? meta.subLogin : meta.subSignup;
+    if (mode === "reset") {
+      $("portalSub").textContent = "We will email an OTP so you can set a new password";
+    } else {
+      $("portalSub").textContent = mode === "login" ? meta.subLogin : meta.subSignup;
+    }
     setVisible($("kindFields"), role === "kind" && mode === "signup");
     setVisible($("teacherFields"), role === "teacher" && mode === "signup");
     setVisible($("vendorFields"), role === "vendor" && mode === "signup");
@@ -423,10 +427,12 @@
       switchMode("login");
     });
     if ($("gotoForgot")) {
-      $("gotoForgot").addEventListener("click", function () {
-        var em = $("loginEmail").value.trim();
-        if (em) $("resetEmail").value = em;
+      $("gotoForgot").addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
         switchMode("reset");
+        var em = ($("loginEmail") && $("loginEmail").value.trim()) || "";
+        if (em && $("resetEmail")) $("resetEmail").value = em;
       });
     }
     if ($("gotoLoginFromReset")) {

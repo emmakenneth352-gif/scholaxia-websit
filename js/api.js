@@ -54,17 +54,17 @@
   }
 
   async function loginApi(email, password) {
-    var health = await wakeServer(45000);
+    await wakeServer(12000);
     try {
       return await api("/api/v1/auth/login", {
         method: "POST",
         noAuth: true,
         body: { email: email, password: password },
         timeout: 60000,
-        retries: 3,
+        retries: 2,
       });
     } catch (err) {
-      throw new Error(friendlyFetchError(err, health));
+      throw new Error(friendlyFetchError(err));
     }
   }
 
