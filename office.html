@@ -10,20 +10,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/office.css?v=20260819i" />
+    <link rel="stylesheet" href="css/office.css?v=20260819j" />
     <style>
-      /* Built into the page so an old cached stylesheet cannot restore the top-tab layout */
-      body.is-office { background:#07111f !important; }
-      body.is-office .topbar { background:#07111f !important; border-color:rgba(255,255,255,.08) !important; }
-      #app-screen.office { display:grid !important; grid-template-columns:268px minmax(0,1fr) !important; max-width:none !important; margin:0 !important; padding:0 !important; min-height:calc(100vh - 61px); }
+      body.is-office { background:#f4f6fb !important; }
+      body.is-office .topbar { background:rgba(255,255,255,.94) !important; }
+      #app-screen.office { display:grid !important; grid-template-columns:272px minmax(0,1fr) !important; max-width:none !important; margin:0 !important; padding:0 !important; min-height:calc(100vh - 61px); }
       #app-screen.office.hidden { display:none !important; }
-      .rail { background:#0c1a30 !important; color:#fff !important; padding:22px 14px 28px; }
-      .rail-nav { display:flex !important; flex-direction:column !important; gap:6px; }
-      .rail-nav button { width:100%; text-align:left; border:0; background:transparent; color:#c5d3e6; padding:12px; border-radius:12px; font-weight:700; cursor:pointer; }
-      .rail-nav button.active { background:#2563eb !important; color:#fff !important; }
-      .workspace { background:#edf2f8; padding:28px; }
-      .row-tabs { display:none !important; }
-      .office-hero { display:none !important; }
+      .rail { background:linear-gradient(180deg,#fff,#faf8ff) !important; color:#0f172a !important; padding:18px 12px; }
+      .rail-nav { display:flex !important; flex-direction:column !important; gap:8px; }
+      .rail-nav button { width:100%; text-align:left; border:0; background:transparent; color:#64748b; padding:12px; border-radius:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:12px; }
+      .rail-nav button.active { background:linear-gradient(135deg,#7c3aed,#6d28d9) !important; color:#fff !important; box-shadow:0 12px 24px rgba(124,58,237,.28); }
+      .workspace { padding:28px; }
+      .row-tabs, .office-hero { display:none !important; }
       @media (max-width:900px) {
         #app-screen.office { grid-template-columns:1fr !important; }
         .rail-nav { flex-direction:row !important; overflow-x:auto; }
@@ -98,11 +96,11 @@
           <p>Students · External exams · Results</p>
         </div>
         <nav class="rail-nav" id="sch-tabs" aria-label="School office">
-          <button type="button" class="active" data-tab="students"><i></i>Students</button>
-          <button type="button" data-tab="external"><i></i>External exams</button>
-          <button type="button" data-tab="results"><i></i>Results</button>
-          <button type="button" data-tab="teachers"><i></i>Teachers</button>
-          <button type="button" data-tab="live"><i></i>Live class</button>
+          <button type="button" class="active" data-tab="students"><span class="ico">👥</span><span class="lab"><b>Students</b><small>Accounts & class</small></span></button>
+          <button type="button" data-tab="external"><span class="ico">📝</span><span class="lab"><b>External exams</b><small>PDF papers</small></span></button>
+          <button type="button" data-tab="results"><span class="ico">📊</span><span class="lab"><b>Results</b><small>Reprint slips</small></span></button>
+          <button type="button" data-tab="teachers"><span class="ico">👩‍🏫</span><span class="lab"><b>Teachers</b><small>Staff logins</small></span></button>
+          <button type="button" data-tab="live"><span class="ico">📺</span><span class="lab"><b>Live class</b><small>Go live now</small></span></button>
         </nav>
       </aside>
       <div class="workspace">
@@ -303,6 +301,6 @@
     </main>
 
     <script src="js/api.js?v=20260819i"></script>
-    <script src="js/office.js?v=20260819i"></script>
+    <script src="js/office.js?v=20260819j"></script>
   </body>
 </html>
