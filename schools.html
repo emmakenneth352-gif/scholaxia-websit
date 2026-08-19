@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/office-purple.css?v=20260819m" />
+    <link rel="stylesheet" href="css/office-purple.css?v=20260820c" />
     <style>
       body.is-office { background:#f7f8fc !important; }
       body.is-office .topbar { background:#fff !important; }
@@ -69,13 +69,15 @@
         <div class="login-copy">
           <span>School office</span>
           <h1>Run your school from one desk.</h1>
-          <p>Students keep their own email and password. You own the class list, external exams, results, teachers and live classes.</p>
+          <p>Students keep their own email and password. You register the class, upload papers, schedule exams and reprint results.</p>
           <ul class="intro-points">
-            <li>Students</li>
-            <li>External exams</li>
-            <li>Results reprint</li>
-            <li>Teachers</li>
-            <li>Live class</li>
+            <li>Upload exams</li>
+            <li>Check results</li>
+            <li>Register students</li>
+            <li>Schedule exams</li>
+            <li>Grant exam retake</li>
+            <li>View uploaded exams</li>
+            <li>Exam settings</li>
           </ul>
         </div>
       </div>
@@ -96,21 +98,23 @@
         <div class="rail-brand">
           <span>School office</span>
           <strong id="school-title">School</strong>
-          <p>Students · External exams · Results</p>
+          <p>Register · Upload · Schedule · Results</p>
         </div>
         <nav class="rail-nav" id="sch-tabs" aria-label="School office">
-          <button type="button" class="active" data-tab="students"><span class="ico">👥</span><span class="lab"><b>Students</b><small>Accounts & class</small></span></button>
-          <button type="button" data-tab="external"><span class="ico">📝</span><span class="lab"><b>External exams</b><small>PDF papers</small></span></button>
-          <button type="button" data-tab="results"><span class="ico">📊</span><span class="lab"><b>Results</b><small>Reprint slips</small></span></button>
-          <button type="button" data-tab="teachers"><span class="ico">👩‍🏫</span><span class="lab"><b>Teachers</b><small>Staff logins</small></span></button>
-          <button type="button" data-tab="live"><span class="ico">📺</span><span class="lab"><b>Live class</b><small>Go live now</small></span></button>
+          <button type="button" class="active" data-tab="students"><span class="ico">👥</span><span class="lab"><b>Register students</b><small>Accounts & class</small></span></button>
+          <button type="button" data-tab="upload"><span class="ico">⬆️</span><span class="lab"><b>Upload exams</b><small>PDF or Word paper</small></span></button>
+          <button type="button" data-tab="papers"><span class="ico">📂</span><span class="lab"><b>View uploaded exams</b><small>Review & publish</small></span></button>
+          <button type="button" data-tab="schedule"><span class="ico">🗓</span><span class="lab"><b>Schedule exams</b><small>Start and end time</small></span></button>
+          <button type="button" data-tab="retake"><span class="ico">🔁</span><span class="lab"><b>Grant exam retake</b><small>One more sitting</small></span></button>
+          <button type="button" data-tab="results"><span class="ico">📊</span><span class="lab"><b>Check results</b><small>Reprint slips</small></span></button>
+          <button type="button" data-tab="settings"><span class="ico">⚙️</span><span class="lab"><b>Exam settings</b><small>Marks, class, publish</small></span></button>
         </nav>
       </aside>
       <div class="workspace">
           <section class="panel tab-panel" id="tab-students">
             <header class="panel-head">
               <div>
-                <h2>Students</h2>
+                <h2>Register students</h2>
                 <p class="hint">Each student gets their own login. Class and student ID stay on the account.</p>
               </div>
             </header>
@@ -150,11 +154,11 @@
             </div>
           </section>
 
-          <section class="panel tab-panel hidden" id="tab-external">
+          <section class="panel tab-panel hidden" id="tab-upload">
             <header class="panel-head">
               <div>
-                <h2>External exams</h2>
-                <p class="hint">Upload a PDF or Word paper, review the questions, then publish to a class.</p>
+                <h2>Upload exams</h2>
+                <p class="hint">Create the paper, attach a PDF or Word file, then extract questions.</p>
               </div>
             </header>
             <div class="block">
@@ -183,8 +187,6 @@
                   </select>
                 </label>
                 <label>Pass mark <input id="ee-pass" type="number" value="50" /></label>
-                <label>Start <input id="ee-start" type="datetime-local" /></label>
-                <label>End <input id="ee-end" type="datetime-local" /></label>
               </div>
               <div class="class-picks">
                 <p class="field-label">Who can take it</p>
@@ -205,10 +207,6 @@
               </div>
               <p class="hint" id="ee-msg"></p>
             </div>
-            <div class="block">
-              <h3>Your external exams</h3>
-              <div id="ee-list" class="table-wrap empty"></div>
-            </div>
             <div id="ee-review" class="block hidden">
               <h3>Review extracted questions</h3>
               <p class="hint">Correct any extraction mistakes, set the right answer, then approve. Students never see this paper until you publish.</p>
@@ -220,10 +218,66 @@
             </div>
           </section>
 
+          <section class="panel tab-panel hidden" id="tab-papers">
+            <header class="panel-head">
+              <div>
+                <h2>View uploaded exams</h2>
+                <p class="hint">Open a paper to review questions, then publish it to the class.</p>
+              </div>
+            </header>
+            <div class="block">
+              <h3>Uploaded papers</h3>
+              <div id="ee-list" class="table-wrap empty"></div>
+            </div>
+          </section>
+
+          <section class="panel tab-panel hidden" id="tab-schedule">
+            <header class="panel-head">
+              <div>
+                <h2>Schedule exams</h2>
+                <p class="hint">Set when students can start and when the paper closes.</p>
+              </div>
+            </header>
+            <div class="block">
+              <div class="grid grid-3">
+                <label>Exam
+                  <select id="ee-sched-exam"></select>
+                </label>
+                <label>Start <input id="ee-start" type="datetime-local" /></label>
+                <label>End <input id="ee-end" type="datetime-local" /></label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-ee-schedule">Save schedule</button>
+              </div>
+              <p class="hint" id="ee-sched-msg"></p>
+            </div>
+          </section>
+
+          <section class="panel tab-panel hidden" id="tab-retake">
+            <header class="panel-head">
+              <div>
+                <h2>Grant exam retake</h2>
+                <p class="hint">Allow one student to sit a published exam again.</p>
+              </div>
+            </header>
+            <div class="block">
+              <div class="grid grid-3">
+                <label>Exam
+                  <select id="so-retake-exam"></select>
+                </label>
+                <label>Student email * <input id="so-retake-email" type="email" placeholder="student@email.com" /></label>
+              </div>
+              <div class="actions">
+                <button type="button" class="btn btn-navy" id="btn-retake">Grant retake</button>
+              </div>
+              <p class="hint" id="so-retake-msg"></p>
+            </div>
+          </section>
+
           <section class="panel tab-panel hidden" id="tab-results">
             <header class="panel-head">
               <div>
-                <h2>Results</h2>
+                <h2>Check results</h2>
                 <p class="hint">Official scores are marked on the server. Filter the class, then reprint the whole sheet or one student slip.</p>
               </div>
             </header>
@@ -243,69 +297,53 @@
             </div>
           </section>
 
-          <section class="panel tab-panel hidden" id="tab-teachers">
+          <section class="panel tab-panel hidden" id="tab-settings">
             <header class="panel-head">
               <div>
-                <h2>Teachers</h2>
-                <p class="hint">Create teacher logins for the teacher portal.</p>
+                <h2>Exam settings</h2>
+                <p class="hint">Change duration, pass mark, who can sit the paper, then publish or unpublish.</p>
               </div>
             </header>
             <div class="block">
-              <h3>Add teacher</h3>
               <div class="grid grid-3">
-                <label>Full name * <input id="so-t-name" /></label>
-                <label>Email * <input id="so-t-email" type="email" /></label>
-                <label>Password * <input id="so-t-pass" type="password" minlength="8" /></label>
-                <label>Subjects (comma) <input id="so-t-subjects" /></label>
-                <label>Classes (comma) <input id="so-t-classes" placeholder="JSS1, JSS2" /></label>
-              </div>
-              <div class="actions">
-                <button type="button" class="btn btn-navy" id="btn-teacher">Create teacher</button>
-              </div>
-              <p class="hint" id="so-t-msg"></p>
-            </div>
-            <div class="block">
-              <h3>Staff list</h3>
-              <div id="so-teachers" class="table-wrap"></div>
-            </div>
-          </section>
-
-          <section class="panel tab-panel hidden" id="tab-live">
-            <header class="panel-head">
-              <div>
-                <h2>Live class</h2>
-                <p class="hint">Host a class for one year group, or open it to the whole school.</p>
-              </div>
-            </header>
-            <div class="block">
-              <div class="grid grid-2">
-                <label>Title * <input id="so-live-title" /></label>
-                <label>Subject * <input id="so-live-subject" /></label>
-                <label>Audience
-                  <select id="so-live-vis">
-                    <option value="class_level">One class</option>
-                    <option value="private">Private</option>
-                    <option value="public">All students</option>
+                <label>Exam
+                  <select id="ee-set-exam"></select>
+                </label>
+                <label>Duration
+                  <select id="ee-set-duration">
+                    <option value="120">2 hours</option>
+                    <option value="90">1 hour 30 min</option>
+                    <option value="60">1 hour</option>
+                    <option value="45">45 min</option>
                   </select>
                 </label>
-                <label>Class
-                  <select id="so-live-class">
-                    <option>JSS1</option><option>JSS2</option><option>JSS3</option>
-                    <option>SS1</option><option>SS2</option><option>SS3</option>
-                  </select>
-                </label>
+                <label>Pass mark <input id="ee-set-pass" type="number" value="50" /></label>
               </div>
+              <div class="class-picks">
+                <p class="field-label">Who can take it</p>
+                <div class="chips">
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="ALL" /> All</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="JSS1" /> JSS1</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="JSS2" /> JSS2</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="JSS3" /> JSS3</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="SS1" /> SS1</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="SS2" /> SS2</label>
+                  <label class="chip"><input type="checkbox" class="ee-set-chip" value="SS3" /> SS3</label>
+                </div>
+              </div>
+              <label class="wide">Instructions <textarea id="ee-set-notes" rows="3"></textarea></label>
               <div class="actions">
-                <button type="button" class="btn btn-ghost" id="btn-live-sched">Create class</button>
-                <button type="button" class="btn btn-gold" id="btn-live-now">Go live now</button>
+                <button type="button" class="btn btn-navy" id="btn-ee-settings">Save settings</button>
+                <button type="button" class="btn btn-gold" id="btn-ee-set-publish">Publish</button>
+                <button type="button" class="btn btn-ghost" id="btn-ee-set-unpublish">Unpublish</button>
               </div>
-              <p class="hint" id="so-live-msg"></p>
+              <p class="hint" id="ee-set-msg"></p>
             </div>
           </section>
       </div>
     </main>
 
-    <script src="js/api.js?v=20260820b"></script>
-    <script src="js/office.js?v=20260820a"></script>
+    <script src="js/api.js?v=portal2"></script>
+    <script src="js/office.js?v=20260820c"></script>
   </body>
 </html>

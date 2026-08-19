@@ -76,7 +76,7 @@
         $("school-title").textContent = me.school_name;
       }
     } catch (e) {}
-    loadTeachers();
+    loadSchoolStudents();
   }
 
   async function loadCandidates() {
@@ -225,11 +225,10 @@
         p.classList.toggle("hidden", p.id !== "tab-" + name);
       });
       if (name === "students") loadSchoolStudents();
-      if (name === "external") loadExternalExams();
-      if (name === "results") {
+      if (name === "upload" || name === "papers" || name === "schedule" || name === "retake" || name === "settings" || name === "results") {
         loadExternalExams();
-        loadEeResults();
       }
+      if (name === "results") loadEeResults();
     }
     document.getElementById("sch-tabs").addEventListener("click", function (e) {
       var btn = e.target.closest("button[data-tab]");
@@ -343,7 +342,7 @@
       }
     });
 
-    $("btn-teacher").addEventListener("click", async function () {
+    if ($("btn-teacher")) $("btn-teacher").addEventListener("click", async function () {
       var msg = $("so-t-msg");
       try {
         await office("/teachers", {
@@ -385,8 +384,8 @@
         msg.textContent = e.message;
       }
     }
-    $("btn-live-sched").addEventListener("click", function () { hostLive(false); });
-    $("btn-live-now").addEventListener("click", function () { hostLive(true); });
+    if ($("btn-live-sched")) $("btn-live-sched").addEventListener("click", function () { hostLive(false); });
+    if ($("btn-live-now")) $("btn-live-now").addEventListener("click", function () { hostLive(true); });
 
     var currentEeId = "";
     var lastEeResults = [];
@@ -397,11 +396,12 @@
       try {
         var data = await office("/external-exams");
         var rows = (data && data.exams) || [];
-        if (sel) {
-          sel.innerHTML = rows.map(function (r) {
-            return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
-          }).join("");
-        }
+        var examOpts = rows.map(function (r) {
+          return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
+        }).join("");
+        ["ee-result-exam", "so-retake-exam", "ee-sched-exam", "ee-set-exam"].forEach(function (id) {
+          if ($(id)) $(id).innerHTML = examOpts;
+        });
         if (!el) return;
         if (!rows.length) { el.innerHTML = '<div class="empty">No external exams yet.</div>'; return; }
         el.innerHTML = "<table><thead><tr><th>Title</th><th>Class</th><th>Marks</th><th>Status</th><th></th></tr></thead><tbody>" +
@@ -470,8 +470,8 @@
             duration_minutes: Number($("ee-duration").value) || 120,
             total_marks: Number($("ee-marks").value) || 100,
             pass_mark: Number($("ee-pass").value) || 50,
-            scheduled_start: $("ee-start").value || null,
-            scheduled_end: $("ee-end").value || null,
+            scheduled_start: null,
+            scheduled_end: null,
           },
         });
         var fd = new FormData();
@@ -509,6 +509,76 @@
         $("ee-msg").textContent = "Published. Students in the selected class(es) will see it after they sign in.";
         loadExternalExams();
       } catch (e) { $("ee-msg").textContent = e.message; }
+    });
+
+    function localToIso(val) {
+      if (!val) return null;
+      var d = new Date(val);
+      return isNaN(d.getTime()) ? val : d.toISOString();
+    }
+
+    if ($("btn-ee-schedule")) $("btn-ee-schedule").addEventListener("click", async function () {
+      var msg = $("ee-sched-msg");
+      var examId = $("ee-sched-exam") && $("ee-sched-exam").value;
+      if (!examId) { msg.textContent = "Upload an exam first."; return; }
+      try {
+        await office("/external-exams/" + examId, {
+          method: "PATCH",
+          body: {
+            scheduled_start: localToIso($("ee-start").value),
+            scheduled_end: localToIso($("ee-end").value),
+          },
+        });
+        msg.textContent = "Schedule saved.";
+        loadExternalExams();
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    });
+
+    if ($("btn-ee-settings")) $("btn-ee-settings").addEventListener("click", async function () {
+      var msg = $("ee-set-msg");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) { msg.textContent = "Upload an exam first."; return; }
+      try {
+        await office("/external-exams/" + examId, {
+          method: "PATCH",
+          body: {
+            duration_minutes: Number($("ee-set-duration").value) || 120,
+            pass_mark: Number($("ee-set-pass").value) || 50,
+            extra_classes: Array.prototype.map.call(document.querySelectorAll(".ee-set-chip:checked"), function (el) { return el.value; }),
+            instructions: ($("ee-set-notes") && $("ee-set-notes").value.trim()) || "",
+          },
+        });
+        msg.textContent = "Settings saved.";
+        loadExternalExams();
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    });
+    if ($("btn-ee-set-publish")) $("btn-ee-set-publish").addEventListener("click", async function () {
+      var msg = $("ee-set-msg");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) return;
+      try {
+        await office("/external-exams/" + examId + "/publish", { method: "POST", body: {} });
+        msg.textContent = "Exam published.";
+        loadExternalExams();
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    });
+    if ($("btn-ee-set-unpublish")) $("btn-ee-set-unpublish").addEventListener("click", async function () {
+      var msg = $("ee-set-msg");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) return;
+      try {
+        await office("/external-exams/" + examId + "/unpublish", { method: "POST", body: {} });
+        msg.textContent = "Exam unpublished.";
+        loadExternalExams();
+      } catch (e) {
+        msg.textContent = e.message;
+      }
     });
 
     async function loadEeResults() {
