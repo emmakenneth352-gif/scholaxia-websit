@@ -2,113 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Exam login — Scholaxia</title>
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <link rel="icon" type="image/png" href="media/logo-main.png" />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/exam-portal.css?v=20260819o" />
-    <style>
-      body.hall { background:#f7f8fc !important; }
-      h1, .kicker, .hello, .take-box h3 { color:#7c3aed !important; }
-      .btn-gold, .btn-navy { background:#7c3aed !important; color:#fff !important; }
-      .card { border-top:4px solid #7c3aed !important; }
-    </style>
+    <meta http-equiv="refresh" content="0; url=exam.html" />
+    <title>Exam login</title>
+    <script>location.replace("exam.html");</script>
   </head>
-  <body class="hall">
-    <header class="hall-bar">
-      <a class="logo" href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /></a>
-      <nav class="exam-nav" id="exam-site-nav">
-        <a href="index.html">Home</a>
-        <a href="auth.html">CBT Practice</a>
-        <a href="auth.html">Past questions</a>
-        <a class="is-on" href="external-exam.html">External exam</a>
-        <a href="office.html">Schools</a>
-        <a href="marketplace.html">Marketplace</a>
-        <a href="index.html#contact">Contact</a>
-        <a href="index.html#about">About</a>
-      </nav>
-      <button type="button" class="btn btn-ghost" id="btn-hall-out" hidden>Log out</button>
-    </header>
-    <section class="login-hero" id="step-login">
-      <div class="login-visual">
-        <img src="media/banner-3.png" alt="" />
-        <div class="login-copy">
-          <span>External exam</span>
-          <h2>Sit your school exam here.</h2>
-          <p>Log in with the email and password your school gave you. If a paper is published, you will see Take exam.</p>
-        </div>
-      </div>
-      <div class="login-panel">
-        <div class="card">
-          <div class="kicker">External exam</div>
-          <h1>Exam login</h1>
-          <p class="lead">Use the email and password your school gave you. You do not pick a class or type a student ID.</p>
-          <label>Email <input id="hall-email" type="email" autocomplete="username" /></label>
-          <label>Password <input id="hall-password" type="password" autocomplete="current-password" /></label>
-          <label class="hidden">Unused <input id="hall-id" /></label>
-          <label class="hidden">Unused <input id="hall-access" /></label>
-          <p class="err" id="hall-err"></p>
-          <button type="button" class="btn btn-gold full" id="btn-identify">Log in</button>
-        </div>
-      </div>
-    </section>
-    <main class="wrap">
-
-      <section class="card hidden" id="step-id">
-        <p class="hello" id="exam-hello">Welcome</p>
-        <div class="exam-list" id="exam-list"></div>
-        <p class="err" id="id-err"></p>
-      </section>
-
-      <section class="card hidden" id="step-ready">
-        <div class="kicker">Start exam</div>
-        <h1 id="ready-title">Preparing exam</h1>
-        <div class="id-grid">
-          <div class="id-box"><span>Student</span><strong id="ready-name">—</strong></div>
-          <div class="id-box"><span>Class</span><strong id="ready-class">—</strong></div>
-          <div class="id-box"><span>School</span><strong id="ready-school">—</strong></div>
-          <div class="id-box"><span>Student ID</span><strong id="ready-sid">—</strong></div>
-        </div>
-        <p class="lead" id="ready-sub">Downloading questions to this computer so the exam can continue if the internet drops.</p>
-        <div class="progress"><i id="ready-bar"></i></div>
-        <p id="ready-pct">0%</p>
-        <p class="err" id="ready-err"></p>
-        <button type="button" class="btn btn-gold full hidden" id="btn-start">Start exam</button>
-      </section>
-
-      <section class="hidden" id="step-exam">
-        <div class="exam-top">
-          <div>
-            <div class="kicker" id="exam-cand"></div>
-            <strong id="exam-title">Exam</strong>
-          </div>
-          <div class="timer" id="exam-timer">2:00:00</div>
-        </div>
-        <div class="card">
-          <div class="q-num" id="q-count">Question 1 of 1</div>
-          <p class="q-text" id="q-text"></p>
-          <button type="button" class="opt" data-opt="A" id="opt-a"></button>
-          <button type="button" class="opt" data-opt="B" id="opt-b"></button>
-          <button type="button" class="opt" data-opt="C" id="opt-c"></button>
-          <button type="button" class="opt" data-opt="D" id="opt-d"></button>
-          <div class="nav-q" id="q-nav"></div>
-          <div class="actions">
-            <button type="button" class="btn btn-ghost" id="btn-prev">Previous</button>
-            <button type="button" class="btn btn-navy" id="btn-next">Next</button>
-            <button type="button" class="btn btn-gold" id="btn-submit">Submit exam</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="card hidden" id="step-done">
-        <div class="kicker">Submitted</div>
-        <h1>Answers locked</h1>
-        <p class="lead" id="done-copy">Your answers are saved on this computer and sent to your school when the internet is available. Official marks are calculated by Scholaxia, not on this PC.</p>
-        <div class="id-grid" id="done-grid"></div>
-      </section>
-    </main>
-    <script src="js/api.js?v=20260819m"></script>
-    <script src="js/external-exam.js?v=20260819o"></script>
+  <body>
+    <p><a href="exam.html">Open exam login</a></p>
   </body>
 </html>

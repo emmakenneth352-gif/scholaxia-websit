@@ -44,7 +44,7 @@
     } catch (e) {}
     try {
       var path = String(window.location.pathname || "");
-      if (/external-exam(\.html)?$/i.test(path)) {
+      if (/external-exam(\.html)?$/i.test(path) || /exam(\.html)?$/i.test(path)) {
         return studentTok;
       }
       if (/schools(\.html)?$/i.test(path) || /office(\.html)?$/i.test(path)) {

@@ -945,7 +945,7 @@
   document.addEventListener("click", function (e) {
     var openSchool = e.target.closest("[data-open-school-exam]");
     if (openSchool) {
-      window.location.href = "external-exam.html?exam=" + encodeURIComponent(openSchool.getAttribute("data-open-school-exam"));
+      window.location.href = "exam.html?exam=" + encodeURIComponent(openSchool.getAttribute("data-open-school-exam"));
       return;
     }
     var btn = e.target.closest("[data-action]");
