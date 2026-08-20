@@ -355,4 +355,5 @@
     dashboardForRole: dashboardForRole,
     requireAuth: requireAuth,
   };
+  global.api = global.ScholaxiaAPI;
 })(window);

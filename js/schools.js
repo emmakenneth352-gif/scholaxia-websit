@@ -1,6 +1,5 @@
 (function () {
-  var api = window.ScholaxiaAPI || window.api;
-  if (!api) return;
+  function getApi() { return window.ScholaxiaAPI || window.api; }
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
@@ -12,7 +11,33 @@
   }
 
   function office(path, options) {
+    var api = getApi();
+    if (!api || typeof api.api !== "function") {
+      return Promise.reject(new Error("School office is still loading. Wait a second and try again."));
+    }
     return api.api("/api/v1/admin/school-office" + path, options || {});
+  }
+
+  function setMsg(id, text, isErr) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = text || "";
+    el.style.color = isErr ? "#b91c1c" : "";
+  }
+
+  function withBusy(btn, label, fn) {
+    return async function () {
+      if (!btn || btn.disabled) return;
+      var prev = btn.textContent;
+      btn.disabled = true;
+      if (label) btn.textContent = label;
+      try {
+        await fn();
+      } finally {
+        btn.disabled = false;
+        if (label) btn.textContent = prev;
+      }
+    };
   }
 
   function hasSession() {
@@ -76,7 +101,7 @@
         $("school-title").textContent = me.school_name;
       }
     } catch (e) {}
-    loadTeachers();
+    loadSchoolStudents();
   }
 
   async function loadCandidates() {
@@ -169,43 +194,71 @@
     window.location.href = "classroom.html";
   }
 
-  document.addEventListener("DOMContentLoaded", function () {
+  async function enterClassroom(classId, title, subject) {
+    var api = getApi();
+    var token = await api.api("/api/v1/live-classes/" + classId + "/token");
+    localStorage.setItem("live_session", JSON.stringify({
+      class_id: classId,
+      classId: classId,
+      room_id: token.room_id || token.channel_id,
+      channel_id: token.channel_id || token.room_id,
+      livekit_token: token.livekit_token || token.token,
+      livekit_url: token.livekit_url,
+      identity: token.identity,
+      title: title || "Live Class",
+      subject: subject || "",
+      teacher_name: localStorage.getItem("sia_name") || "School admin",
+      role: "teacher",
+    }));
+    window.location.href = "classroom.html";
+  }
+
+  function bindOffice() {
+    var api = getApi();
+    if (!api || typeof api.api !== "function") {
+      setTimeout(bindOffice, 50);
+      return;
+    }
+    if (window.__scholaxiaOfficeBound) return;
+    window.__scholaxiaOfficeBound = true;
+
     if (hasSession()) showApp();
     else showLogin();
 
-    $("sch-login").addEventListener("submit", async function (e) {
+    if ($("sch-login")) $("sch-login").addEventListener("submit", async function (e) {
       e.preventDefault();
       var err = $("login-error");
       var btn = $("btn-login");
-      err.textContent = "";
-      btn.disabled = true;
+      if (err) err.textContent = "";
+      if (btn) btn.disabled = true;
       try {
-        if (api.wakeServer) await api.wakeServer(8000);
-        var data = await api.api("/api/v1/auth/login", {
-          method: "POST",
-          noAuth: true,
-          timeout: 45000,
-          body: {
-            email: $("login-email").value.trim(),
-            password: $("login-password").value,
-          },
-        });
+        var email = $("login-email").value.trim();
+        var password = $("login-password").value;
+        var data = api.loginApi
+          ? await api.loginApi(email, password)
+          : await api.api("/api/v1/auth/login", {
+              method: "POST",
+              noAuth: true,
+              timeout: 60000,
+              retries: 3,
+              body: { email: email, password: password },
+            });
         if (data.role !== "school_admin") {
-          err.textContent = "This login is for school admins only. Students use Sign in on the home page. Main admin uses the main admin site.";
+          if (err) err.textContent = "This login is for school admins only. Students use Sign in on the home page. Main admin uses the main admin site.";
           return;
         }
-        api.saveSession(data, $("login-email").value.trim(), data.user && data.user.full_name);
+        api.saveSession(data, email, data.user && data.user.full_name);
         if (data.user && data.user.school_id) localStorage.setItem("sia_school_id", data.user.school_id);
         if (data.user && data.user.school_name) localStorage.setItem("sia_school_campus", data.user.school_name);
         showApp();
       } catch (ex) {
-        err.textContent = ex.message || "Login failed.";
+        if (err) err.textContent = ex.message || "Login failed.";
       } finally {
-        btn.disabled = false;
+        if (btn) btn.disabled = false;
       }
     });
 
-    $("sch-logout").addEventListener("click", function () {
+    if ($("sch-logout")) $("sch-logout").addEventListener("click", function () {
       localStorage.removeItem("sia_school_token");
       localStorage.removeItem("sia_school_campus");
       localStorage.removeItem("sia_school_id");
@@ -224,13 +277,12 @@
         p.classList.toggle("hidden", p.id !== "tab-" + name);
       });
       if (name === "students") loadSchoolStudents();
-      if (name === "external") loadExternalExams();
-      if (name === "results") {
+      if (name === "upload" || name === "papers" || name === "schedule" || name === "retake" || name === "settings" || name === "results") {
         loadExternalExams();
-        loadEeResults();
       }
+      if (name === "results") loadEeResults();
     }
-    document.getElementById("sch-tabs").addEventListener("click", function (e) {
+    if ($("sch-tabs")) $("sch-tabs").addEventListener("click", function (e) {
       var btn = e.target.closest("button[data-tab]");
       if (!btn) return;
       switchTab(btn.getAttribute("data-tab"));
@@ -252,11 +304,11 @@
             subjects: ($("so-subjects").value || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean),
           },
         });
-        msg.textContent = "Registered. ID: " + (row.candidate_id || "") + " · Rec: " + row.rec_number + " · Access: " + row.access_code;
+        if (msg) msg.textContent = "Registered. ID: " + (row.candidate_id || "") + " · Rec: " + row.rec_number + " · Access: " + row.access_code;
         printSlip(row);
         loadCandidates();
       } catch (e) {
-        msg.textContent = e.message;
+        if (msg) msg.textContent = e.message;
       }
     });
 
@@ -284,11 +336,11 @@
             questions: questions,
           },
         });
-        msg.textContent = "Exam saved: " + created.title + " (" + created.total_questions + " questions).";
+        if (msg) msg.textContent = "Exam saved: " + created.title + " (" + created.total_questions + " questions).";
         $("ex-questions").value = "";
         loadExamCounts();
       } catch (e) {
-        msg.textContent = e.message;
+        if (msg) msg.textContent = e.message;
       }
     });
 
@@ -326,8 +378,8 @@
       var school = localStorage.getItem("sia_school_campus") || "School";
       openPrintWindow("Reprint results", "<h1>" + esc(school) + "</h1><h2>" + esc(examName) + "</h2>" + html);
     });
-    if ($("btn-retake")) $("btn-retake").addEventListener("click", async function () {
-      var msg = $("so-retake-msg");
+    if ($("btn-retake")) $("btn-retake").addEventListener("click", withBusy($("btn-retake"), "Saving…", async function () {
+      setMsg("so-retake-msg", "");
       try {
         var data = await office("/retake", {
           method: "POST",
@@ -336,13 +388,13 @@
             exam_id: $("so-retake-exam").value.trim(),
           },
         });
-        msg.textContent = data.message || "Retake granted.";
+        setMsg("so-retake-msg", data.message || "Retake granted.");
       } catch (e) {
-        msg.textContent = e.message;
+        setMsg("so-retake-msg", e.message, true);
       }
-    });
+    }));
 
-    $("btn-teacher").addEventListener("click", async function () {
+    if ($("btn-teacher")) $("btn-teacher").addEventListener("click", async function () {
       var msg = $("so-t-msg");
       try {
         await office("/teachers", {
@@ -355,11 +407,11 @@
             academic_classes: ($("so-t-classes").value || "").split(",").map(function (s) { return s.trim(); }).filter(Boolean),
           },
         });
-        msg.textContent = "Teacher created. They can sign in on the teacher portal.";
+        if (msg) msg.textContent = "Teacher created. They can sign in on the teacher portal.";
         $("so-t-pass").value = "";
         loadTeachers();
       } catch (e) {
-        msg.textContent = e.message;
+        if (msg) msg.textContent = e.message;
       }
     });
 
@@ -376,31 +428,31 @@
             academic_class: $("so-live-class").value,
           },
         });
-        msg.textContent = startNow ? "Class is live." : "Class created.";
+        if (msg) msg.textContent = startNow ? "Class is live." : "Class created.";
         if (startNow && created && created.id && confirm("Open classroom now?")) {
           await enterClassroom(created.id, $("so-live-title").value.trim(), $("so-live-subject").value.trim());
         }
       } catch (e) {
-        msg.textContent = e.message;
+        if (msg) msg.textContent = e.message;
       }
     }
-    $("btn-live-sched").addEventListener("click", function () { hostLive(false); });
-    $("btn-live-now").addEventListener("click", function () { hostLive(true); });
+    if ($("btn-live-sched")) $("btn-live-sched").addEventListener("click", function () { hostLive(false); });
+    if ($("btn-live-now")) $("btn-live-now").addEventListener("click", function () { hostLive(true); });
 
     var currentEeId = "";
     var lastEeResults = [];
 
     async function loadExternalExams() {
       var el = $("ee-list");
-      var sel = $("ee-result-exam");
       try {
         var data = await office("/external-exams");
         var rows = (data && data.exams) || [];
-        if (sel) {
-          sel.innerHTML = rows.map(function (r) {
-            return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
-          }).join("");
-        }
+        var examOpts = rows.map(function (r) {
+          return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
+        }).join("");
+        ["ee-result-exam", "so-retake-exam", "ee-sched-exam", "ee-set-exam"].forEach(function (id) {
+          if ($(id)) $(id).innerHTML = examOpts || '<option value="">No exams yet</option>';
+        });
         if (!el) return;
         if (!rows.length) { el.innerHTML = '<div class="empty">No external exams yet.</div>'; return; }
         el.innerHTML = "<table><thead><tr><th>Title</th><th>Class</th><th>Marks</th><th>Status</th><th></th></tr></thead><tbody>" +
@@ -415,6 +467,7 @@
     }
 
     function renderReview(questions) {
+      if (!$("ee-review") || !$("ee-questions")) return;
       $("ee-review").classList.remove("hidden");
       $("ee-questions").innerHTML = (questions || []).map(function (q) {
         return '<div class="q-card" data-qid="' + esc(q.id) + '"><strong>Q' + esc(q.number) + '</strong>' +
@@ -453,10 +506,10 @@
       });
     }
 
-    $("btn-ee-create").addEventListener("click", async function () {
-      var msg = $("ee-msg");
-      var file = $("ee-file").files[0];
-      if (!file) { msg.textContent = "Choose a PDF or DOCX paper."; return; }
+    if ($("btn-ee-create")) $("btn-ee-create").addEventListener("click", withBusy($("btn-ee-create"), "Working…", async function () {
+      setMsg("ee-msg", "");
+      var file = $("ee-file") && $("ee-file").files[0];
+      if (!file) { setMsg("ee-msg", "Choose a PDF or DOCX paper.", true); return; }
       try {
         var created = await office("/external-exams", {
           method: "POST",
@@ -469,51 +522,123 @@
             duration_minutes: Number($("ee-duration").value) || 120,
             total_marks: Number($("ee-marks").value) || 100,
             pass_mark: Number($("ee-pass").value) || 50,
-            scheduled_start: $("ee-start").value || null,
-            scheduled_end: $("ee-end").value || null,
+            scheduled_start: null,
+            scheduled_end: null,
           },
         });
         var fd = new FormData();
         fd.append("file", file);
         var uploaded = await api.apiUpload("/api/v1/admin/school-office/external-exams/" + created.id + "/upload", fd);
-        msg.textContent = "Extracted " + ((uploaded.questions || []).length) + " questions. Review them before publish.";
-        if (uploaded.warnings && uploaded.warnings.length) msg.textContent += " " + uploaded.warnings.join(" ");
+        var note = "Extracted " + ((uploaded.questions || []).length) + " questions. Review them before publish.";
+        if (uploaded.warnings && uploaded.warnings.length) note += " " + uploaded.warnings.join(" ");
+        setMsg("ee-msg", note);
         currentEeId = created.id;
         renderReview(uploaded.questions || []);
         loadExternalExams();
       } catch (e) {
-        msg.textContent = e.message;
+        setMsg("ee-msg", e.message, true);
       }
-    });
+    }));
 
-    $("ee-list").addEventListener("click", function (e) {
+    if ($("ee-list")) $("ee-list").addEventListener("click", function (e) {
       var b = e.target.closest("[data-ee-review]");
       if (!b) return;
       openReview(b.getAttribute("data-ee-review")).catch(function (err) { alert(err.message); });
     });
 
-    $("btn-ee-save").addEventListener("click", async function () {
+    if ($("btn-ee-save")) $("btn-ee-save").addEventListener("click", async function () {
       if (!currentEeId) return;
       try {
         await office("/external-exams/" + currentEeId + "/review", { method: "PUT", body: { questions: collectReview() } });
-        $("ee-msg").textContent = "Review saved. Publish when every answer is correct.";
-      } catch (e) { $("ee-msg").textContent = e.message; }
+        setMsg("ee-msg", "Review saved. Publish when every answer is correct.");
+      } catch (e) { setMsg("ee-msg", e.message, true); }
     });
 
-    $("btn-ee-publish").addEventListener("click", async function () {
+    if ($("btn-ee-publish")) $("btn-ee-publish").addEventListener("click", async function () {
       if (!currentEeId) return;
       try {
         await office("/external-exams/" + currentEeId + "/review", { method: "PUT", body: { questions: collectReview() } });
         await office("/external-exams/" + currentEeId + "/publish", { method: "POST", body: {} });
-        $("ee-msg").textContent = "Published. Students in the selected class(es) will see it after they sign in.";
+        setMsg("ee-msg", "Published. Students in the selected class(es) will see it after they sign in.");
         loadExternalExams();
-      } catch (e) { $("ee-msg").textContent = e.message; }
+      } catch (e) { setMsg("ee-msg", e.message, true); }
     });
+
+    function localToIso(val) {
+      if (!val) return null;
+      var d = new Date(val);
+      return isNaN(d.getTime()) ? val : d.toISOString();
+    }
+
+    if ($("btn-ee-schedule")) $("btn-ee-schedule").addEventListener("click", withBusy($("btn-ee-schedule"), "Saving…", async function () {
+      setMsg("ee-sched-msg", "");
+      var examId = $("ee-sched-exam") && $("ee-sched-exam").value;
+      if (!examId) { setMsg("ee-sched-msg", "Upload an exam first.", true); return; }
+      try {
+        await office("/external-exams/" + examId, {
+          method: "PATCH",
+          body: {
+            scheduled_start: localToIso($("ee-start").value),
+            scheduled_end: localToIso($("ee-end").value),
+          },
+        });
+        setMsg("ee-sched-msg", "Schedule saved.");
+        loadExternalExams();
+      } catch (e) {
+        setMsg("ee-sched-msg", e.message, true);
+      }
+    }));
+
+    if ($("btn-ee-settings")) $("btn-ee-settings").addEventListener("click", withBusy($("btn-ee-settings"), "Saving…", async function () {
+      setMsg("ee-set-msg", "");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) { setMsg("ee-set-msg", "Upload an exam first.", true); return; }
+      try {
+        await office("/external-exams/" + examId, {
+          method: "PATCH",
+          body: {
+            duration_minutes: Number($("ee-set-duration").value) || 120,
+            pass_mark: Number($("ee-set-pass").value) || 50,
+            extra_classes: Array.prototype.map.call(document.querySelectorAll(".ee-set-chip:checked"), function (el) { return el.value; }),
+            instructions: ($("ee-set-notes") && $("ee-set-notes").value.trim()) || "",
+          },
+        });
+        setMsg("ee-set-msg", "Settings saved.");
+        loadExternalExams();
+      } catch (e) {
+        setMsg("ee-set-msg", e.message, true);
+      }
+    }));
+    if ($("btn-ee-set-publish")) $("btn-ee-set-publish").addEventListener("click", withBusy($("btn-ee-set-publish"), "Publishing…", async function () {
+      setMsg("ee-set-msg", "");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) return;
+      try {
+        await office("/external-exams/" + examId + "/publish", { method: "POST", body: {} });
+        setMsg("ee-set-msg", "Exam published.");
+        loadExternalExams();
+      } catch (e) {
+        setMsg("ee-set-msg", e.message, true);
+      }
+    }));
+    if ($("btn-ee-set-unpublish")) $("btn-ee-set-unpublish").addEventListener("click", withBusy($("btn-ee-set-unpublish"), "Working…", async function () {
+      setMsg("ee-set-msg", "");
+      var examId = $("ee-set-exam") && $("ee-set-exam").value;
+      if (!examId) return;
+      try {
+        await office("/external-exams/" + examId + "/unpublish", { method: "POST", body: {} });
+        setMsg("ee-set-msg", "Exam unpublished.");
+        loadExternalExams();
+      } catch (e) {
+        setMsg("ee-set-msg", e.message, true);
+      }
+    }));
 
     async function loadEeResults() {
       var examId = $("ee-result-exam") && $("ee-result-exam").value;
       var el = $("ee-results");
-      if (!examId || !el) return;
+      if (!el) return;
+      if (!examId) { el.innerHTML = '<div class="empty">Upload an exam first, then load results.</div>'; return; }
       var qs = [];
       var cls = ($("so-res-class") && $("so-res-class").value.trim()) || "";
       var q = ($("ee-result-q") && $("ee-result-q").value.trim()) || "";
@@ -535,7 +660,7 @@
         el.innerHTML = '<div class="empty">' + esc(e.message) + "</div>";
       }
     }
-    $("btn-ee-results").addEventListener("click", loadEeResults);
+    if ($("btn-ee-results")) $("btn-ee-results").addEventListener("click", loadEeResults);
     if ($("ee-results")) $("ee-results").addEventListener("click", function (e) {
       var b = e.target.closest("[data-reprint]");
       if (!b) return;
@@ -547,6 +672,7 @@
       var el = $("st-list");
       if (!el) return;
       var q = ($("st-search") && $("st-search").value) || "";
+      el.innerHTML = '<div class="empty">Loading…</div>';
       try {
         var data = await office("/students" + (q ? "?q=" + encodeURIComponent(q) : ""));
         var rows = (data && data.students) || [];
@@ -562,40 +688,56 @@
       }
     }
 
-    if ($("btn-st-add")) $("btn-st-add").addEventListener("click", async function () {
-      var msg = $("st-msg");
+    if ($("btn-st-add")) $("btn-st-add").addEventListener("click", withBusy($("btn-st-add"), "Adding…", async function () {
+      setMsg("st-add-msg", "");
+      setMsg("st-msg", "");
+      var name = ($("st-name") && $("st-name").value.trim()) || "";
+      var email = ($("st-email") && $("st-email").value.trim()) || "";
+      if (!name || !email) {
+        setMsg("st-add-msg", "Enter the student full name and email.", true);
+        return;
+      }
       try {
         var row = await office("/students", {
           method: "POST",
           body: {
-            full_name: $("st-name").value.trim(),
-            email: $("st-email").value.trim(),
+            full_name: name,
+            email: email,
             class_name: $("st-class").value,
-            student_id: $("st-sid").value.trim() || null,
-            password: $("st-pass").value || null,
+            student_id: ($("st-sid") && $("st-sid").value.trim()) || null,
+            password: ($("st-pass") && $("st-pass").value) || null,
           },
         });
-        msg.textContent = "Created. Give them: " + row.email + " / " + row.password + "  (Student ID " + (row.student_id || "") + ")";
-        $("st-pass").value = "";
+        var ok = "Created. Give them: " + row.email + " / " + row.password + "  (Student ID " + (row.student_id || "") + ")";
+        setMsg("st-add-msg", ok);
+        setMsg("st-msg", ok);
+        if ($("st-pass")) $("st-pass").value = "";
+        if ($("st-name")) $("st-name").value = "";
+        if ($("st-email")) $("st-email").value = "";
+        if ($("st-sid")) $("st-sid").value = "";
         loadSchoolStudents();
-      } catch (e) { msg.textContent = e.message; }
-    });
+      } catch (e) {
+        setMsg("st-add-msg", e.message, true);
+        setMsg("st-msg", e.message, true);
+      }
+    }));
     if ($("st-search")) $("st-search").addEventListener("input", loadSchoolStudents);
-    if ($("btn-st-import")) $("btn-st-import").addEventListener("click", async function () {
+    if ($("btn-st-import")) $("btn-st-import").addEventListener("click", withBusy($("btn-st-import"), "Importing…", async function () {
       var file = $("st-csv") && $("st-csv").files[0];
-      var msg = $("st-msg");
-      if (!file) { msg.textContent = "Choose a CSV file first."; return; }
+      setMsg("st-msg", "");
+      if (!file) { setMsg("st-msg", "Choose a CSV file first.", true); return; }
       var fd = new FormData();
       fd.append("file", file);
       try {
         var data = await api.apiUpload("/api/v1/admin/school-office/students/import", fd);
-        msg.textContent = "Imported " + (data.created_count || 0) + " students." + ((data.errors || []).length ? " Issues: " + data.errors.join(" | ") : "");
+        var note = "Imported " + (data.created_count || 0) + " students." + ((data.errors || []).length ? " Issues: " + data.errors.join(" | ") : "");
         if (data.created && data.created.length) {
-          msg.textContent += " Logins: " + data.created.map(function (s) { return s.email + "/" + s.password; }).join("; ");
+          note += " Logins: " + data.created.map(function (s) { return s.email + "/" + s.password; }).join("; ");
         }
+        setMsg("st-msg", note);
         loadSchoolStudents();
-      } catch (e) { msg.textContent = e.message; }
-    });
+      } catch (e) { setMsg("st-msg", e.message, true); }
+    }));
     if ($("st-list")) $("st-list").addEventListener("click", async function (e) {
       var b = e.target.closest("[data-reset]");
       if (!b) return;
@@ -603,9 +745,19 @@
       if (!pw) return;
       try {
         var row = await office("/students/" + b.getAttribute("data-reset"), { method: "PATCH", body: { password: pw } });
-        $("st-msg").textContent = "Password reset for " + row.email;
-      } catch (err) { $("st-msg").textContent = err.message; }
+        setMsg("st-add-msg", "Password reset for " + row.email);
+        setMsg("st-msg", "Password reset for " + row.email);
+      } catch (err) {
+        setMsg("st-add-msg", err.message, true);
+        setMsg("st-msg", err.message, true);
+      }
     });
     loadSchoolStudents();
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindOffice);
+  } else {
+    bindOffice();
+  }
 })();
