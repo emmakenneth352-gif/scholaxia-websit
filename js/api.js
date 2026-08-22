@@ -332,6 +332,14 @@
         lastErr = xhrErr || lastErr;
       }
     }
+    // Same for GET when fetch fails (CBT home often hits cold-start / CORS edge cases)
+    if (lastErr && method === "GET") {
+      try {
+        return await xhrJson(path, headers, Object.assign({}, options, { method: "GET", timeout: timeoutMs }));
+      } catch (xhrErr) {
+        lastErr = xhrErr || lastErr;
+      }
+    }
     if (lastErr) {
       var friendly = friendlyFetchError(lastErr);
       if (friendly && friendly !== lastErr.message) {
