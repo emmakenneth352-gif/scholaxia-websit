@@ -153,23 +153,29 @@
                 <div>
                   <span class="hub-kicker">CBT</span>
                   <h2>CBT Practice</h2>
-                  <p>Start a practice paper. If you need access, you can pay with Paystack or unlock with a CBT coupon.</p>
+                  <p>Choose your exam type. Questions are drawn from the question bank using admin CBT settings — not every uploaded question.</p>
                 </div>
               </header>
 
-              <div class="panel" style="margin-top:0.25rem">
+              <div class="panel" style="margin-top:0.25rem" id="cbtHomePanel">
                 <div class="panel-head">
                   <div>
-                    <h2>Practice exams</h2>
-                    <p>Tap <strong>Start exam</strong> anytime. Download is optional — only if you want to save the paper offline.</p>
+                    <h2>Choose exam</h2>
+                    <p>Select <strong>JAMB</strong>, <strong>WAEC</strong>, or <strong>NECO</strong> to continue.</p>
                   </div>
                 </div>
-                <div class="tabs" id="cbtBoardTabs">
-                  <button type="button" class="tab is-active" data-board="practice_exams">General Practice</button>
-                  <button type="button" class="tab" data-board="jamb_exams">JAMB</button>
-                  <button type="button" class="tab" data-board="ssce_exams">WAEC / NECO</button>
+                <div class="card-grid" id="cbtExamTypeList"><div class="loading-state">Loading…</div></div>
+              </div>
+
+              <div class="panel" id="cbtBoardPanel" hidden>
+                <div class="panel-head">
+                  <div>
+                    <button type="button" class="btn btn-mini" id="cbtBackToTypes">← Exam types</button>
+                    <h2 id="cbtBoardTitle" style="margin-top:0.75rem">Exam</h2>
+                    <p id="cbtBoardHint"></p>
+                  </div>
                 </div>
-                <div class="card-grid" id="cbtExamList"><div class="loading-state">Loading exams…</div></div>
+                <div id="cbtBoardBody"></div>
               </div>
             </div>
           </section>
