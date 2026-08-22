@@ -8,22 +8,26 @@
     var timer = setTimeout(function () {
       try { ctrl.abort(); } catch (e) {}
     }, ms || 25000);
-    ctrl.signal.addEventListener("abort", function () { clearTimeout(timer); });
-    return ctrl.signal;
+    return { signal: ctrl.signal, clear: function () { clearTimeout(timer); } };
   }
 
   async function readHealth(ms) {
-    var res = await fetch(API_BASE + "/health", {
-      method: "GET",
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store",
-      signal: fetchTimeout(ms || 45000),
-    });
+    var t = fetchTimeout(ms || 45000);
     try {
-      return await res.json();
-    } catch (e) {
-      return { status: res.ok ? "ok" : "error" };
+      var res = await fetch(API_BASE + "/health", {
+        method: "GET",
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal: t.signal,
+      });
+      try {
+        return await res.json();
+      } catch (e) {
+        return { status: res.ok ? "ok" : "error" };
+      }
+    } finally {
+      t.clear();
     }
   }
 
@@ -231,13 +235,21 @@
   }
 
   var wakePromise = null;
+  var lastWakeOkAt = 0;
 
   function ensureAwake() {
+    if (Date.now() - lastWakeOkAt < 20000) {
+      return Promise.resolve({ status: "ok", cached: true });
+    }
     if (!wakePromise) {
-      wakePromise = wakeServer(60000).finally(function () {
-        // Allow a fresh wake later if the next call still fails
-        setTimeout(function () { wakePromise = null; }, 15000);
-      });
+      wakePromise = wakeServer(25000)
+        .then(function (res) {
+          if (res) lastWakeOkAt = Date.now();
+          return res;
+        })
+        .finally(function () {
+          setTimeout(function () { wakePromise = null; }, 8000);
+        });
     }
     return wakePromise;
   }
@@ -254,21 +266,42 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var tries = options.retries == null ? 3 : options.retries;
+    var tries = options.retries == null ? (method === "POST" ? 2 : 3) : options.retries;
     var lastErr = null;
-    var timeoutMs = options.timeout || (method === "GET" ? 60000 : 45000);
+    var timeoutMs = options.timeout || (method === "GET" ? 60000 : 60000);
 
     try {
       await ensureAwake();
     } catch (w) { /* continue anyway */ }
 
+    // Coupon redeem + Paystack init: use XHR first (fetch often reports Failed to fetch on some browsers)
+    var preferXhr =
+      !!options.preferXhr ||
+      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$/i.test(path);
+    if (preferXhr && method === "POST") {
+      try {
+        return await xhrJson(path, headers, Object.assign({}, options, { timeout: timeoutMs }));
+      } catch (xhrFirstErr) {
+        var xm = (xhrFirstErr && xhrFirstErr.message) || "";
+        var networkish =
+          !xhrFirstErr.status ||
+          /failed to fetch|networkerror|load failed|aborted/i.test(xm) ||
+          xhrFirstErr.name === "AbortError";
+        if (!networkish) throw xhrFirstErr;
+        lastErr = xhrFirstErr;
+      }
+    }
+
     for (var i = 0; i <= tries; i++) {
+      var t = null;
       try {
         if (i > 0) {
           wakePromise = null;
+          lastWakeOkAt = 0;
           try { await ensureAwake(); } catch (w2) {}
-          await new Promise(function (resolve) { setTimeout(resolve, 1000 * i); });
+          await new Promise(function (resolve) { setTimeout(resolve, 700 * i); });
         }
+        t = fetchTimeout(timeoutMs);
         var res = await fetch(API_BASE + path, {
           method: method,
           mode: "cors",
@@ -276,8 +309,9 @@
           body: hasBody ? JSON.stringify(options.body) : undefined,
           credentials: "omit",
           cache: "no-store",
-          signal: fetchTimeout(timeoutMs),
+          signal: t.signal,
         });
+        lastWakeOkAt = Date.now();
         return await parseResponse(res);
       } catch (err) {
         lastErr = err;
@@ -286,13 +320,16 @@
           /failed to fetch|networkerror|load failed|aborted/i.test(msg) ||
           err.name === "AbortError";
         if (!retryable || i === tries) break;
+      } finally {
+        if (t) t.clear();
       }
     }
-    if (lastErr && options.noAuth && method === "POST") {
+    // Prefer XHR for mutating calls — more reliable than fetch on some mobile browsers
+    if (lastErr && (method === "POST" || method === "PUT" || method === "PATCH")) {
       try {
-        return await xhrJson(path, headers, options);
+        return await xhrJson(path, headers, Object.assign({}, options, { timeout: timeoutMs }));
       } catch (xhrErr) {
-        throw lastErr;
+        lastErr = xhrErr || lastErr;
       }
     }
     if (lastErr) {
@@ -312,7 +349,7 @@
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open(options.method || "POST", API_BASE + path, true);
-      xhr.timeout = options.timeout || 20000;
+      xhr.timeout = options.timeout || 60000;
       Object.keys(headers || {}).forEach(function (k) {
         try { xhr.setRequestHeader(k, headers[k]); } catch (e) {}
       });
@@ -329,6 +366,7 @@
         if (typeof msg === "object") msg = JSON.stringify(msg);
         var err = new Error(msg);
         err.status = xhr.status;
+        err.data = data;
         reject(err);
       };
       xhr.onerror = function () { reject(new Error("Failed to fetch")); };

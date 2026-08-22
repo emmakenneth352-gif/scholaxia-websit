@@ -2416,11 +2416,19 @@
       $("cbtUnlockChoice").hidden = true;
       $("cbtUnlockCoupon").hidden = false;
       $("cbtUnlockPay").hidden = true;
+      if ($("cbtUnlockStatus")) {
+        $("cbtUnlockStatus").textContent = "";
+        $("cbtUnlockStatus").className = "form-status";
+      }
     }
     if (e.target.id === "cbtUnlockPickPay") {
       $("cbtUnlockChoice").hidden = true;
       $("cbtUnlockCoupon").hidden = true;
       $("cbtUnlockPay").hidden = false;
+      if ($("cbtUnlockStatus")) {
+        $("cbtUnlockStatus").textContent = "";
+        $("cbtUnlockStatus").className = "form-status";
+      }
       loadCbtUnlockPackages();
     }
     if (e.target.id === "cbtUnlockRedeem") {
@@ -2441,7 +2449,12 @@
         statusEl.className = "form-status";
         statusEl.textContent = "Checking coupon…";
       }
-      api.api("/api/v1/cbt/coupons/redeem", { method: "POST", body: { code: code } })
+      api.api("/api/v1/cbt/coupons/redeem", {
+        method: "POST",
+        body: { code: code },
+        timeout: 90000,
+        retries: 2,
+      })
         .then(function (res) {
           var next = cbtUnlockAfter;
           closeCbtUnlockModal();
