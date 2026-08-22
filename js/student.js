@@ -1142,7 +1142,7 @@
           }
           if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
             unlockStart();
-            openCbtUnlockModal(ensurePackThenLaunch);
+            openCbtUnlockModal(function () { ensurePackThenLaunch(false); });
             return;
           }
           unlockStart();
@@ -1151,7 +1151,7 @@
         });
     }
 
-    function ensurePackThenLaunch() {
+    function ensurePackThenLaunch(retried) {
       var pack = getPack(examId, isExternal);
       if (pack) {
         launchWithPack(pack);
@@ -1178,9 +1178,28 @@
             btn.disabled = false;
             btn.textContent = "Start exam";
           }
+          // After coupon redeem, first download can race the DB commit — retry once
+          var justUnlocked = 0;
+          try { justUnlocked = Number(sessionStorage.getItem("sia_cbt_just_unlocked") || 0); } catch (e) {}
+          if (!retried && isCbtPackageError(err) && justUnlocked && Date.now() - justUnlocked < 120000) {
+            setTimeout(function () { ensurePackThenLaunch(true); }, 700);
+            return;
+          }
           unlockStart();
           if (isCbtPackageError(err)) {
-            openCbtUnlockModal(ensurePackThenLaunch);
+            var boardHint = "";
+            try {
+              var d = err && err.data && err.data.detail;
+              if (d && d.board) boardHint = " This exam needs " + d.board + " access.";
+            } catch (e2) {}
+            if (justUnlocked && Date.now() - justUnlocked < 120000) {
+              alert(
+                "Coupon saved, but this exam board is not in your package." +
+                  boardHint +
+                  " Open an exam that matches your coupon, or pay for the right package."
+              );
+            }
+            openCbtUnlockModal(function () { ensurePackThenLaunch(false); });
             return;
           }
           alert("Could not open this exam: " + errMsg(err));
@@ -1188,7 +1207,18 @@
     }
 
     if (isSchool || isExternal) {
-      ensurePackThenLaunch();
+      ensurePackThenLaunch(false);
+      return;
+    }
+    // If coupon was just redeemed on this device, skip the unlock popup
+    var justUnlockedAt = 0;
+    try { justUnlockedAt = Number(sessionStorage.getItem("sia_cbt_just_unlocked") || 0); } catch (e3) {}
+    if (justUnlockedAt && Date.now() - justUnlockedAt < 120000) {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Start exam";
+      }
+      ensurePackThenLaunch(false);
       return;
     }
     if (btn) {
@@ -1203,10 +1233,11 @@
           btn.textContent = "Start exam";
         }
         if (access && access.has_access) {
-          ensurePackThenLaunch();
+          try { sessionStorage.setItem("sia_cbt_just_unlocked", String(Date.now())); } catch (e4) {}
+          ensurePackThenLaunch(false);
         } else {
           unlockStart();
-          openCbtUnlockModal(ensurePackThenLaunch);
+          openCbtUnlockModal(function () { ensurePackThenLaunch(false); });
         }
       })
       .catch(function () {
@@ -1215,7 +1246,7 @@
           btn.textContent = "Start exam";
         }
         unlockStart();
-        openCbtUnlockModal(ensurePackThenLaunch);
+        openCbtUnlockModal(function () { ensurePackThenLaunch(false); });
       });
   }
 
@@ -2504,15 +2535,25 @@
       })
         .then(function (res) {
           var next = cbtUnlockAfter;
+          var boards = (res && res.boards) || [];
+          try {
+            sessionStorage.setItem("sia_cbt_just_unlocked", String(Date.now()));
+            if (res && res.package_id) {
+              sessionStorage.setItem("sia_cbt_package_id", String(res.package_id));
+            }
+            if (boards.length) {
+              sessionStorage.setItem("sia_cbt_boards", JSON.stringify(boards));
+            }
+          } catch (s) {}
           closeCbtUnlockModal(true);
           examsCacheByKind = {};
           examsForMeCache = null;
           if (typeof loadCbtPackages === "function") {
             loadCbtPackages({ gridId: "cbtPackagesGrid", bannerId: "cbtAccessBanner" });
           }
-          // Continue into the exam immediately — do not ask for coupon again
+          // Wait briefly so DB commit is visible, then start the exam
           if (typeof next === "function") {
-            setTimeout(function () { next(); }, 50);
+            setTimeout(function () { next(); }, 400);
           } else if (typeof loadCbt === "function") {
             loadCbt();
           }
