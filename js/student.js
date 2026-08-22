@@ -319,12 +319,32 @@
     var retryBtn = e.target.closest("[data-retry]");
     if (retryBtn) {
       var page = retryBtn.dataset.retry;
-      if (PAGE_LOADERS[page]) PAGE_LOADERS[page]();
+      loadedPages[page] = false;
+      examsCacheByKind = {};
+      examsForMeCache = null;
+      var go = function () {
+        if (PAGE_LOADERS[page]) PAGE_LOADERS[page]();
+      };
+      if (api.wakeServer) {
+        retryBtn.disabled = true;
+        retryBtn.textContent = "Waking server…";
+        api
+          .wakeServer(60000)
+          .catch(function () { return null; })
+          .then(go)
+          .finally(function () {
+            retryBtn.disabled = false;
+            retryBtn.textContent = "Try again";
+          });
+      } else {
+        go();
+      }
       return;
     }
     var refreshBtn = e.target.closest("[data-refresh]");
     if (refreshBtn) {
       var p2 = refreshBtn.dataset.refresh;
+      loadedPages[p2] = false;
       if (PAGE_LOADERS[p2]) PAGE_LOADERS[p2]();
     }
   });
@@ -812,18 +832,68 @@
     examsCacheByKind.cbt_practice = examsForMeCache;
   }
 
+  function bucketPublicExams(rows) {
+    var jamb = [];
+    var ssce = [];
+    var practice = [];
+    var school = [];
+    (rows || []).forEach(function (e) {
+      if (e.is_school_exam) {
+        school.push(e);
+        return;
+      }
+      var t = String(e.exam_type || "").toUpperCase();
+      if (t.indexOf("JAMB") >= 0 || t.indexOf("UTME") >= 0) jamb.push(e);
+      else if (
+        t.indexOf("WAEC") >= 0 ||
+        t.indexOf("NECO") >= 0 ||
+        t.indexOf("JUNIOR") >= 0 ||
+        t.indexOf("COMMON") >= 0
+      ) {
+        ssce.push(e);
+      } else {
+        practice.push(e);
+      }
+    });
+    return {
+      practice_exams: practice.concat(jamb, ssce),
+      jamb_exams: jamb,
+      ssce_exams: ssce,
+      school_exams: school,
+      boards: [].concat(jamb.length ? ["JAMB"] : [], ssce.length ? ["WAEC_NECO"] : []),
+      _fallback: true,
+    };
+  }
+
   function fetchExamsForMe(paperKind) {
     paperKind = paperKind || "cbt_practice";
     if (examsCacheByKind[paperKind]) return Promise.resolve(examsCacheByKind[paperKind]);
     return api
       .api("/api/v1/cbt/exams/for-me?paper_kind=" + encodeURIComponent(paperKind), {
-        timeout: 45000,
-        retries: 2,
+        timeout: 60000,
+        retries: 3,
       })
       .then(function (data) {
         examsCacheByKind[paperKind] = data || {};
         if (paperKind === "cbt_practice") examsForMeCache = examsCacheByKind[paperKind];
         return examsCacheByKind[paperKind];
+      })
+      .catch(function (err) {
+        // Fallback: public published list so Practice / Past Questions still show something
+        return api
+          .api(
+            "/api/v1/cbt/exams?paper_kind=" + encodeURIComponent(paperKind),
+            { timeout: 60000, retries: 2, noAuth: false }
+          )
+          .then(function (rows) {
+            var data = bucketPublicExams(Array.isArray(rows) ? rows : []);
+            examsCacheByKind[paperKind] = data;
+            if (paperKind === "cbt_practice") examsForMeCache = data;
+            return data;
+          })
+          .catch(function () {
+            throw err;
+          });
       });
   }
 
@@ -1754,7 +1824,7 @@
     if (upWrap) upWrap.innerHTML = loadingHtml("Loading upcoming classes…");
 
     api
-      .api("/api/v1/live-classes/?status=live")
+      .api("/api/v1/live-classes/?status=live", { timeout: 60000, retries: 3 })
       .then(function (data) {
         var items = firstArray(data, ["classes", "items", "results", "live_classes"]);
         if (!liveWrap) return;
@@ -1767,7 +1837,7 @@
       });
 
     api
-      .api("/api/v1/live-classes/?status=upcoming")
+      .api("/api/v1/live-classes/?status=upcoming", { timeout: 60000, retries: 3 })
       .then(function (data) {
         var items = firstArray(data, ["classes", "items", "results", "live_classes"]);
         if (!upWrap) return;
@@ -2017,7 +2087,13 @@
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading plans…");
     api
-      .api("/api/v1/payments/live-class/plans", { timeout: 45000, retries: 2 })
+      .api("/api/v1/payments/live-class/plans", { timeout: 60000, retries: 3 })
+      .catch(function () {
+        return api.api("/api/v1/payments/paystack/live-class/plans", {
+          timeout: 60000,
+          retries: 2,
+        });
+      })
       .then(function (data) {
         data = data || {};
         var plans = firstArray(data, ["plans", "items", "results"]);
@@ -3197,5 +3273,15 @@
   pollLiveInvitesForRing();
   setInterval(pollLiveInvitesForRing, 12000);
 
-  loadHome();
+  // Wake Render before first dashboard load so Exam / Live / CBT screens do not flash network errors
+  if (api.wakeServer) {
+    api
+      .wakeServer(60000)
+      .catch(function () { return null; })
+      .finally(function () {
+        loadHome();
+      });
+  } else {
+    loadHome();
+  }
 })();

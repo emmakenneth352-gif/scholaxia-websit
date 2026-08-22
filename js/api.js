@@ -230,42 +230,65 @@
     return data;
   }
 
+  var wakePromise = null;
+
+  function ensureAwake() {
+    if (!wakePromise) {
+      wakePromise = wakeServer(60000).finally(function () {
+        // Allow a fresh wake later if the next call still fails
+        setTimeout(function () { wakePromise = null; }, 15000);
+      });
+    }
+    return wakePromise;
+  }
+
   async function api(path, options) {
     options = options || {};
-    var headers = Object.assign(
-      { "Content-Type": "application/json", Accept: "application/json" },
-      options.headers || {}
-    );
+    var method = (options.method || "GET").toUpperCase();
+    var hasBody = !!options.body;
+    var headers = Object.assign({ Accept: "application/json" }, options.headers || {});
+    if (hasBody && !headers["Content-Type"] && !headers["content-type"]) {
+      headers["Content-Type"] = "application/json";
+    }
     var token = getToken();
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var tries = options.retries == null ? 2 : options.retries;
+    var tries = options.retries == null ? 3 : options.retries;
     var lastErr = null;
+    var timeoutMs = options.timeout || (method === "GET" ? 60000 : 45000);
+
+    try {
+      await ensureAwake();
+    } catch (w) { /* continue anyway */ }
+
     for (var i = 0; i <= tries; i++) {
       try {
         if (i > 0) {
-          try { await wakeServer(20000); } catch (w) {}
+          wakePromise = null;
+          try { await ensureAwake(); } catch (w2) {}
+          await new Promise(function (resolve) { setTimeout(resolve, 1000 * i); });
         }
         var res = await fetch(API_BASE + path, {
-          method: options.method || "GET",
+          method: method,
           mode: "cors",
           headers: headers,
-          body: options.body ? JSON.stringify(options.body) : undefined,
+          body: hasBody ? JSON.stringify(options.body) : undefined,
           credentials: "omit",
           cache: "no-store",
-          signal: fetchTimeout(options.timeout || 35000),
+          signal: fetchTimeout(timeoutMs),
         });
         return await parseResponse(res);
       } catch (err) {
         lastErr = err;
         var msg = (err && err.message) || "";
-        var retryable = /failed to fetch|networkerror|load failed|aborted/i.test(msg) || err.name === "AbortError";
+        var retryable =
+          /failed to fetch|networkerror|load failed|aborted/i.test(msg) ||
+          err.name === "AbortError";
         if (!retryable || i === tries) break;
-        await new Promise(function (resolve) { setTimeout(resolve, 800 * (i + 1)); });
       }
     }
-    if (lastErr && options.noAuth && (options.method || "GET").toUpperCase() === "POST") {
+    if (lastErr && options.noAuth && method === "POST") {
       try {
         return await xhrJson(path, headers, options);
       } catch (xhrErr) {
