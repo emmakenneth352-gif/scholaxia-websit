@@ -673,7 +673,7 @@
     if (!items.length) {
       wrap.innerHTML = emptyHtml(
         "📄",
-        "No past-question papers yet. Admin uploads them under CBT → Past Questions. You sit them here as timed CBT — not as library PDFs, and not mixed with CBT Practice."
+        "No past-question papers yet. Admin uploads them under the Past Questions tab. You sit them here as timed CBT — not as library PDFs, and not mixed with CBT Practice."
       );
       return;
     }
@@ -2296,24 +2296,40 @@
       loadCbtUnlockPackages();
     }
     if (e.target.id === "cbtUnlockRedeem") {
-      var code = (($("cbtUnlockCode") && $("cbtUnlockCode").value) || "").trim();
+      var code = (($("cbtUnlockCode") && $("cbtUnlockCode").value) || "")
+        .trim()
+        .replace(/\s+/g, "")
+        .toUpperCase();
       var statusEl = $("cbtUnlockStatus");
       if (!code) {
-        if (statusEl) statusEl.textContent = "Enter your coupon code.";
+        if (statusEl) {
+          statusEl.className = "form-status err";
+          statusEl.textContent = "Enter your coupon code.";
+        }
         return;
       }
       e.target.disabled = true;
+      if (statusEl) {
+        statusEl.className = "form-status";
+        statusEl.textContent = "Checking coupon…";
+      }
       api.api("/api/v1/cbt/coupons/redeem", { method: "POST", body: { code: code } })
-        .then(function () {
+        .then(function (res) {
           var next = cbtUnlockAfter;
           closeCbtUnlockModal();
           loadCbtPackages();
           loadCbtPackages({ gridId: "cbtPagePackagesGrid", bannerId: "cbtPageAccessBanner" });
           if (typeof fetchExamsForMe === "function") fetchExamsForMe();
           if (typeof next === "function") next();
+          if (res && res.message) {
+            try { alert(res.message); } catch (a) {}
+          }
         })
         .catch(function (err) {
-          if (statusEl) statusEl.textContent = errMsg(err);
+          if (statusEl) {
+            statusEl.className = "form-status err";
+            statusEl.textContent = errMsg(err) || "Coupon could not be redeemed.";
+          }
         })
         .finally(function () { e.target.disabled = false; });
     }
