@@ -1077,15 +1077,11 @@
   }
 
   function startExamFlow(examId, isExternal, isSchool, btn) {
-    var pack = getPack(examId, isExternal);
-    if (!pack) {
-      alert("Please download this exam first.");
-      return;
-    }
     var exam = findExamById(currentExamSourceList(), examId) || {};
-    var title = exam.title || exam.name || pack.title || pack.name || "Exam";
 
-    function proceed() {
+    function launchWithPack(pack) {
+      var title = exam.title || exam.name || (pack && (pack.title || pack.name)) || "Exam";
+
       if (isExternal) {
         openExam({
           examId: examId,
@@ -1127,25 +1123,61 @@
             btn.textContent = "Start exam";
           }
           if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
-            openCbtUnlockModal(proceed);
+            openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
             return;
           }
+          // Offline pack is enough to sit the paper if session start fails for other reasons
           openExam({ examId: examId, title: title, pack: pack, isSchool: isSchool });
         });
     }
 
-    if (isSchool) {
-      proceed();
+    function ensurePackThenLaunch() {
+      var pack = getPack(examId, isExternal);
+      if (pack) {
+        launchWithPack(pack);
+        return;
+      }
+      // Download is optional for the student — Start loads the paper automatically
+      var base = isExternal ? "/api/v1/cbt/external-exams/" : "/api/v1/cbt/exams/";
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+      }
+      api
+        .api(base + examId + "/download", { timeout: 90000, retries: 2 })
+        .then(function (data) {
+          setPack(examId, isExternal, data);
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Start exam";
+          }
+          launchWithPack(data);
+        })
+        .catch(function (err) {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Start exam";
+          }
+          if (isCbtPackageError(err)) {
+            openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
+            return;
+          }
+          alert("Could not open this exam: " + errMsg(err));
+        });
+    }
+
+    if (isSchool || isExternal) {
+      ensurePackThenLaunch();
       return;
     }
     api
       .api("/api/v1/payments/paystack/cbt-access")
       .then(function (access) {
-        if (access && access.has_access) proceed();
-        else openCbtUnlockModal(proceed);
+        if (access && access.has_access) ensurePackThenLaunch();
+        else openCbtUnlockModal(ensurePackThenLaunch);
       })
       .catch(function () {
-        openCbtUnlockModal(proceed);
+        openCbtUnlockModal(ensurePackThenLaunch);
       });
   }
 
@@ -1464,10 +1496,6 @@
   var cbtActiveBoard = "practice_exams";
 
   function loadCbt() {
-    loadCbtPackages({
-      gridId: "cbtPagePackagesGrid",
-      bannerId: "cbtPageAccessBanner",
-    });
     var wrap = $("cbtExamList");
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading exams…");
@@ -1832,8 +1860,13 @@
           ? items.map(function (c) { return renderLiveCard(c, true); }).join("")
           : emptyHtml("📺", "No live classes right now. Your invite codes appear above when a teacher starts a class.");
       })
-      .catch(function (err) {
-        if (liveWrap) liveWrap.innerHTML = errorHtml(errMsg(err), "live");
+      .catch(function () {
+        if (liveWrap) {
+          liveWrap.innerHTML = emptyHtml(
+            "📺",
+            "No live classes right now. Your invite codes appear above when a teacher starts a class."
+          );
+        }
       });
 
     api
@@ -2087,12 +2120,9 @@
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading plans…");
     api
-      .api("/api/v1/payments/live-class/plans", { timeout: 60000, retries: 3 })
+      .api("/api/v1/payments/paystack/live-class/plans", { timeout: 60000, retries: 3 })
       .catch(function () {
-        return api.api("/api/v1/payments/paystack/live-class/plans", {
-          timeout: 60000,
-          retries: 2,
-        });
+        return api.api("/api/v1/payments/live-class/plans", { timeout: 60000, retries: 2 });
       })
       .then(function (data) {
         data = data || {};
@@ -2299,7 +2329,12 @@
     wrap.innerHTML = SKILLS_PROGRAMS.map(function (p) { return renderSkillCard(p, false); }).join("");
 
     api
-      .api("/api/v1/payments/flutterwave/skills/enrollments")
+      .api("/api/v1/payments/paystack/skills/enrollments")
+      .catch(function () {
+        return api.api("/api/v1/payments/skills/enrollments").catch(function () {
+          return { enrollments: [] };
+        });
+      })
       .then(function (data) {
         var items = firstArray(data, ["enrollments", "items", "results"]);
         enrolledIds = items.map(function (it) { return it.program_id || it.skill_id || it.slug || it.id; });
@@ -2410,10 +2445,13 @@
         .then(function (res) {
           var next = cbtUnlockAfter;
           closeCbtUnlockModal();
-          loadCbtPackages();
-          loadCbtPackages({ gridId: "cbtPagePackagesGrid", bannerId: "cbtPageAccessBanner" });
-          if (typeof fetchExamsForMe === "function") fetchExamsForMe();
+          examsCacheByKind = {};
+          examsForMeCache = null;
+          if (typeof loadCbtPackages === "function") {
+            loadCbtPackages({ gridId: "cbtPackagesGrid", bannerId: "cbtAccessBanner" });
+          }
           if (typeof next === "function") next();
+          else if (typeof loadCbt === "function") loadCbt();
           if (res && res.message) {
             try { alert(res.message); } catch (a) {}
           }
