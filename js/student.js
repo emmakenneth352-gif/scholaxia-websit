@@ -1142,7 +1142,7 @@
           }
           if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
             unlockStart();
-            openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
+            openCbtUnlockModal(ensurePackThenLaunch);
             return;
           }
           unlockStart();
@@ -1180,7 +1180,7 @@
           }
           unlockStart();
           if (isCbtPackageError(err)) {
-            openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
+            openCbtUnlockModal(ensurePackThenLaunch);
             return;
           }
           alert("Could not open this exam: " + errMsg(err));
@@ -2510,10 +2510,11 @@
           if (typeof loadCbtPackages === "function") {
             loadCbtPackages({ gridId: "cbtPackagesGrid", bannerId: "cbtAccessBanner" });
           }
-          if (typeof next === "function") next();
-          else if (typeof loadCbt === "function") loadCbt();
-          if (res && res.message) {
-            try { alert(res.message); } catch (a) {}
+          // Continue into the exam immediately — do not ask for coupon again
+          if (typeof next === "function") {
+            setTimeout(function () { next(); }, 50);
+          } else if (typeof loadCbt === "function") {
+            loadCbt();
           }
         })
         .catch(function (err) {
