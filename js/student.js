@@ -964,6 +964,8 @@
   }
 
   var cbtUnlockAfter = null;
+  var cbtUnlockOpenedAt = 0;
+  var startExamLock = false;
 
   function resetCbtUnlockModal() {
     if ($("cbtUnlockChoice")) $("cbtUnlockChoice").hidden = false;
@@ -976,7 +978,10 @@
     if ($("cbtUnlockCode")) $("cbtUnlockCode").value = "";
   }
 
-  function closeCbtUnlockModal() {
+  function closeCbtUnlockModal(force) {
+    // Ignore the same tap that opened the modal (common on phones)
+    if (!force && cbtUnlockOpenedAt && Date.now() - cbtUnlockOpenedAt < 700) return;
+    cbtUnlockOpenedAt = 0;
     var modal = $("cbtUnlockModal");
     if (modal) modal.classList.remove("is-on");
     cbtUnlockAfter = null;
@@ -991,7 +996,12 @@
       if (confirm("CBT package required. Open CBT packages to pay?")) showPage("cbt");
       return;
     }
-    modal.classList.add("is-on");
+    // Defer show so the Start click cannot hit the new overlay and instantly close it
+    cbtUnlockOpenedAt = Date.now();
+    setTimeout(function () {
+      cbtUnlockOpenedAt = Date.now();
+      modal.classList.add("is-on");
+    }, 60);
   }
 
   function loadCbtUnlockPackages() {
@@ -1077,12 +1087,19 @@
   }
 
   function startExamFlow(examId, isExternal, isSchool, btn) {
+    if (startExamLock) return;
+    startExamLock = true;
     var exam = findExamById(currentExamSourceList(), examId) || {};
+
+    function unlockStart() {
+      startExamLock = false;
+    }
 
     function launchWithPack(pack) {
       var title = exam.title || exam.name || (pack && (pack.title || pack.name)) || "Exam";
 
       if (isExternal) {
+        unlockStart();
         openExam({
           examId: examId,
           title: title,
@@ -1109,6 +1126,7 @@
             btn.disabled = false;
             btn.textContent = "Start exam";
           }
+          unlockStart();
           openExam({
             examId: examId,
             title: title,
@@ -1123,9 +1141,11 @@
             btn.textContent = "Start exam";
           }
           if (typeof isCbtPackageError === "function" && isCbtPackageError(err)) {
+            unlockStart();
             openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
             return;
           }
+          unlockStart();
           // Offline pack is enough to sit the paper if session start fails for other reasons
           openExam({ examId: examId, title: title, pack: pack, isSchool: isSchool });
         });
@@ -1158,6 +1178,7 @@
             btn.disabled = false;
             btn.textContent = "Start exam";
           }
+          unlockStart();
           if (isCbtPackageError(err)) {
             openCbtUnlockModal(function () { startExamFlow(examId, isExternal, isSchool, btn); });
             return;
@@ -1170,13 +1191,30 @@
       ensurePackThenLaunch();
       return;
     }
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Checking…";
+    }
     api
-      .api("/api/v1/payments/paystack/cbt-access")
+      .api("/api/v1/payments/paystack/cbt-access", { timeout: 25000, retries: 1 })
       .then(function (access) {
-        if (access && access.has_access) ensurePackThenLaunch();
-        else openCbtUnlockModal(ensurePackThenLaunch);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Start exam";
+        }
+        if (access && access.has_access) {
+          ensurePackThenLaunch();
+        } else {
+          unlockStart();
+          openCbtUnlockModal(ensurePackThenLaunch);
+        }
       })
       .catch(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Start exam";
+        }
+        unlockStart();
         openCbtUnlockModal(ensurePackThenLaunch);
       });
   }
@@ -2409,8 +2447,17 @@
     if (e.target.id === "skillEnrollClose" || e.target === $("skillEnrollModal")) {
       if ($("skillEnrollModal")) $("skillEnrollModal").classList.remove("is-on");
     }
-    if (e.target.id === "cbtUnlockClose" || e.target === $("cbtUnlockModal")) {
+    if (e.target.id === "cbtUnlockClose") {
+      closeCbtUnlockModal(true);
+      return;
+    }
+    if (e.target === $("cbtUnlockModal")) {
       closeCbtUnlockModal();
+      return;
+    }
+    // Clicks inside the modal panel must not bubble to overlay close logic elsewhere
+    if (e.target.closest && e.target.closest("#cbtUnlockModal .modal")) {
+      e.stopPropagation();
     }
     if (e.target.id === "cbtUnlockPickCoupon") {
       $("cbtUnlockChoice").hidden = true;
@@ -2457,7 +2504,7 @@
       })
         .then(function (res) {
           var next = cbtUnlockAfter;
-          closeCbtUnlockModal();
+          closeCbtUnlockModal(true);
           examsCacheByKind = {};
           examsForMeCache = null;
           if (typeof loadCbtPackages === "function") {
