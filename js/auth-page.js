@@ -125,7 +125,7 @@
     var row = $("roleRow");
     if (row) {
       row.classList.add("role-row-market");
-      row.style.gridTemplateColumns = "1fr 1fr";
+      row.style.gridTemplateColumns = "1fr";
     }
     var kicker = $("authVisualKicker");
     var title = $("authVisualTitle");
