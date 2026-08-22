@@ -38,6 +38,12 @@
 
   function errMsg(err) {
     var msg = (err && err.message) || "Something went wrong. Please try again.";
+    if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+      return "Cannot reach the Scholaxia API. Wait a minute if the server is waking up, then tap Try again.";
+    }
+    if (/aborted|abort/i.test(msg) || (err && err.name === "AbortError")) {
+      return "Server took too long. Wait 30 seconds and try again (Render may be waking up).";
+    }
     // Unwrap JSON-looking detail blobs from FastAPI
     try {
       if (msg.charAt(0) === "{") {
@@ -810,7 +816,10 @@
     paperKind = paperKind || "cbt_practice";
     if (examsCacheByKind[paperKind]) return Promise.resolve(examsCacheByKind[paperKind]);
     return api
-      .api("/api/v1/cbt/exams/for-me?paper_kind=" + encodeURIComponent(paperKind))
+      .api("/api/v1/cbt/exams/for-me?paper_kind=" + encodeURIComponent(paperKind), {
+        timeout: 45000,
+        retries: 2,
+      })
       .then(function (data) {
         examsCacheByKind[paperKind] = data || {};
         if (paperKind === "cbt_practice") examsForMeCache = examsCacheByKind[paperKind];
@@ -1489,7 +1498,15 @@
         }).join("");
       })
       .catch(function (err) {
-        wrap.innerHTML = errorHtml(errMsg(err), "school-portal");
+        var msg = errMsg(err);
+        if (/not linked|school_id|school has not/i.test(msg + JSON.stringify((err && err.data) || {}))) {
+          wrap.innerHTML = emptyHtml(
+            "🏫",
+            "Your school has not linked this account yet. Ask the school office to add your email, then refresh."
+          );
+          return;
+        }
+        wrap.innerHTML = errorHtml(msg, "school-portal");
       });
   }
 
@@ -2000,7 +2017,7 @@
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading plans…");
     api
-      .api("/api/v1/payments/live-class/plans")
+      .api("/api/v1/payments/live-class/plans", { timeout: 45000, retries: 2 })
       .then(function (data) {
         data = data || {};
         var plans = firstArray(data, ["plans", "items", "results"]);
@@ -2677,7 +2694,9 @@
     wrap.innerHTML = loadingHtml("Loading groups…");
     Promise.all([
       api.api("/api/v1/student-groups/mine").catch(function () { return []; }),
-      api.api("/api/v1/student-groups/?is_community_listed=true").catch(function () { return []; }),
+      api.api("/api/v1/student-groups/community-listed").catch(function () {
+        return api.api("/api/v1/student-groups/discover").catch(function () { return []; });
+      }),
     ]).then(function (pair) {
       var mine = firstArray(pair[0], ["items", "groups", "results"]);
       if (Array.isArray(pair[0])) mine = pair[0];
@@ -2821,9 +2840,14 @@
       });
 
     api
-      .api("/api/v1/student-groups/?is_community_listed=true")
+      .api("/api/v1/student-groups/community-listed")
+      .catch(function () {
+        return api.api("/api/v1/student-groups/discover");
+      })
       .then(function (data) {
         var items = firstArray(data, ["items", "results", "groups"]);
+        if (Array.isArray(data)) items = data;
+        items = (items || []).filter(function (g) { return !g.is_member; });
         if (!commWrap) return;
         commWrap.innerHTML = items.length
           ? items.map(function (g) { return renderGroupCard(g, false); }).join("")

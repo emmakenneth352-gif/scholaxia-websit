@@ -240,10 +240,13 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var tries = options.retries == null ? 1 : options.retries;
+    var tries = options.retries == null ? 2 : options.retries;
     var lastErr = null;
     for (var i = 0; i <= tries; i++) {
       try {
+        if (i > 0) {
+          try { await wakeServer(20000); } catch (w) {}
+        }
         var res = await fetch(API_BASE + path, {
           method: options.method || "GET",
           mode: "cors",
@@ -251,7 +254,7 @@
           body: options.body ? JSON.stringify(options.body) : undefined,
           credentials: "omit",
           cache: "no-store",
-          signal: fetchTimeout(options.timeout || 20000),
+          signal: fetchTimeout(options.timeout || 35000),
         });
         return await parseResponse(res);
       } catch (err) {
@@ -259,7 +262,7 @@
         var msg = (err && err.message) || "";
         var retryable = /failed to fetch|networkerror|load failed|aborted/i.test(msg) || err.name === "AbortError";
         if (!retryable || i === tries) break;
-        await new Promise(function (resolve) { setTimeout(resolve, 600); });
+        await new Promise(function (resolve) { setTimeout(resolve, 800 * (i + 1)); });
       }
     }
     if (lastErr && options.noAuth && (options.method || "GET").toUpperCase() === "POST") {
@@ -267,6 +270,16 @@
         return await xhrJson(path, headers, options);
       } catch (xhrErr) {
         throw lastErr;
+      }
+    }
+    if (lastErr) {
+      var friendly = friendlyFetchError(lastErr);
+      if (friendly && friendly !== lastErr.message) {
+        var wrapped = new Error(friendly);
+        wrapped.status = lastErr.status;
+        wrapped.data = lastErr.data;
+        wrapped.name = lastErr.name;
+        throw wrapped;
       }
     }
     throw lastErr;
