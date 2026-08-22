@@ -1637,15 +1637,27 @@
     if (home) home.hidden = false;
     if (board) board.hidden = true;
     if (!list) return;
-    list.innerHTML = loadingHtml("Loading CBT…");
-    api
-      .api("/api/v1/cbt/practice/home")
+    list.innerHTML = loadingHtml("Connecting to server…");
+
+    function fetchHome() {
+      return api.api("/api/v1/cbt/practice/home", { timeout: 90000, retries: 4 });
+    }
+
+    var ready = api.wakeServer
+      ? api.wakeServer(60000).catch(function () { return null; }).then(fetchHome)
+      : fetchHome();
+
+    ready
       .then(function (data) {
         cbtHomeCache = data || {};
         renderCbtExamTypes();
       })
       .catch(function (err) {
-        list.innerHTML = errorHtml(errMsg(err), "cbt");
+        var msg = errMsg(err);
+        if (err && (err.status === 401 || err.status === 403 || /not authenticated|unauthorized/i.test(msg))) {
+          msg = "Please sign in again, then open CBT Practice.";
+        }
+        list.innerHTML = errorHtml(msg, "cbt");
       });
   }
 
