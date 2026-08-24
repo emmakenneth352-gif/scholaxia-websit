@@ -2138,44 +2138,49 @@
       btn.disabled = true;
       btn.textContent = "Starting…";
     }
-    setStartStatus("Connecting to server…", true);
+    setStartStatus("Building your " + (examType || "CBT") + " paper…", true);
 
     // Close any leftover result overlay from a previous broken attempt
     try {
       if ($("result-screen")) $("result-screen").classList.remove("is-on");
-      if ($("exam-screen")) $("exam-screen").classList.remove("is-on");
     } catch (e0) {}
 
-    var watchdog = setTimeout(function () {
-      resetStartBtn();
-      setStartStatus("Still waiting on the server. Tap Start again in a few seconds.", false);
-    }, 55000);
-
-    var wake = Promise.resolve();
+    // Wake in background — do not block Start on Render cold wake
     if (api.wakeServer) {
-      wake = api.wakeServer(20000).catch(function () {
-        return null;
-      });
+      try {
+        api.wakeServer(15000);
+      } catch (eWake) {}
     }
 
-    wake
-      .then(function () {
-        setStartStatus("Building your " + (examType || "CBT") + " paper…", true);
-        return api.api("/api/v1/cbt/practice/start", {
-          method: "POST",
-          body: { exam_type: examType, subjects: subjects },
-          timeout: 50000,
-          retries: 0,
-          preferXhr: true,
-        });
+    var finished = false;
+    var watchdog = setTimeout(function () {
+      if (finished) return;
+      resetStartBtn();
+      setStartStatus("Server is slow. Tap Start again — your package is already unlocked.", false);
+    }, 28000);
+
+    api
+      .api("/api/v1/cbt/practice/start", {
+        method: "POST",
+        body: { exam_type: examType, subjects: subjects },
+        timeout: 45000,
+        retries: 0,
+        preferXhr: true,
       })
       .then(function (attempt) {
+        finished = true;
         clearTimeout(watchdog);
         resetStartBtn();
-        setStartStatus("", true);
-        openPracticeAttempt(attempt);
+        setStartStatus("Opening exam…", true);
+        try {
+          openPracticeAttempt(attempt);
+          setStartStatus("", true);
+        } catch (openErr) {
+          setStartStatus(errMsg(openErr) || "Exam built but could not open. Tap Start again.", false);
+        }
       })
       .catch(function (err) {
+        finished = true;
         clearTimeout(watchdog);
         resetStartBtn();
         if (isCbtPackageError(err)) {
@@ -2187,7 +2192,6 @@
         }
         var msg = errMsg(err) || "Could not start CBT. Try again.";
         setStartStatus(msg, false);
-        alert(msg);
       });
   }
 
@@ -2268,9 +2272,18 @@
       closeCbtUnlockModal(true);
     } catch (e1) {}
 
-    $("examTitle").textContent = Exam.current.title;
+    if ($("examTitle")) $("examTitle").textContent = Exam.current.title;
     updatePracticeExamSub();
-    $("exam-screen").classList.add("is-on");
+    var screen = $("exam-screen");
+    if (!screen) {
+      throw new Error("Exam screen missing on this page. Hard refresh and try again.");
+    }
+    screen.classList.add("is-on");
+    screen.style.display = "flex";
+    try {
+      screen.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.scrollTo(0, 0);
+    } catch (eScroll) {}
     startExamTimer();
 
     if (Exam.current.awaitingSectionPick) {
