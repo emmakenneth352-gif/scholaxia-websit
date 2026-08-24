@@ -1637,27 +1637,23 @@
     if (home) home.hidden = false;
     if (board) board.hidden = true;
     if (!list) return;
-    list.innerHTML = loadingHtml("Connecting to server…");
-
-    function fetchHome() {
-      return api.api("/api/v1/cbt/practice/home", { timeout: 90000, retries: 4 });
-    }
-
-    var ready = api.wakeServer
-      ? api.wakeServer(60000).catch(function () { return null; }).then(fetchHome)
-      : fetchHome();
-
-    ready
+    list.innerHTML = loadingHtml("Waking server & loading CBT…");
+    var loadHome = function () {
+      return api.api("/api/v1/cbt/practice/home", { timeout: 90000, retries: 3, preferXhr: true });
+    };
+    var start =
+      api.wakeServer && typeof api.wakeServer === "function"
+        ? api.wakeServer(45000).then(function () {
+            return loadHome();
+          })
+        : loadHome();
+    start
       .then(function (data) {
         cbtHomeCache = data || {};
         renderCbtExamTypes();
       })
       .catch(function (err) {
-        var msg = errMsg(err);
-        if (err && (err.status === 401 || err.status === 403 || /not authenticated|unauthorized/i.test(msg))) {
-          msg = "Please sign in again, then open CBT Practice.";
-        }
-        list.innerHTML = errorHtml(msg, "cbt");
+        list.innerHTML = errorHtml(errMsg(err), "cbt");
       });
   }
 

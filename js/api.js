@@ -274,13 +274,15 @@
       await ensureAwake();
     } catch (w) { /* continue anyway */ }
 
-    // Coupon redeem + Paystack init: use XHR first (fetch often reports Failed to fetch on some browsers)
+    // Coupon redeem + Paystack init + CBT home: use XHR first (fetch often reports Failed to fetch on some browsers)
     var preferXhr =
       !!options.preferXhr ||
-      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$/i.test(path);
-    if (preferXhr && method === "POST") {
+      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$/i.test(
+        path
+      );
+    if (preferXhr) {
       try {
-        return await xhrJson(path, headers, Object.assign({}, options, { timeout: timeoutMs }));
+        return await xhrJson(path, headers, Object.assign({}, options, { method: method, timeout: timeoutMs }));
       } catch (xhrFirstErr) {
         var xm = (xhrFirstErr && xhrFirstErr.message) || "";
         var networkish =
@@ -324,18 +326,10 @@
         if (t) t.clear();
       }
     }
-    // Prefer XHR for mutating calls — more reliable than fetch on some mobile browsers
-    if (lastErr && (method === "POST" || method === "PUT" || method === "PATCH")) {
+    // XHR fallback for any method — some browsers report Failed to fetch on GET too (CBT home, etc.)
+    if (lastErr) {
       try {
-        return await xhrJson(path, headers, Object.assign({}, options, { timeout: timeoutMs }));
-      } catch (xhrErr) {
-        lastErr = xhrErr || lastErr;
-      }
-    }
-    // Same for GET when fetch fails (CBT home often hits cold-start / CORS edge cases)
-    if (lastErr && method === "GET") {
-      try {
-        return await xhrJson(path, headers, Object.assign({}, options, { method: "GET", timeout: timeoutMs }));
+        return await xhrJson(path, headers, Object.assign({}, options, { method: method, timeout: timeoutMs }));
       } catch (xhrErr) {
         lastErr = xhrErr || lastErr;
       }
