@@ -1328,6 +1328,12 @@
 
   function startExamTimer() {
     stopExamTimer();
+    if (!Exam.current) return;
+    // Never open an exam with 0 time left — that instantly auto-submits as 0%
+    if (!(Exam.current.remainingSec > 0)) {
+      var mins = Exam.current.durationMinutes || 180;
+      Exam.current.remainingSec = Math.max(60, mins * 60);
+    }
     updateTimerDisplay();
     Exam.current.timerId = setInterval(function () {
       if (!Exam.current) return;
@@ -1335,6 +1341,12 @@
       updateTimerDisplay();
       if (Exam.current.remainingSec <= 0) {
         stopExamTimer();
+        // Only auto-submit if the student actually entered the paper
+        if (Exam.current.awaitingSectionPick) {
+          Exam.current.remainingSec = 0;
+          updateTimerDisplay();
+          return;
+        }
         submitExam(true);
       }
     }, 1000);
@@ -1565,10 +1577,17 @@
   function showResult(res, st) {
     res = res || {};
     var score = res.score != null ? res.score : res.correct_count;
-    var total = res.total != null ? res.total : res.total_questions || (st && st.questions.length);
+    var total =
+      res.total != null
+        ? res.total
+        : res.max_score != null
+        ? res.max_score
+        : res.total_questions || (st && st.questions && st.questions.length);
     var pct =
       res.percentage != null
         ? res.percentage
+        : res.percent != null
+        ? res.percent
         : score != null && total
         ? Math.round((score / total) * 100)
         : null;
@@ -2028,12 +2047,23 @@
       btn.disabled = true;
       btn.textContent = "Starting…";
     }
+    // Close any leftover result overlay from a previous broken attempt
+    try {
+      if ($("result-screen")) $("result-screen").classList.remove("is-on");
+      if ($("exam-screen")) $("exam-screen").classList.remove("is-on");
+    } catch (e0) {}
     api
       .api("/api/v1/cbt/practice/start", {
         method: "POST",
         body: { exam_type: examType, subjects: subjects },
+        timeout: 90000,
+        retries: 1,
       })
       .then(function (attempt) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "START CBT";
+        }
         openPracticeAttempt(attempt);
       })
       .catch(function (err) {
@@ -2047,7 +2077,7 @@
           });
           return;
         }
-        alert(errMsg(err));
+        alert(errMsg(err) || "Could not start CBT. Try again.");
       });
   }
 
@@ -2062,7 +2092,27 @@
       alert("Could not start CBT attempt.");
       return;
     }
+    // Never show a fake completed result instead of the exam
+    if (String(attempt.status || "").toLowerCase() === "completed") {
+      alert("That attempt already finished. Starting a new exam…");
+      startPracticeAttempt(attempt.exam_type || cbtSelectedBoard || "JAMB", attempt.subjects || [], null);
+      return;
+    }
+
     var sections = attempt.sections || [];
+    if (!sections.length) {
+      alert("No questions were loaded for this exam. Ask admin to upload JAMB practice questions.");
+      return;
+    }
+    var totalQs = 0;
+    sections.forEach(function (sec) {
+      totalQs += ((sec && sec.questions) || []).length;
+    });
+    if (!totalQs) {
+      alert("No questions were loaded for this exam. Ask admin to upload JAMB practice questions.");
+      return;
+    }
+
     var idx = Math.min(attempt.section_index || 0, Math.max(0, sections.length - 1));
     var answers = Object.assign({}, attempt.answers || {});
     try {
@@ -2071,6 +2121,14 @@
     } catch (e) {}
     var hasAnyAnswer = Object.keys(answers).length > 0;
     var multi = sections.length > 1;
+
+    var durationMinutes = attempt.duration_minutes || 180;
+    var remaining =
+      typeof attempt.seconds_left === "number" ? attempt.seconds_left : durationMinutes * 60;
+    // Expired resumed attempts used to open with 0s and instantly submit as 0%
+    if (!(remaining > 30)) {
+      remaining = durationMinutes * 60;
+    }
 
     Exam.current = {
       practiceAttemptId: attempt.attempt_id,
@@ -2087,12 +2145,15 @@
       isExternal: false,
       isSchool: false,
       index: 0,
-      remainingSec:
-        typeof attempt.seconds_left === "number"
-          ? attempt.seconds_left
-          : (attempt.duration_minutes || 60) * 60,
+      durationMinutes: durationMinutes,
+      remainingSec: remaining,
       timerId: null,
     };
+
+    try {
+      if ($("result-screen")) $("result-screen").classList.remove("is-on");
+      closeCbtUnlockModal(true);
+    } catch (e1) {}
 
     $("examTitle").textContent = Exam.current.title;
     updatePracticeExamSub();
