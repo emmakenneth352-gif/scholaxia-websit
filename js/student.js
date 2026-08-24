@@ -1803,6 +1803,10 @@
     if (board === "JAMB") {
       var need = settings.jamb_subjects_required || 4;
       var jambSubs = (profile.jamb_subjects || []).filter(Boolean);
+      if (jambSubs.length !== need) {
+        var localJamb = readLocalJson("sia_jamb_subjects", null) || readLocalJson("sia_subjects", []);
+        if (Array.isArray(localJamb) && localJamb.length === need) jambSubs = localJamb.slice();
+      }
       var dur = settings.jamb_duration_minutes || 180;
       if (hint) {
         hint.textContent =
@@ -1850,6 +1854,10 @@
 
     // WAEC / NECO — only profile subjects
     var registered = (profile.ssce_subjects || []).filter(Boolean);
+    if (!registered.length) {
+      var localSsce = readLocalJson("sia_ssce_subjects", null) || readLocalJson("sia_subjects", []);
+      if (Array.isArray(localSsce) && localSsce.length) registered = localSsce.slice();
+    }
     if (hint) {
       hint.textContent = "Only subjects from your profile. Timer and question count come from Admin CBT Settings.";
     }
@@ -3902,55 +3910,116 @@
     $("profileSaveBtn").addEventListener("click", function () {
       var statusEl = $("profileSaveStatus");
       var examType = (($("examTypeSelect") && $("examTypeSelect").value) || "").toUpperCase().replace(/-/g, "_");
-      var eduLevel = (($("eduLevelSelect") && $("eduLevelSelect").value) || "").toUpperCase();
+      var eduLevel = (($("eduLevelSelect") && $("eduLevelSelect").value) || "SS1").toUpperCase();
       if (!selectedSubjects.length) {
         setStatus(statusEl, "Select at least one subject.", false);
         return;
       }
       if (examType === "JAMB" && selectedSubjects.length !== 4) {
-        setStatus(statusEl, "JAMB requires exactly 4 subjects (usually include Use of English / English Language).", false);
+        setStatus(statusEl, "JAMB requires exactly 4 subjects (include English Language if you offer it).", false);
         return;
       }
       if ((examType === "WAEC" || examType === "NECO") && selectedSubjects.length !== 9) {
         setStatus(statusEl, examType + " requires exactly 9 subjects.", false);
         return;
       }
+
       var btn = $("profileSaveBtn");
       btn.disabled = true;
       setStatus(statusEl, "Saving…", true);
-      var body = {
-        exam_type: examType,
-        subjects: selectedSubjects,
-        education_level: eduLevel || "SS1",
-      };
-      if (examType === "JAMB") {
-        body.enable_jamb = true;
-        body.jamb_subjects = selectedSubjects.slice();
-      } else if (examType === "WAEC" || examType === "NECO") {
-        body.enable_ssce = true;
-        body.ssce_exam_type = examType;
-        body.ssce_subjects = selectedSubjects.slice();
+
+      // Always keep a local copy so CBT can use subjects even if the network flakes
+      function commitLocal(note) {
+        localStorage.setItem("sia_exam_type", examType);
+        writeLocalJson("sia_subjects", selectedSubjects.slice());
+        if (examType === "JAMB") writeLocalJson("sia_jamb_subjects", selectedSubjects.slice());
+        if (examType === "WAEC" || examType === "NECO") writeLocalJson("sia_ssce_subjects", selectedSubjects.slice());
+        refreshLocalExamBadges();
+        if (cbtHomeCache) {
+          cbtHomeCache.profile = cbtHomeCache.profile || {};
+          if (examType === "JAMB") cbtHomeCache.profile.jamb_subjects = selectedSubjects.slice();
+          else cbtHomeCache.profile.ssce_subjects = selectedSubjects.slice();
+        }
+        setStatus(statusEl, note || "Saved on this device.", true);
       }
-      api
-        .api("/api/v1/students/setup-exam", {
-          method: "POST",
-          body: body,
-          preferXhr: true,
-          timeout: 45000,
-          retries: 2,
+
+      function postSetup(payload) {
+        return new Promise(function (resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          var url = (api.API_BASE || "https://scholaxia1.onrender.com") + "/api/v1/students/setup-exam";
+          xhr.open("POST", url, true);
+          xhr.timeout = 45000;
+          xhr.setRequestHeader("Content-Type", "application/json");
+          xhr.setRequestHeader("Accept", "application/json");
+          var tok = api.getToken ? api.getToken() : localStorage.getItem("sia_token");
+          if (tok) xhr.setRequestHeader("Authorization", "Bearer " + tok);
+          xhr.onload = function () {
+            var data = null;
+            try {
+              data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+            } catch (e) {
+              data = { detail: xhr.responseText || "Invalid response" };
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(data);
+              return;
+            }
+            var msg = (data && (data.detail || data.message)) || ("Request failed (" + xhr.status + ")");
+            if (typeof msg === "object") msg = msg.message || JSON.stringify(msg);
+            var err = new Error(String(msg));
+            err.status = xhr.status;
+            err.data = data;
+            reject(err);
+          };
+          xhr.onerror = function () {
+            var err = new Error("NETWORK");
+            err.status = 0;
+            reject(err);
+          };
+          xhr.ontimeout = function () {
+            var err = new Error("TIMEOUT");
+            err.status = 0;
+            reject(err);
+          };
+          xhr.send(JSON.stringify(payload));
+        });
+      }
+
+      // Try simple legacy payload first (most compatible), then dual-board payload
+      var legacyBody = {
+        exam_type: examType,
+        subjects: selectedSubjects.slice(),
+        education_level: eduLevel,
+      };
+      var dualBody = {
+        education_level: eduLevel,
+        exam_type: examType,
+        subjects: selectedSubjects.slice(),
+        enable_jamb: examType === "JAMB",
+        jamb_subjects: examType === "JAMB" ? selectedSubjects.slice() : undefined,
+        enable_ssce: examType === "WAEC" || examType === "NECO",
+        ssce_exam_type: examType === "WAEC" || examType === "NECO" ? examType : undefined,
+        ssce_subjects: examType === "WAEC" || examType === "NECO" ? selectedSubjects.slice() : undefined,
+      };
+
+      postSetup(legacyBody)
+        .catch(function () {
+          return postSetup(dualBody);
         })
         .then(function (res) {
-          localStorage.setItem("sia_exam_type", examType);
-          writeLocalJson("sia_subjects", selectedSubjects);
+          commitLocal("Saved! Your CBT will use these subjects.");
           if (res && Array.isArray(res.jamb_subjects)) {
             writeLocalJson("sia_jamb_subjects", res.jamb_subjects);
           }
-          refreshLocalExamBadges();
-          setStatus(statusEl, "Saved! Your CBT will use these subjects.", true);
-          // Refresh summary cards
-          loadProfile();
         })
         .catch(function (err) {
+          // Network flake: keep subjects locally so CBT / JAMB package still works
+          if (!err || !err.status || err.message === "NETWORK" || err.message === "TIMEOUT") {
+            commitLocal(
+              "Saved on this device (server unreachable). CBT can use these subjects. Try Save again when online."
+            );
+            return;
+          }
           setStatus(statusEl, errMsg(err), false);
         })
         .then(function () {
