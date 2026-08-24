@@ -259,20 +259,23 @@
   var lastWakeOkAt = 0;
 
   function ensureAwake() {
-    if (Date.now() - lastWakeOkAt < 20000) {
+    // Never block UI/API calls on a long health check — wake in the background only
+    if (Date.now() - lastWakeOkAt < 45000) {
       return Promise.resolve({ status: "ok", cached: true });
     }
     if (!wakePromise) {
-      wakePromise = wakeServer(25000)
+      wakePromise = wakeServer(12000)
         .then(function (res) {
           if (res) lastWakeOkAt = Date.now();
           return res;
         })
         .finally(function () {
-          setTimeout(function () { wakePromise = null; }, 8000);
+          setTimeout(function () {
+            wakePromise = null;
+          }, 5000);
         });
     }
-    return wakePromise;
+    return Promise.resolve({ status: "waking" });
   }
 
   async function api(path, options) {
@@ -287,18 +290,19 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var tries = options.retries == null ? (method === "POST" ? 2 : 3) : options.retries;
+    var tries = options.retries == null ? (method === "POST" ? 2 : 2) : options.retries;
     var lastErr = null;
-    var timeoutMs = options.timeout || (method === "GET" ? 60000 : 60000);
+    var timeoutMs = options.timeout || (method === "GET" ? 45000 : 45000);
 
+    // Background wake only — do not await
     try {
-      await ensureAwake();
-    } catch (w) { /* continue anyway */ }
+      ensureAwake();
+    } catch (w) {}
 
-    // Coupon redeem + Paystack init + CBT home: use XHR first (fetch often reports Failed to fetch on some browsers)
+    // Prefer XHR for flaky browser fetch (CBT, profile save, payments)
     var preferXhr =
       !!options.preferXhr ||
-      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$/i.test(
+      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
         path
       );
     if (preferXhr) {

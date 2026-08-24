@@ -3812,7 +3812,7 @@
 
   function loadProfile() {
     api
-      .api("/api/v1/students/me")
+      .api("/api/v1/students/me", { preferXhr: true, timeout: 35000, retries: 1 })
       .then(function (me) {
         if (!me) return;
         var name = me.full_name || me.name || user.name;
@@ -3822,10 +3822,16 @@
           if ($("examTypeSelect")) $("examTypeSelect").value = me.exam_type;
         }
         if (me.education_level && $("eduLevelSelect")) $("eduLevelSelect").value = me.education_level;
-        if (Array.isArray(me.subjects)) {
-          selectedSubjects = me.subjects.slice();
-          writeLocalJson("sia_subjects", selectedSubjects);
-        }
+        var loaded =
+          (me.exam_type === "JAMB" && Array.isArray(me.jamb_subjects) && me.jamb_subjects.length
+            ? me.jamb_subjects
+            : null) ||
+          (Array.isArray(me.ssce_subjects) && me.ssce_subjects.length ? me.ssce_subjects : null) ||
+          (Array.isArray(me.selected_subjects) ? me.selected_subjects : null) ||
+          (Array.isArray(me.subjects) ? me.subjects : null) ||
+          [];
+        selectedSubjects = loaded.slice();
+        writeLocalJson("sia_subjects", selectedSubjects);
         refreshLocalExamBadges();
         renderSubjectChips();
       })
@@ -3839,11 +3845,10 @@
     if (!Array.isArray(selectedSubjects)) selectedSubjects = [];
 
     api
-      .api("/api/v1/students/subjects")
+      .api("/api/v1/students/subjects", { preferXhr: true, timeout: 35000, retries: 1 })
       .then(function (data) {
         subjectsCatalog = firstArray(data, ["subjects", "items", "results"]);
         if (!subjectsCatalog.length && data && typeof data === "object") {
-          // Flatten grouped shapes e.g. { jamb: [...], waec: [...] }
           Object.keys(data).forEach(function (k) {
             if (Array.isArray(data[k])) subjectsCatalog = subjectsCatalog.concat(data[k]);
           });
@@ -3902,19 +3907,48 @@
         setStatus(statusEl, "Select at least one subject.", false);
         return;
       }
+      if (examType === "JAMB" && selectedSubjects.length !== 4) {
+        setStatus(statusEl, "JAMB requires exactly 4 subjects (usually include Use of English / English Language).", false);
+        return;
+      }
+      if ((examType === "WAEC" || examType === "NECO") && selectedSubjects.length !== 9) {
+        setStatus(statusEl, examType + " requires exactly 9 subjects.", false);
+        return;
+      }
       var btn = $("profileSaveBtn");
       btn.disabled = true;
       setStatus(statusEl, "Saving…", true);
+      var body = {
+        exam_type: examType,
+        subjects: selectedSubjects,
+        education_level: eduLevel || "SS1",
+      };
+      if (examType === "JAMB") {
+        body.enable_jamb = true;
+        body.jamb_subjects = selectedSubjects.slice();
+      } else if (examType === "WAEC" || examType === "NECO") {
+        body.enable_ssce = true;
+        body.ssce_exam_type = examType;
+        body.ssce_subjects = selectedSubjects.slice();
+      }
       api
         .api("/api/v1/students/setup-exam", {
           method: "POST",
-          body: { exam_type: examType, subjects: selectedSubjects, education_level: eduLevel },
+          body: body,
+          preferXhr: true,
+          timeout: 45000,
+          retries: 2,
         })
-        .then(function () {
+        .then(function (res) {
           localStorage.setItem("sia_exam_type", examType);
           writeLocalJson("sia_subjects", selectedSubjects);
+          if (res && Array.isArray(res.jamb_subjects)) {
+            writeLocalJson("sia_jamb_subjects", res.jamb_subjects);
+          }
           refreshLocalExamBadges();
-          setStatus(statusEl, "Saved!", true);
+          setStatus(statusEl, "Saved! Your CBT will use these subjects.", true);
+          // Refresh summary cards
+          loadProfile();
         })
         .catch(function (err) {
           setStatus(statusEl, errMsg(err), false);
