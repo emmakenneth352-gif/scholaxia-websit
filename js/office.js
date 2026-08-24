@@ -237,12 +237,12 @@
         var data = api.loginApi
           ? await api.loginApi(email, password)
           : await api.api("/api/v1/auth/login", {
-              method: "POST",
-              noAuth: true,
+          method: "POST",
+          noAuth: true,
               timeout: 60000,
               retries: 3,
               body: { email: email, password: password },
-            });
+        });
         if (data.role !== "school_admin") {
           if (err) err.textContent = "This login is for school admins only. Students use Sign in on the home page. Main admin uses the main admin site.";
           return;
@@ -448,8 +448,8 @@
         var data = await office("/external-exams");
         var rows = (data && data.exams) || [];
         var examOpts = rows.map(function (r) {
-          return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
-        }).join("");
+            return '<option value="' + esc(r.id) + '">' + esc(r.title) + " · " + esc(r.status) + "</option>";
+          }).join("");
         ["ee-result-exam", "so-retake-exam", "ee-sched-exam", "ee-set-exam"].forEach(function (id) {
           if ($(id)) $(id).innerHTML = examOpts || '<option value="">No exams yet</option>';
         });
