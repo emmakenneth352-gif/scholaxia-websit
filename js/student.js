@@ -1675,6 +1675,23 @@
     };
   }
 
+  function cachedCbtSettings() {
+    return readLocalJson("sia_cbt_settings", null) || {};
+  }
+
+  function saveCachedCbtSettings(settings) {
+    if (!settings || typeof settings !== "object") return;
+    writeLocalJson("sia_cbt_settings", {
+      cbt_enabled: settings.cbt_enabled !== false,
+      jamb_subjects_required: Number(settings.jamb_subjects_required) || 4,
+      jamb_duration_minutes: Number(settings.jamb_duration_minutes) || 60,
+      jamb_questions_per_subject: Number(settings.jamb_questions_per_subject) || 40,
+      jamb_english_questions: Number(settings.jamb_english_questions) || 40,
+      waec_duration_minutes: Number(settings.waec_duration_minutes) || 60,
+      neco_duration_minutes: Number(settings.neco_duration_minutes) || 60,
+    });
+  }
+
   function defaultCbtHome(accessBoards) {
     var boards = accessBoards || [];
     function has(b) {
@@ -1694,13 +1711,17 @@
         if (!pkg && boards.indexOf("JAMB") < 0) boards.push("JAMB", "WAEC", "NECO");
       }
     } catch (e) {}
+    var cached = cachedCbtSettings();
     return {
       settings: {
-        cbt_enabled: true,
-        jamb_subjects_required: 4,
-        jamb_duration_minutes: 180,
-        waec_duration_minutes: 60,
-        neco_duration_minutes: 60,
+        cbt_enabled: cached.cbt_enabled !== false,
+        jamb_subjects_required: Number(cached.jamb_subjects_required) || 4,
+        // Prefer last admin settings from API — do not hardcode 180
+        jamb_duration_minutes: Number(cached.jamb_duration_minutes) || 60,
+        jamb_questions_per_subject: Number(cached.jamb_questions_per_subject) || 40,
+        jamb_english_questions: Number(cached.jamb_english_questions) || 40,
+        waec_duration_minutes: Number(cached.waec_duration_minutes) || 60,
+        neco_duration_minutes: Number(cached.neco_duration_minutes) || 60,
       },
       exam_types: [
         { exam_type: "JAMB", has_access: has("JAMB"), package_id: "jamb" },
@@ -1734,8 +1755,10 @@
         has_access: !!(t.has_access || (localT && localT.has_access)),
       });
     });
+    var settings = Object.assign({}, base.settings, incoming.settings || {});
+    if (incoming.settings) saveCachedCbtSettings(settings);
     return {
-      settings: Object.assign({}, base.settings, incoming.settings || {}),
+      settings: settings,
       exam_types: types,
       profile: profile,
     };
@@ -1904,12 +1927,11 @@
       jambSubs = jambSubs.filter(function (s, i, arr) {
         return arr.indexOf(s) === i;
       });
-      var dur = settings.jamb_duration_minutes || 180;
+      var dur = Number(settings.jamb_duration_minutes) || Number(cachedCbtSettings().jamb_duration_minutes) || 60;
+      var perSub = Number(settings.jamb_questions_per_subject) || Number(cachedCbtSettings().jamb_questions_per_subject) || 40;
+      var totalQ = perSub * jambSubs.length;
       if (hint) {
-        hint.textContent =
-          "This is one JAMB exam package. Your " +
-          need +
-          " profile subjects are combined into a single CBT — review them below before you pay or use a coupon.";
+        hint.textContent = "Your saved JAMB subjects. Settings come from Admin CBT Settings.";
       }
       if (!jambSubs.length) {
         body.innerHTML =
@@ -1931,18 +1953,14 @@
         return;
       }
       body.innerHTML =
-        '<div style="margin:0 0 1rem;padding:1rem 1.1rem;border-radius:14px;border:1px solid #ddd6fe;background:linear-gradient(180deg,#faf8ff,#f5f3ff)">' +
-        '<div style="font-size:0.75rem;font-weight:800;letter-spacing:0.06em;color:#6d28d9;text-transform:uppercase">What you are unlocking</div>' +
-        '<h3 style="margin:0.35rem 0 0.35rem;font-size:1.35rem">1 JAMB CBT exam</h3>' +
-        '<p style="margin:0;color:#5b21b6;font-size:0.95rem">Not ' +
-        esc(String(jambSubs.length)) +
-        " separate exams — your subjects below run together as <strong>one</strong> timed paper (" +
-        esc(String(dur)) +
-        " minutes).</p>" +
-        "</div>" +
         "<h3 style=\"margin:0 0 0.55rem\">Your " +
         esc(String(jambSubs.length)) +
         " subjects</h3>" +
+        '<p class="muted" style="margin:0 0 0.85rem">' +
+        esc(String(totalQ)) +
+        " questions · " +
+        esc(String(dur)) +
+        " minutes (from admin settings)</p>" +
         '<ol style="margin:0 0 1rem;padding:0;list-style:none;display:grid;gap:0.45rem">' +
         jambSubs
           .map(function (s, idx) {
@@ -1953,7 +1971,10 @@
               "</span>" +
               '<span style="font-weight:700;font-size:1.02rem">' +
               esc(s) +
-              "</span></li>"
+              "</span>" +
+              '<span style="margin-left:auto;color:#64748b;font-size:0.85rem">' +
+              esc(String(perSub)) +
+              " q</span></li>"
             );
           })
           .join("") +
@@ -1990,6 +2011,17 @@
           });
         };
       }
+      // Refresh admin settings in background so duration/question counts stay correct
+      api
+        .api("/api/v1/cbt/practice/settings", { timeout: 12000, retries: 0, preferXhr: true })
+        .then(function (data) {
+          if (!data || !data.settings) return;
+          saveCachedCbtSettings(data.settings);
+          if (cbtHomeCache) cbtHomeCache.settings = Object.assign({}, cbtHomeCache.settings || {}, data.settings);
+          var nextDur = Number(data.settings.jamb_duration_minutes);
+          if (nextDur && nextDur !== dur) openCbtBoard("JAMB", { skipUnlockModal: true });
+        })
+        .catch(function () {});
       return;
     }
 
@@ -2155,7 +2187,10 @@
     var hasAnyAnswer = Object.keys(answers).length > 0;
     var multi = sections.length > 1;
 
-    var durationMinutes = attempt.duration_minutes || 180;
+    var durationMinutes =
+      attempt.duration_minutes ||
+      Number(cachedCbtSettings().jamb_duration_minutes) ||
+      60;
     var remaining =
       typeof attempt.seconds_left === "number" ? attempt.seconds_left : durationMinutes * 60;
     // Expired resumed attempts used to open with 0s and instantly submit as 0%
