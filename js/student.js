@@ -1316,6 +1316,12 @@
       " · " +
       questions.length +
       " questions";
+    var bar = $("examSectionBar");
+    if (bar) bar.hidden = true;
+    var chooser = $("examSectionChooser");
+    if (chooser) chooser.hidden = true;
+    var body = $("examBody");
+    if (body) body.hidden = false;
     $("exam-screen").classList.add("is-on");
     startExamTimer();
   }
@@ -1401,7 +1407,10 @@
       var q = Exam.current.questions[Exam.current.index];
       Exam.current.answers[q.id] = btn.dataset.optKey;
       renderExamQuestion();
-      if (Exam.current.isPractice) renderPracticeSectionTabs();
+      if (Exam.current.isPractice) {
+        renderPracticeSectionTabs();
+        savePracticeAnswers();
+      }
     });
   }
 
@@ -1638,7 +1647,23 @@
     if (home) home.hidden = false;
     if (board) board.hidden = true;
     if (!list) return;
-    list.innerHTML = loadingHtml("Waking server & loading CBT…");
+
+    // Show exam packages immediately — do not block the UI on a long wake cycle
+    list.innerHTML = ["JAMB", "WAEC", "NECO"]
+      .map(function (boardName) {
+        return (
+          '<button type="button" class="card card-click" data-cbt-board="' +
+          boardName +
+          '" style="text-align:left;cursor:pointer;border:1px solid #e2e8f0;opacity:0.85">' +
+          '<span class="card-tag">' +
+          boardName +
+          '</span><span class="badge">Loading…</span>' +
+          "<h4 style=\"margin:0.5rem 0 0.35rem\">" +
+          boardName +
+          "</h4><p style=\"margin:0;color:#64748b;font-size:0.9rem\">Exam package</p></button>"
+        );
+      })
+      .join("");
 
     function applyHome(data) {
       cbtHomeCache = data || {};
@@ -1646,9 +1671,8 @@
     }
 
     function fallbackHome() {
-      // If practice/home fails, still show JAMB/WAEC/NECO using access + defaults
       return api
-        .api("/api/v1/payments/paystack/cbt-access", { timeout: 60000, retries: 2, preferXhr: true })
+        .api("/api/v1/payments/paystack/cbt-access", { timeout: 25000, retries: 1, preferXhr: true })
         .then(function (access) {
           var boards = (access && access.boards) || [];
           function has(b) {
@@ -1673,22 +1697,15 @@
         });
     }
 
-    var wake =
-      api.wakeServer && typeof api.wakeServer === "function"
-        ? api.wakeServer(60000)
-        : Promise.resolve(null);
+    // Fire-and-forget short wake; do not wait for it before loading home
+    if (api.wakeServer) {
+      try {
+        api.wakeServer(12000);
+      } catch (e) {}
+    }
 
-    wake
-      .catch(function () {
-        return null;
-      })
-      .then(function () {
-        return api.api("/api/v1/cbt/practice/home", {
-          timeout: 90000,
-          retries: 2,
-          preferXhr: true,
-        });
-      })
+    api
+      .api("/api/v1/cbt/practice/home", { timeout: 35000, retries: 1, preferXhr: true })
       .then(applyHome)
       .catch(function (err) {
         fallbackHome()
@@ -1720,8 +1737,8 @@
           : '<span class="badge">Locked</span>';
         var hint =
           board === "JAMB"
-            ? "Combined CBT · pick " + (settings.jamb_subjects_required || 4) + " subjects · one package"
-            : "Practice one subject at a time from your registered list";
+            ? "One combined CBT · your profile subjects · settings from admin"
+            : "Subject practice from your registered profile subjects";
         return (
           '<button type="button" class="card card-click" data-cbt-board="' +
           esc(board) +
@@ -1760,9 +1777,11 @@
     var settings = (cbtHomeCache && cbtHomeCache.settings) || {};
 
     if (!info.has_access) {
-      if (hint) hint.textContent = "Unlock " + board + " with a coupon or Paystack payment, then continue.";
+      if (hint) hint.textContent = "Unlock " + board + " once with a coupon or Paystack. That unlocks the whole package.";
       body.innerHTML =
-        '<p style="margin:0 0 1rem;color:#64748b">This exam type requires a package unlock.</p>' +
+        '<p style="margin:0 0 1rem;color:#64748b">One ' +
+        esc(board) +
+        " package unlocks this CBT. You do not unlock subjects one by one.</p>" +
         '<button type="button" class="btn btn-primary" id="cbtUnlockBoardBtn">Unlock ' +
         esc(board) +
         "</button>";
@@ -1783,107 +1802,72 @@
 
     if (board === "JAMB") {
       var need = settings.jamb_subjects_required || 4;
+      var jambSubs = (profile.jamb_subjects || []).filter(Boolean);
+      var dur = settings.jamb_duration_minutes || 180;
       if (hint) {
         hint.textContent =
-          "Select exactly " + need + " subjects, then start. All subjects run as one CBT with separate sections.";
+          "Your profile subjects become one JAMB CBT. Duration and question counts come from Admin CBT Settings.";
       }
-      var jambSubs = (profile.jamb_subjects && profile.jamb_subjects.length
-        ? profile.jamb_subjects
-        : DEFAULT_JAMB_SUBJECTS
-      ).slice();
+      if (jambSubs.length !== need) {
+        body.innerHTML =
+          '<div class="empty-state"><strong>Set your JAMB subjects in Profile first</strong>' +
+          "<p>CBT needs exactly " +
+          need +
+          " JAMB subjects from your registration/profile. Current: " +
+          jambSubs.length +
+          ".</p>" +
+          '<button type="button" class="btn btn-primary" data-goto="profile">Open Profile</button></div>';
+        return;
+      }
       body.innerHTML =
-        '<div class="card-grid one-col" id="cbtJambSubjectPick" style="gap:0.5rem">' +
+        "<h3 style=\"margin:0 0 0.5rem\">Your Subjects</h3>" +
+        '<p class="muted" style="margin:0 0 1rem">One JAMB CBT · ' +
+        esc(String(dur)) +
+        " minutes (from admin settings)</p>" +
+        '<div class="card-grid one-col" style="gap:0.45rem">' +
         jambSubs
           .map(function (s) {
             return (
-              '<label style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;border:1px solid #e2e8f0;border-radius:10px">' +
-              '<input type="checkbox" class="cbt-jamb-sub" value="' +
+              '<div style="padding:0.7rem 0.9rem;border:1px solid #e2e8f0;border-radius:10px;font-weight:700">' +
               esc(s) +
-              '" /> <span>' +
-              esc(s) +
-              "</span></label>"
+              "</div>"
             );
           })
           .join("") +
         "</div>" +
-        '<label style="display:block;margin-top:1rem"><span style="display:block;font-weight:700;margin-bottom:0.35rem">Start with subject</span>' +
-        '<select id="cbtJambStartSubject" style="width:100%;padding:0.65rem 0.75rem;border:1px solid #e2e8f0;border-radius:10px">' +
-        '<option value="">Select subjects first…</option></select></label>' +
-        '<div class="btn-row" style="margin-top:1rem">' +
+        '<div class="btn-row" style="margin-top:1.1rem">' +
         '<button type="button" class="btn btn-primary" id="cbtStartJambBtn">START CBT</button>' +
         "</div>" +
         '<p id="cbtJambPickMsg" class="form-status" style="margin-top:0.75rem"></p>';
-
-      function refreshJambStartOptions() {
-        var sel = $("cbtJambStartSubject");
-        if (!sel) return;
-        var picked = Array.prototype.slice
-          .call(document.querySelectorAll(".cbt-jamb-sub:checked"))
-          .map(function (el) {
-            return el.value;
-          });
-        var prev = sel.value;
-        if (!picked.length) {
-          sel.innerHTML = '<option value="">Select subjects first…</option>';
-          return;
-        }
-        sel.innerHTML = picked
-          .map(function (s, i) {
-            return (
-              '<option value="' +
-              esc(s) +
-              '"' +
-              (s === prev || (!prev && i === 0) ? " selected" : "") +
-              ">Start with " +
-              esc(s) +
-              "</option>"
-            );
-          })
-          .join("");
-      }
-
-      document.querySelectorAll(".cbt-jamb-sub").forEach(function (cb) {
-        cb.addEventListener("change", refreshJambStartOptions);
-      });
-
       var startJ = $("cbtStartJambBtn");
       if (startJ) {
         startJ.onclick = function () {
-          var picked = Array.prototype.slice
-            .call(document.querySelectorAll(".cbt-jamb-sub:checked"))
-            .map(function (el) {
-              return el.value;
-            });
-          var msg = $("cbtJambPickMsg");
-          var startWith = (($("cbtJambStartSubject") || {}).value || "").trim();
-          if (picked.length !== need) {
-            if (msg) msg.textContent = "Select exactly " + need + " subjects.";
-            return;
-          }
-          if (startWith && picked.indexOf(startWith) >= 0) {
-            picked = [startWith].concat(
-              picked.filter(function (s) {
-                return s !== startWith;
-              })
-            );
-          }
-          startPracticeAttempt("JAMB", picked, startJ);
+          startPracticeAttempt("JAMB", jambSubs.slice(), startJ);
         };
       }
       return;
     }
 
-    // WAEC / NECO — subject list from profile (registered subjects)
-    var registered =
-      board === "WAEC" || board === "NECO"
-        ? profile.ssce_subjects && profile.ssce_subjects.length
-          ? profile.ssce_subjects
-          : DEFAULT_SSCE_SUBJECTS
-        : [];
+    // WAEC / NECO — only profile subjects
+    var registered = (profile.ssce_subjects || []).filter(Boolean);
     if (hint) {
-      hint.textContent = "Choose one of your subjects to practice. Questions and timer come from CBT Settings.";
+      hint.textContent = "Only subjects from your profile. Timer and question count come from Admin CBT Settings.";
     }
+    if (!registered.length) {
+      body.innerHTML =
+        '<div class="empty-state"><strong>No ' +
+        esc(board) +
+        " subjects on your profile</strong>" +
+        "<p>Add your subjects under Profile, then return here.</p>" +
+        '<button type="button" class="btn btn-primary" data-goto="profile">Open Profile</button></div>';
+      return;
+    }
+    var packDur =
+      board === "WAEC" ? settings.waec_duration_minutes || 60 : settings.neco_duration_minutes || 60;
     body.innerHTML =
+      '<p class="muted" style="margin:0 0 0.85rem">Pick one subject to practice · ' +
+      esc(String(packDur)) +
+      " min (admin settings)</p>" +
       '<div class="card-grid" id="cbtSubjectCards">' +
       registered
         .map(function (s) {
@@ -1943,23 +1927,26 @@
     }
     var sections = attempt.sections || [];
     var idx = Math.min(attempt.section_index || 0, Math.max(0, sections.length - 1));
-    var section = sections[idx] || sections[0];
-    var questions = sectionQuestions(section);
-    if (!questions.length) {
-      alert("No questions were generated for this attempt. Ask admin to upload more bank questions.");
-      return;
-    }
+    var answers = Object.assign({}, attempt.answers || {});
+    try {
+      var cached = JSON.parse(localStorage.getItem("sia_cbt_attempt_" + attempt.attempt_id) || "null");
+      if (cached && cached.answers) Object.assign(answers, cached.answers);
+    } catch (e) {}
+    var hasAnyAnswer = Object.keys(answers).length > 0;
+    var multi = sections.length > 1;
+
     Exam.current = {
       practiceAttemptId: attempt.attempt_id,
       examId: attempt.attempt_id,
-      title: (attempt.exam_type || "CBT") + " · " + ((section && section.subject) || "Practice"),
+      title: (attempt.exam_type || "CBT") + " CBT",
       examType: attempt.exam_type,
       sections: sections,
       sectionIndex: idx,
-      questions: questions,
-      answers: Object.assign({}, attempt.answers || {}),
+      questions: [],
+      answers: answers,
       sessionId: null,
       isPractice: true,
+      awaitingSectionPick: multi && !hasAnyAnswer,
       isExternal: false,
       isSchool: false,
       index: 0,
@@ -1969,13 +1956,98 @@
           : (attempt.duration_minutes || 60) * 60,
       timerId: null,
     };
-    renderPracticeSectionTabs();
-    renderExamNav();
-    renderExamQuestion();
+
     $("examTitle").textContent = Exam.current.title;
     updatePracticeExamSub();
     $("exam-screen").classList.add("is-on");
     startExamTimer();
+
+    if (Exam.current.awaitingSectionPick) {
+      showPracticeSectionChooser();
+    } else {
+      enterPracticeSection(idx, true);
+    }
+  }
+
+  function setPracticeQuestionView(showQuestions) {
+    var chooser = $("examSectionChooser");
+    var body = $("examBody");
+    if (chooser) chooser.hidden = !!showQuestions;
+    if (body) body.hidden = !showQuestions;
+  }
+
+  function showPracticeSectionChooser() {
+    var st = Exam.current;
+    if (!st || !st.isPractice) return;
+    st.awaitingSectionPick = true;
+    st.questions = [];
+    setPracticeQuestionView(false);
+    renderPracticeSectionTabs();
+    var title = $("examChooserTitle");
+    var hint = $("examChooserHint");
+    var grid = $("examChooserGrid");
+    if (title) title.textContent = (st.examType || "CBT") + " — Choose where to start";
+    if (hint) {
+      hint.textContent =
+        "Subjects stay separate. Pick any section. Progress is saved automatically.";
+    }
+    if (!grid) return;
+    grid.innerHTML = (st.sections || [])
+      .map(function (sec, i) {
+        var answered = 0;
+        (sec.questions || []).forEach(function (q) {
+          if (st.answers[String(q.id)]) answered += 1;
+        });
+        var total = (sec.questions || []).length;
+        var done = !!sec.completed || (total > 0 && answered === total);
+        return (
+          '<button type="button" class="exam-section-chooser-btn' +
+          (done ? " is-done" : "") +
+          '" data-practice-section="' +
+          i +
+          '"><span>' +
+          (done ? "✓ " : "") +
+          esc(sec.subject || "Subject " + (i + 1)) +
+          '</span><span class="meta">' +
+          answered +
+          " / " +
+          total +
+          (done ? " completed" : " answered") +
+          "</span></button>"
+        );
+      })
+      .join("");
+    if ($("examSub")) {
+      $("examSub").textContent =
+        (st.examType || "CBT") + " · Choose a subject · Timer from admin settings";
+    }
+  }
+
+  function enterPracticeSection(nextIndex, skipSave) {
+    var st = Exam.current;
+    if (!st || !st.isPractice) return;
+    var sections = st.sections || [];
+    nextIndex = parseInt(nextIndex, 10);
+    if (isNaN(nextIndex) || nextIndex < 0 || nextIndex >= sections.length) return;
+
+    function apply() {
+      st.awaitingSectionPick = false;
+      st.sectionIndex = nextIndex;
+      var next = sections[nextIndex];
+      st.questions = sectionQuestions(next);
+      st.index = 0;
+      st.title = (st.examType || "CBT") + " · " + ((next && next.subject) || "Practice");
+      if ($("examTitle")) $("examTitle").textContent = st.title;
+      setPracticeQuestionView(true);
+      updatePracticeExamSub();
+      renderPracticeSectionTabs();
+      renderExamNav();
+      renderExamQuestion();
+      savePracticeAnswers();
+    }
+
+    if (skipSave) apply();
+    else savePracticeAnswers(apply);
   }
 
   function renderPracticeSectionTabs() {
@@ -1989,7 +2061,7 @@
       return;
     }
     bar.hidden = false;
-    tabs.innerHTML = st.sections
+    var html = st.sections
       .map(function (sec, i) {
         var answered = 0;
         (sec.questions || []).forEach(function (q) {
@@ -1997,7 +2069,7 @@
         });
         var total = (sec.questions || []).length;
         var cls = "exam-section-tab";
-        if (i === st.sectionIndex) cls += " is-active";
+        if (!st.awaitingSectionPick && i === st.sectionIndex) cls += " is-active";
         if (sec.completed || (total && answered === total)) cls += " is-done";
         return (
           '<button type="button" class="' +
@@ -2011,35 +2083,32 @@
         );
       })
       .join("");
+    html +=
+      '<button type="button" class="exam-section-tab" id="examShowChooserBtn" style="margin-left:0.25rem">All subjects</button>';
+    tabs.innerHTML = html;
+    var allBtn = $("examShowChooserBtn");
+    if (allBtn) {
+      allBtn.onclick = function () {
+        showPracticeSectionChooser();
+      };
+    }
   }
 
   function switchPracticeSection(nextIndex) {
-    var st = Exam.current;
-    if (!st || !st.isPractice) return;
-    var sections = st.sections || [];
-    nextIndex = parseInt(nextIndex, 10);
-    if (isNaN(nextIndex) || nextIndex < 0 || nextIndex >= sections.length) return;
-    if (nextIndex === st.sectionIndex) return;
-    savePracticeAnswers(function () {
-      st.sectionIndex = nextIndex;
-      var next = sections[nextIndex];
-      st.questions = sectionQuestions(next);
-      st.index = 0;
-      st.title = (st.examType || "CBT") + " · " + ((next && next.subject) || "Practice");
-      if ($("examTitle")) $("examTitle").textContent = st.title;
-      updatePracticeExamSub();
-      renderPracticeSectionTabs();
-      renderExamNav();
-      renderExamQuestion();
-      savePracticeAnswers();
-    });
+    enterPracticeSection(nextIndex, false);
   }
 
   function updatePracticeExamSub() {
     var st = Exam.current;
     if (!st || !$("examSub")) return;
+    if (st.awaitingSectionPick) {
+      $("examSub").textContent =
+        (st.examType || "CBT") + " · Choose a subject · Timer from admin settings";
+      renderPracticeSectionTabs();
+      return;
+    }
     var sec = (st.sections && st.sections[st.sectionIndex]) || {};
-    var parts =
+    $("examSub").textContent =
       (st.examType || "CBT") +
       " · Section " +
       (st.sectionIndex + 1) +
@@ -2050,7 +2119,6 @@
       " · " +
       st.questions.length +
       " questions";
-    $("examSub").textContent = parts;
     renderPracticeSectionTabs();
   }
 
@@ -2060,10 +2128,24 @@
       if (done) done();
       return;
     }
+    // Keep a local copy for poor networks
+    try {
+      localStorage.setItem(
+        "sia_cbt_attempt_" + st.practiceAttemptId,
+        JSON.stringify({
+          answers: st.answers,
+          section_index: st.sectionIndex,
+          saved_at: Date.now(),
+        })
+      );
+    } catch (e) {}
     api
       .api("/api/v1/cbt/practice/attempts/" + st.practiceAttemptId + "/answers", {
         method: "POST",
         body: { answers: st.answers, section_index: st.sectionIndex },
+        preferXhr: true,
+        retries: 1,
+        timeout: 20000,
       })
       .then(function () {
         if (done) done();
@@ -2080,28 +2162,14 @@
     sections[st.sectionIndex].completed = true;
     renderPracticeSectionTabs();
 
-    // Prefer any remaining incomplete section so student can pick freely
-    var nextIdx = -1;
-    for (var i = 0; i < sections.length; i++) {
-      if (i === st.sectionIndex) continue;
-      if (!sections[i].completed) {
-        nextIdx = i;
-        break;
-      }
-    }
-    if (nextIdx >= 0) {
-      if (
-        !confirm(
-          "Leave " +
-            ((sections[st.sectionIndex] && sections[st.sectionIndex].subject) || "this section") +
-            " and open " +
-            ((sections[nextIdx] && sections[nextIdx].subject) || "the next subject") +
-            "? You can also tap any subject tab above."
-        )
-      ) {
-        return;
-      }
-      switchPracticeSection(nextIdx);
+    var remaining = sections.filter(function (sec, i) {
+      return i !== st.sectionIndex && !sec.completed;
+    }).length;
+
+    if (remaining > 0) {
+      savePracticeAnswers(function () {
+        showPracticeSectionChooser();
+      });
       return;
     }
     confirmSubmitExam();

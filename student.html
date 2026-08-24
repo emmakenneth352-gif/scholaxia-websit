@@ -6,7 +6,7 @@
     <title>Scholaxia — Student</title>
     <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/app.css?v=13" />
+    <link rel="stylesheet" href="css/app.css?v=14" />
     <link rel="stylesheet" href="css/student-pretty.css?v=20260815c" />
   </head>
   <body class="app-body student-shell">
@@ -688,7 +688,14 @@
         <span class="exam-section-label">Subjects</span>
         <div class="exam-section-tabs" id="examSectionTabs"></div>
       </div>
-      <div class="exam-body">
+      <div class="exam-section-chooser" id="examSectionChooser" hidden>
+        <div class="exam-section-chooser-card">
+          <h3 id="examChooserTitle">Choose where to start</h3>
+          <p class="muted" id="examChooserHint">Pick a subject section. Questions stay separate by subject.</p>
+          <div class="exam-section-chooser-grid" id="examChooserGrid"></div>
+        </div>
+      </div>
+      <div class="exam-body" id="examBody">
         <aside class="exam-nav">
           <p class="exam-nav-label">Questions</p>
           <div class="exam-nav-grid" id="examQuestionNav"></div>
@@ -734,8 +741,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260824b"></script>
+    <script src="js/api.js?v=20260824c"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260824b"></script>
+    <script src="js/student.js?v=20260824c"></script>
   </body>
 </html>

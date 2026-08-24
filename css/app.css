@@ -1234,6 +1234,69 @@ button { font: inherit; cursor: pointer; border: 0; background: none; color: inh
   color: #fff;
 }
 
+.exam-section-chooser {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: #f3f4f6;
+}
+
+.exam-section-chooser[hidden] { display: none !important; }
+
+.exam-section-chooser-card {
+  width: min(720px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  padding: 1.4rem 1.5rem 1.6rem;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+}
+
+.exam-section-chooser-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+}
+
+.exam-section-chooser-grid {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.exam-section-chooser-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  cursor: pointer;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.exam-section-chooser-btn:hover {
+  border-color: #c4b5fd;
+  background: #faf5ff;
+}
+
+.exam-section-chooser-btn .meta {
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #64748b;
+}
+
+.exam-section-chooser-btn.is-done {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
 .exam-body {
   flex: 1;
   display: grid;
