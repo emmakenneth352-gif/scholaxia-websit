@@ -2153,17 +2153,18 @@
     }
 
     var finished = false;
+    // Soft notice only — do not abort or re-enable Start while the request is still running
     var watchdog = setTimeout(function () {
       if (finished) return;
-      resetStartBtn();
-      setStartStatus("Server is slow. Tap Start again — your package is already unlocked.", false);
-    }, 28000);
+      setStartStatus("Still building on the server… keep this page open.", true);
+      if (btn) btn.textContent = "Still starting…";
+    }, 20000);
 
     api
       .api("/api/v1/cbt/practice/start", {
         method: "POST",
         body: { exam_type: examType, subjects: subjects },
-        timeout: 45000,
+        timeout: 90000,
         retries: 0,
         preferXhr: true,
       })
@@ -2220,7 +2221,7 @@
     }
     var totalQs = 0;
     sections.forEach(function (sec) {
-      totalQs += ((sec && sec.questions) || []).length;
+      totalQs += Number(sec && sec.total) || ((sec && sec.questions) || []).length || 0;
     });
     if (!totalQs) {
       alert("No questions were loaded for this exam. Ask admin to upload JAMB practice questions.");
@@ -2322,8 +2323,8 @@
         (sec.questions || []).forEach(function (q) {
           if (st.answers[String(q.id)]) answered += 1;
         });
-        var total = (sec.questions || []).length;
-        var done = !!sec.completed || (total > 0 && answered === total);
+        var total = Number(sec.total) || (sec.questions || []).length || 0;
+        var done = !!sec.completed || (total > 0 && answered === total && (sec.questions || []).length > 0);
         return (
           '<button type="button" class="exam-section-chooser-btn' +
           (done ? " is-done" : "") +
@@ -2370,8 +2371,56 @@
       savePracticeAnswers();
     }
 
-    if (skipSave) apply();
-    else savePracticeAnswers(apply);
+    function ensureQuestionsThenApply() {
+      var next = sections[nextIndex];
+      var hasQs = next && next.questions && next.questions.length;
+      if (hasQs) {
+        apply();
+        return;
+      }
+      if (!st.practiceAttemptId) {
+        alert("Could not load this subject. Tap Start again.");
+        return;
+      }
+      var body = $("examBody");
+      var chooser = $("examSectionChooser");
+      if (chooser) chooser.hidden = true;
+      if (body) {
+        body.hidden = false;
+        body.innerHTML =
+          '<p class="muted" style="padding:1.5rem;text-align:center">Loading ' +
+          esc((next && next.subject) || "subject") +
+          "…</p>";
+      }
+      if ($("examSub")) {
+        $("examSub").textContent = "Loading questions…";
+      }
+      api
+        .api(
+          "/api/v1/cbt/practice/attempts/" +
+            encodeURIComponent(st.practiceAttemptId) +
+            "/sections/" +
+            nextIndex,
+          { timeout: 60000, retries: 1, preferXhr: true }
+        )
+        .then(function (sec) {
+          if (!sec || !(sec.questions || []).length) {
+            throw new Error("No questions for " + ((next && next.subject) || "this subject"));
+          }
+          sections[nextIndex] = sec;
+          st.sections = sections;
+          apply();
+        })
+        .catch(function (err) {
+          if (chooser) chooser.hidden = false;
+          if (body) body.hidden = true;
+          alert(errMsg(err) || "Could not load subject questions. Try again.");
+          showPracticeSectionChooser();
+        });
+    }
+
+    if (skipSave) ensureQuestionsThenApply();
+    else savePracticeAnswers(ensureQuestionsThenApply);
   }
 
   function renderPracticeSectionTabs() {
@@ -2391,10 +2440,10 @@
         (sec.questions || []).forEach(function (q) {
           if (st.answers[String(q.id)]) answered += 1;
         });
-        var total = (sec.questions || []).length;
+        var total = Number(sec.total) || (sec.questions || []).length || 0;
         var cls = "exam-section-tab";
         if (!st.awaitingSectionPick && i === st.sectionIndex) cls += " is-active";
-        if (sec.completed || (total && answered === total)) cls += " is-done";
+        if (sec.completed || (total && answered === total && (sec.questions || []).length)) cls += " is-done";
         return (
           '<button type="button" class="' +
           cls +
