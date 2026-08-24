@@ -1806,6 +1806,46 @@
       .join("");
   }
 
+  function boardHasAccess(board) {
+    var types = (cbtHomeCache && cbtHomeCache.exam_types) || [];
+    var info = types.find(function (t) {
+      return t.exam_type === board;
+    });
+    return !!(info && info.has_access);
+  }
+
+  function markBoardUnlockedLocally(board) {
+    try {
+      sessionStorage.setItem("sia_cbt_just_unlocked", String(Date.now()));
+      sessionStorage.setItem("sia_cbt_package_id", String(board).toLowerCase());
+    } catch (e) {}
+    cbtHomeCache = mergeCbtHome(
+      Object.assign({}, cbtHomeCache || {}, {
+        exam_types: ["JAMB", "WAEC", "NECO"].map(function (b) {
+          var prev = ((cbtHomeCache && cbtHomeCache.exam_types) || []).find(function (t) {
+            return t.exam_type === b;
+          });
+          return {
+            exam_type: b,
+            has_access: b === board || !!(prev && prev.has_access),
+            package_id: b.toLowerCase(),
+          };
+        }),
+      })
+    );
+  }
+
+  function ensureBoardUnlockedThen(board, run) {
+    if (boardHasAccess(board)) {
+      run();
+      return;
+    }
+    openCbtUnlockModal(function () {
+      markBoardUnlockedLocally(board);
+      run();
+    });
+  }
+
   function openCbtBoard(board, opts) {
     opts = opts || {};
     cbtSelectedBoard = board;
@@ -1827,47 +1867,7 @@
     }) || { has_access: false };
     var profile = Object.assign({}, localProfileSubjects(), (cbtHomeCache && cbtHomeCache.profile) || {});
     var settings = (cbtHomeCache && cbtHomeCache.settings) || {};
-
-    if (!info.has_access) {
-      if (hint) hint.textContent = "Unlock " + board + " once with a coupon or Paystack, then start the exam.";
-      body.innerHTML =
-        '<p style="margin:0 0 1rem;color:#64748b">One ' +
-        esc(board) +
-        " package unlocks this CBT. Choose <strong>coupon</strong> or <strong>pay</strong> to continue.</p>" +
-        '<button type="button" class="btn btn-primary" id="cbtUnlockBoardBtn">Unlock with coupon or pay</button>';
-      var unlockBtn = $("cbtUnlockBoardBtn");
-      function doUnlock() {
-        openCbtUnlockModal(function () {
-          try {
-            sessionStorage.setItem("sia_cbt_just_unlocked", String(Date.now()));
-          } catch (e) {}
-          // Mark this board unlocked locally so START CBT can show right away
-          cbtHomeCache = mergeCbtHome(
-            Object.assign({}, cbtHomeCache || {}, {
-              exam_types: ["JAMB", "WAEC", "NECO"].map(function (b) {
-                var prev = ((cbtHomeCache && cbtHomeCache.exam_types) || []).find(function (t) {
-                  return t.exam_type === b;
-                });
-                return {
-                  exam_type: b,
-                  has_access: b === board || !!(prev && prev.has_access),
-                  package_id: b.toLowerCase(),
-                };
-              }),
-            })
-          );
-          loadedPages.cbt = false;
-          loadCbt();
-          setTimeout(function () {
-            openCbtBoard(board, { skipUnlockModal: true });
-          }, 350);
-        });
-      }
-      if (unlockBtn) unlockBtn.onclick = doUnlock;
-      // Clicking JAMB/WAEC/NECO should ask for payment or coupon immediately
-      if (!opts.skipUnlockModal) doUnlock();
-      return;
-    }
+    var unlocked = !!info.has_access;
 
     if (board === "JAMB") {
       var need = settings.jamb_subjects_required || 4;
@@ -1878,8 +1878,9 @@
       }
       var dur = settings.jamb_duration_minutes || 180;
       if (hint) {
-        hint.textContent =
-          "Your profile subjects become one JAMB CBT. Duration and question counts come from Admin CBT Settings.";
+        hint.textContent = unlocked
+          ? "Your saved subjects. Tap START CBT to begin."
+          : "Preview your saved exam first. Pay or use a coupon only when you tap START CBT.";
       }
       if (jambSubs.length !== need) {
         body.innerHTML =
@@ -1894,9 +1895,12 @@
       }
       body.innerHTML =
         "<h3 style=\"margin:0 0 0.5rem\">Your Subjects</h3>" +
-        '<p class="muted" style="margin:0 0 1rem">One JAMB CBT · ' +
+        '<p class="muted" style="margin:0 0 0.75rem">One JAMB CBT · ' +
         esc(String(dur)) +
-        " minutes (from admin settings)</p>" +
+        " minutes</p>" +
+        (unlocked
+          ? ""
+          : '<p style="margin:0 0 1rem;padding:0.75rem 0.9rem;border-radius:10px;background:#f5f3ff;color:#4c1d95;font-size:0.92rem">You can review this exam now. When you start, you will unlock with a <strong>coupon</strong> or <strong>Paystack</strong>.</p>') +
         '<div class="card-grid one-col" style="gap:0.45rem">' +
         jambSubs
           .map(function (s) {
@@ -1909,26 +1913,32 @@
           .join("") +
         "</div>" +
         '<div class="btn-row" style="margin-top:1.1rem">' +
-        '<button type="button" class="btn btn-primary" id="cbtStartJambBtn">START CBT</button>' +
+        '<button type="button" class="btn btn-primary" id="cbtStartJambBtn">' +
+        (unlocked ? "START CBT" : "START CBT (coupon or pay)") +
+        "</button>" +
         "</div>" +
         '<p id="cbtJambPickMsg" class="form-status" style="margin-top:0.75rem"></p>';
       var startJ = $("cbtStartJambBtn");
       if (startJ) {
         startJ.onclick = function () {
-          startPracticeAttempt("JAMB", jambSubs.slice(), startJ);
+          ensureBoardUnlockedThen(board, function () {
+            startPracticeAttempt("JAMB", jambSubs.slice(), startJ);
+          });
         };
       }
       return;
     }
 
-    // WAEC / NECO — only profile subjects
+    // WAEC / NECO — show saved subjects first; gate on START
     var registered = (profile.ssce_subjects || []).filter(Boolean);
     if (!registered.length) {
       var localSsce = readLocalJson("sia_ssce_subjects", null) || readLocalJson("sia_subjects", []);
       if (Array.isArray(localSsce) && localSsce.length) registered = localSsce.slice();
     }
     if (hint) {
-      hint.textContent = "Only subjects from your profile. Timer and question count come from Admin CBT Settings.";
+      hint.textContent = unlocked
+        ? "Pick a subject and start."
+        : "Preview your saved subjects. Pay or use a coupon only when you tap START CBT.";
     }
     if (!registered.length) {
       body.innerHTML =
@@ -1942,9 +1952,12 @@
     var packDur =
       board === "WAEC" ? settings.waec_duration_minutes || 60 : settings.neco_duration_minutes || 60;
     body.innerHTML =
+      (unlocked
+        ? ""
+        : '<p style="margin:0 0 0.85rem;padding:0.75rem 0.9rem;border-radius:10px;background:#f5f3ff;color:#4c1d95;font-size:0.92rem">Review your subjects first. Unlock with coupon or pay when you start.</p>') +
       '<p class="muted" style="margin:0 0 0.85rem">Pick one subject to practice · ' +
       esc(String(packDur)) +
-      " min (admin settings)</p>" +
+      " min</p>" +
       '<div class="card-grid" id="cbtSubjectCards">' +
       registered
         .map(function (s) {
@@ -1956,7 +1969,9 @@
             "</h4>" +
             '<div class="card-foot"><button type="button" class="btn btn-primary btn-mini" data-cbt-start-subject="' +
             esc(s) +
-            '">START CBT</button></div></div>'
+            '">' +
+            (unlocked ? "START CBT" : "START (pay/coupon)") +
+            "</button></div></div>"
           );
         })
         .join("") +
@@ -2265,7 +2280,11 @@
     }
     var subBtn = e.target.closest("[data-cbt-start-subject]");
     if (subBtn) {
-      startPracticeAttempt(cbtSelectedBoard, [subBtn.getAttribute("data-cbt-start-subject")], subBtn);
+      var subject = subBtn.getAttribute("data-cbt-start-subject");
+      var board = cbtSelectedBoard || "WAEC";
+      ensureBoardUnlockedThen(board, function () {
+        startPracticeAttempt(board, [subject], subBtn);
+      });
     }
   });
 
