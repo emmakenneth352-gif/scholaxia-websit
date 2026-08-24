@@ -2043,41 +2043,74 @@
   }
 
   function startPracticeAttempt(examType, subjects, btn) {
+    var statusEl = $("cbtJambPickMsg");
+    function setStartStatus(msg, ok) {
+      if (!statusEl) return;
+      statusEl.className = "form-status" + (msg ? (ok ? " ok" : " err") : "");
+      statusEl.textContent = msg || "";
+    }
+    function resetStartBtn() {
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = btn.getAttribute("data-start-label") || "Start this JAMB exam";
+    }
     if (btn) {
+      if (!btn.getAttribute("data-start-label")) {
+        btn.setAttribute("data-start-label", btn.textContent || "Start this JAMB exam");
+      }
       btn.disabled = true;
       btn.textContent = "Starting…";
     }
+    setStartStatus("Connecting to server…", true);
+
     // Close any leftover result overlay from a previous broken attempt
     try {
       if ($("result-screen")) $("result-screen").classList.remove("is-on");
       if ($("exam-screen")) $("exam-screen").classList.remove("is-on");
     } catch (e0) {}
-    api
-      .api("/api/v1/cbt/practice/start", {
-        method: "POST",
-        body: { exam_type: examType, subjects: subjects },
-        timeout: 90000,
-        retries: 1,
+
+    var watchdog = setTimeout(function () {
+      resetStartBtn();
+      setStartStatus("Still waiting on the server. Tap Start again in a few seconds.", false);
+    }, 55000);
+
+    var wake = Promise.resolve();
+    if (api.wakeServer) {
+      wake = api.wakeServer(20000).catch(function () {
+        return null;
+      });
+    }
+
+    wake
+      .then(function () {
+        setStartStatus("Building your " + (examType || "CBT") + " paper…", true);
+        return api.api("/api/v1/cbt/practice/start", {
+          method: "POST",
+          body: { exam_type: examType, subjects: subjects },
+          timeout: 50000,
+          retries: 0,
+          preferXhr: true,
+        });
       })
       .then(function (attempt) {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "START CBT";
-        }
+        clearTimeout(watchdog);
+        resetStartBtn();
+        setStartStatus("", true);
         openPracticeAttempt(attempt);
       })
       .catch(function (err) {
-        if (btn) {
-          btn.disabled = false;
-          btn.textContent = "START CBT";
-        }
+        clearTimeout(watchdog);
+        resetStartBtn();
         if (isCbtPackageError(err)) {
+          setStartStatus("Unlock required — use coupon or pay, then start again.", false);
           openCbtUnlockModal(function () {
             startPracticeAttempt(examType, subjects, btn);
           });
           return;
         }
-        alert(errMsg(err) || "Could not start CBT. Try again.");
+        var msg = errMsg(err) || "Could not start CBT. Try again.";
+        setStartStatus(msg, false);
+        alert(msg);
       });
   }
 

@@ -302,7 +302,7 @@
     // Prefer XHR for flaky browser fetch (CBT, profile save, payments)
     var preferXhr =
       !!options.preferXhr ||
-      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
+      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/cbt\/practice\/start$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
         path
       );
     if (preferXhr) {
