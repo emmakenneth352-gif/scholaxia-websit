@@ -1640,6 +1640,88 @@
     "Financial Accounting",
   ];
 
+  function localProfileSubjects() {
+    var examType = (localStorage.getItem("sia_exam_type") || "").toUpperCase();
+    var jamb = readLocalJson("sia_jamb_subjects", null) || [];
+    var ssce = readLocalJson("sia_ssce_subjects", null) || [];
+    var any = readLocalJson("sia_subjects", []) || [];
+    if ((!jamb || !jamb.length) && examType === "JAMB" && any.length) jamb = any.slice();
+    if ((!ssce || !ssce.length) && (examType === "WAEC" || examType === "NECO") && any.length) {
+      ssce = any.slice();
+    }
+    return {
+      jamb_subjects: Array.isArray(jamb) ? jamb.filter(Boolean) : [],
+      ssce_subjects: Array.isArray(ssce) ? ssce.filter(Boolean) : [],
+      ssce_exam_type: examType === "NECO" ? "NECO" : "WAEC",
+    };
+  }
+
+  function defaultCbtHome(accessBoards) {
+    var boards = accessBoards || [];
+    function has(b) {
+      return boards.indexOf(b) >= 0;
+    }
+    // Treat a very recent coupon redeem as unlocked on this device
+    try {
+      var justAt = Number(sessionStorage.getItem("sia_cbt_just_unlocked") || 0);
+      var pkg = String(sessionStorage.getItem("sia_cbt_package_id") || "").toLowerCase();
+      if (justAt && Date.now() - justAt < 24 * 60 * 60 * 1000) {
+        ["jamb", "waec", "neco"].forEach(function (id) {
+          if (pkg === id || pkg.indexOf(id) >= 0) {
+            var name = id.toUpperCase();
+            if (boards.indexOf(name) < 0) boards.push(name);
+          }
+        });
+        if (!pkg && boards.indexOf("JAMB") < 0) boards.push("JAMB", "WAEC", "NECO");
+      }
+    } catch (e) {}
+    return {
+      settings: {
+        cbt_enabled: true,
+        jamb_subjects_required: 4,
+        jamb_duration_minutes: 180,
+        waec_duration_minutes: 60,
+        neco_duration_minutes: 60,
+      },
+      exam_types: [
+        { exam_type: "JAMB", has_access: has("JAMB"), package_id: "jamb" },
+        { exam_type: "WAEC", has_access: has("WAEC"), package_id: "waec" },
+        { exam_type: "NECO", has_access: has("NECO"), package_id: "neco" },
+      ],
+      profile: localProfileSubjects(),
+      _local: true,
+    };
+  }
+
+  function mergeCbtHome(data) {
+    var base = defaultCbtHome();
+    var incoming = data || {};
+    var local = localProfileSubjects();
+    var profile = Object.assign({}, base.profile, incoming.profile || {});
+    if (!(profile.jamb_subjects && profile.jamb_subjects.length) && local.jamb_subjects.length) {
+      profile.jamb_subjects = local.jamb_subjects.slice();
+    }
+    if (!(profile.ssce_subjects && profile.ssce_subjects.length) && local.ssce_subjects.length) {
+      profile.ssce_subjects = local.ssce_subjects.slice();
+    }
+    var types = (incoming.exam_types && incoming.exam_types.length
+      ? incoming.exam_types
+      : base.exam_types
+    ).map(function (t) {
+      var localT = (base.exam_types || []).find(function (x) {
+        return x.exam_type === t.exam_type;
+      });
+      return Object.assign({}, t, {
+        has_access: !!(t.has_access || (localT && localT.has_access)),
+      });
+    });
+    return {
+      settings: Object.assign({}, base.settings, incoming.settings || {}),
+      exam_types: types,
+      profile: profile,
+    };
+  }
+
   function loadCbt() {
     var list = $("cbtExamTypeList");
     var home = $("cbtHomePanel");
@@ -1648,56 +1730,22 @@
     if (board) board.hidden = true;
     if (!list) return;
 
-    // Show exam packages immediately — do not block the UI on a long wake cycle
-    list.innerHTML = ["JAMB", "WAEC", "NECO"]
-      .map(function (boardName) {
-        return (
-          '<button type="button" class="card card-click" data-cbt-board="' +
-          boardName +
-          '" style="text-align:left;cursor:pointer;border:1px solid #e2e8f0;opacity:0.85">' +
-          '<span class="card-tag">' +
-          boardName +
-          '</span><span class="badge">Loading…</span>' +
-          "<h4 style=\"margin:0.5rem 0 0.35rem\">" +
-          boardName +
-          "</h4><p style=\"margin:0;color:#64748b;font-size:0.9rem\">Exam package</p></button>"
-        );
-      })
-      .join("");
-
     function applyHome(data) {
-      cbtHomeCache = data || {};
+      cbtHomeCache = mergeCbtHome(data);
       renderCbtExamTypes();
     }
 
+    // Never leave cards stuck on "Loading…" — show Locked packages immediately
+    applyHome(defaultCbtHome());
+
     function fallbackHome() {
       return api
-        .api("/api/v1/payments/paystack/cbt-access", { timeout: 25000, retries: 1, preferXhr: true })
+        .api("/api/v1/payments/paystack/cbt-access", { timeout: 12000, retries: 0, preferXhr: true })
         .then(function (access) {
-          var boards = (access && access.boards) || [];
-          function has(b) {
-            return boards.indexOf(b) >= 0;
-          }
-          return {
-            settings: {
-              cbt_enabled: true,
-              jamb_subjects_required: 4,
-              jamb_duration_minutes: 180,
-              waec_duration_minutes: 60,
-              neco_duration_minutes: 60,
-            },
-            exam_types: [
-              { exam_type: "JAMB", has_access: has("JAMB"), package_id: "jamb" },
-              { exam_type: "WAEC", has_access: has("WAEC"), package_id: "waec" },
-              { exam_type: "NECO", has_access: has("NECO"), package_id: "neco" },
-            ],
-            profile: { jamb_subjects: [], ssce_subjects: [], ssce_exam_type: "WAEC" },
-            _fallback: true,
-          };
+          return defaultCbtHome((access && access.boards) || []);
         });
     }
 
-    // Fire-and-forget short wake; do not wait for it before loading home
     if (api.wakeServer) {
       try {
         api.wakeServer(12000);
@@ -1705,13 +1753,14 @@
     }
 
     api
-      .api("/api/v1/cbt/practice/home", { timeout: 35000, retries: 1, preferXhr: true })
+      .api("/api/v1/cbt/practice/home", { timeout: 18000, retries: 0, preferXhr: true })
       .then(applyHome)
-      .catch(function (err) {
+      .catch(function () {
         fallbackHome()
           .then(applyHome)
           .catch(function () {
-            list.innerHTML = errorHtml(errMsg(err), "cbt");
+            // Keep the local Locked cards — user can still tap JAMB → coupon/pay
+            applyHome(defaultCbtHome());
           });
       });
   }
@@ -1757,8 +1806,11 @@
       .join("");
   }
 
-  function openCbtBoard(board) {
+  function openCbtBoard(board, opts) {
+    opts = opts || {};
     cbtSelectedBoard = board;
+    if (!cbtHomeCache) cbtHomeCache = defaultCbtHome();
+
     var home = $("cbtHomePanel");
     var panel = $("cbtBoardPanel");
     var body = $("cbtBoardBody");
@@ -1773,30 +1825,47 @@
     var info = types.find(function (t) {
       return t.exam_type === board;
     }) || { has_access: false };
-    var profile = (cbtHomeCache && cbtHomeCache.profile) || {};
+    var profile = Object.assign({}, localProfileSubjects(), (cbtHomeCache && cbtHomeCache.profile) || {});
     var settings = (cbtHomeCache && cbtHomeCache.settings) || {};
 
     if (!info.has_access) {
-      if (hint) hint.textContent = "Unlock " + board + " once with a coupon or Paystack. That unlocks the whole package.";
+      if (hint) hint.textContent = "Unlock " + board + " once with a coupon or Paystack, then start the exam.";
       body.innerHTML =
         '<p style="margin:0 0 1rem;color:#64748b">One ' +
         esc(board) +
-        " package unlocks this CBT. You do not unlock subjects one by one.</p>" +
-        '<button type="button" class="btn btn-primary" id="cbtUnlockBoardBtn">Unlock ' +
-        esc(board) +
-        "</button>";
+        " package unlocks this CBT. Choose <strong>coupon</strong> or <strong>pay</strong> to continue.</p>" +
+        '<button type="button" class="btn btn-primary" id="cbtUnlockBoardBtn">Unlock with coupon or pay</button>';
       var unlockBtn = $("cbtUnlockBoardBtn");
-      if (unlockBtn) {
-        unlockBtn.onclick = function () {
-          openCbtUnlockModal(function () {
-            loadedPages.cbt = false;
-            loadCbt();
-            setTimeout(function () {
-              openCbtBoard(board);
-            }, 400);
-          });
-        };
+      function doUnlock() {
+        openCbtUnlockModal(function () {
+          try {
+            sessionStorage.setItem("sia_cbt_just_unlocked", String(Date.now()));
+          } catch (e) {}
+          // Mark this board unlocked locally so START CBT can show right away
+          cbtHomeCache = mergeCbtHome(
+            Object.assign({}, cbtHomeCache || {}, {
+              exam_types: ["JAMB", "WAEC", "NECO"].map(function (b) {
+                var prev = ((cbtHomeCache && cbtHomeCache.exam_types) || []).find(function (t) {
+                  return t.exam_type === b;
+                });
+                return {
+                  exam_type: b,
+                  has_access: b === board || !!(prev && prev.has_access),
+                  package_id: b.toLowerCase(),
+                };
+              }),
+            })
+          );
+          loadedPages.cbt = false;
+          loadCbt();
+          setTimeout(function () {
+            openCbtBoard(board, { skipUnlockModal: true });
+          }, 350);
+        });
       }
+      if (unlockBtn) unlockBtn.onclick = doUnlock;
+      // Clicking JAMB/WAEC/NECO should ask for payment or coupon immediately
+      if (!opts.skipUnlockModal) doUnlock();
       return;
     }
 
