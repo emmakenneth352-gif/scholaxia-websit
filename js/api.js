@@ -12,22 +12,43 @@
   }
 
   async function readHealth(ms) {
-    var t = fetchTimeout(ms || 45000);
+    var timeout = ms || 45000;
+    // XHR first — more reliable than fetch on some mobile browsers / GitHub Pages
     try {
-      var res = await fetch(API_BASE + "/health", {
-        method: "GET",
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-        signal: t.signal,
+      var data = await new Promise(function (resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", API_BASE + "/health", true);
+        xhr.timeout = timeout;
+        xhr.onload = function () {
+          try {
+            resolve(xhr.responseText ? JSON.parse(xhr.responseText) : { status: xhr.status === 200 ? "ok" : "error" });
+          } catch (e) {
+            resolve({ status: xhr.status === 200 ? "ok" : "error" });
+          }
+        };
+        xhr.onerror = function () { reject(new Error("Failed to fetch")); };
+        xhr.ontimeout = function () { reject(new Error("The user aborted a request.")); };
+        xhr.send();
       });
+      return data;
+    } catch (xhrErr) {
+      var t = fetchTimeout(timeout);
       try {
-        return await res.json();
-      } catch (e) {
-        return { status: res.ok ? "ok" : "error" };
+        var res = await fetch(API_BASE + "/health", {
+          method: "GET",
+          mode: "cors",
+          credentials: "omit",
+          cache: "no-store",
+          signal: t.signal,
+        });
+        try {
+          return await res.json();
+        } catch (e) {
+          return { status: res.ok ? "ok" : "error" };
+        }
+      } finally {
+        t.clear();
       }
-    } finally {
-      t.clear();
     }
   }
 

@@ -1638,22 +1638,63 @@
     if (board) board.hidden = true;
     if (!list) return;
     list.innerHTML = loadingHtml("Waking server & loading CBT…");
-    var loadHome = function () {
-      return api.api("/api/v1/cbt/practice/home", { timeout: 90000, retries: 3, preferXhr: true });
-    };
-    var start =
+
+    function applyHome(data) {
+      cbtHomeCache = data || {};
+      renderCbtExamTypes();
+    }
+
+    function fallbackHome() {
+      // If practice/home fails, still show JAMB/WAEC/NECO using access + defaults
+      return api
+        .api("/api/v1/payments/paystack/cbt-access", { timeout: 60000, retries: 2, preferXhr: true })
+        .then(function (access) {
+          var boards = (access && access.boards) || [];
+          function has(b) {
+            return boards.indexOf(b) >= 0;
+          }
+          return {
+            settings: {
+              cbt_enabled: true,
+              jamb_subjects_required: 4,
+              jamb_duration_minutes: 180,
+              waec_duration_minutes: 60,
+              neco_duration_minutes: 60,
+            },
+            exam_types: [
+              { exam_type: "JAMB", has_access: has("JAMB"), package_id: "jamb" },
+              { exam_type: "WAEC", has_access: has("WAEC"), package_id: "waec" },
+              { exam_type: "NECO", has_access: has("NECO"), package_id: "neco" },
+            ],
+            profile: { jamb_subjects: [], ssce_subjects: [], ssce_exam_type: "WAEC" },
+            _fallback: true,
+          };
+        });
+    }
+
+    var wake =
       api.wakeServer && typeof api.wakeServer === "function"
-        ? api.wakeServer(45000).then(function () {
-            return loadHome();
-          })
-        : loadHome();
-    start
-      .then(function (data) {
-        cbtHomeCache = data || {};
-        renderCbtExamTypes();
+        ? api.wakeServer(60000)
+        : Promise.resolve(null);
+
+    wake
+      .catch(function () {
+        return null;
       })
+      .then(function () {
+        return api.api("/api/v1/cbt/practice/home", {
+          timeout: 90000,
+          retries: 2,
+          preferXhr: true,
+        });
+      })
+      .then(applyHome)
       .catch(function (err) {
-        list.innerHTML = errorHtml(errMsg(err), "cbt");
+        fallbackHome()
+          .then(applyHome)
+          .catch(function () {
+            list.innerHTML = errorHtml(errMsg(err), "cbt");
+          });
       });
   }
 
