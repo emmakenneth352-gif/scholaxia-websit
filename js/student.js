@@ -189,7 +189,7 @@
 
   var PAGE_TITLES = {
     home: "Home",
-    "study-materials": "Video Tutorials",
+    "study-materials": "Lesson Notes",
     "past-questions": "Past Questions",
     cbt: "CBT Practice",
     school: "Scholaxia Exam",
@@ -433,44 +433,89 @@
     return u;
   }
 
+  var lessonNotesCache = [];
+
+  function renderLessonNotes(items) {
+    var wrap = $("studyMaterialsList");
+    if (!wrap) return;
+    if (!items.length) {
+      wrap.innerHTML = emptyHtml("▶", "No lesson notes match your search.");
+      return;
+    }
+    wrap.innerHTML = items
+      .map(function (it) {
+        var src = youtubeEmbed(it.video_url || it.url || "");
+        var tutor = it.tutor_name || it.tutor || it.teacher_name || it.channel || "";
+        return (
+          '<div class="card">' +
+          '<span class="card-tag">' +
+          esc(it.subject || "Lesson") +
+          "</span><h4>" +
+          esc(it.title || "Lesson note") +
+          "</h4>" +
+          (tutor
+            ? '<p class="muted" style="margin:0.25rem 0 0.65rem">Tutor: ' + esc(tutor) + "</p>"
+            : "") +
+          (src
+            ? '<div class="video-frame"><iframe src="' +
+              esc(src) +
+              '" title="' +
+              esc(it.title || "Lesson") +
+              '" allowfullscreen loading="lazy"></iframe></div>'
+            : "") +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function filterLessonNotes() {
+    var q = (($("lessonNotesSearch") && $("lessonNotesSearch").value) || "").trim().toLowerCase();
+    if (!q) {
+      renderLessonNotes(lessonNotesCache);
+      return;
+    }
+    var filtered = lessonNotesCache.filter(function (it) {
+      var blob = [
+        it.title,
+        it.subject,
+        it.topic,
+        it.tutor_name,
+        it.tutor,
+        it.teacher_name,
+        it.channel,
+        it.exam_type,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+    renderLessonNotes(filtered);
+  }
+
   function loadStudyMaterials() {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading video tutorials…");
+    wrap.innerHTML = loadingHtml("Loading lesson notes…");
     api
       .api("/api/v1/videos")
       .then(function (data) {
-        var items = firstArray(data, ["videos", "items", "results"]);
-        if (!items.length) {
-          wrap.innerHTML = emptyHtml("▶", "No video tutorials yet. Admin will post YouTube lessons here.");
+        lessonNotesCache = firstArray(data, ["videos", "items", "results"]);
+        if (!lessonNotesCache.length) {
+          wrap.innerHTML = emptyHtml("▶", "No lesson notes yet. Admin will post YouTube lessons here.");
           return;
         }
-        wrap.innerHTML = items
-          .map(function (it) {
-            var src = youtubeEmbed(it.video_url || it.url || "");
-            return (
-              '<div class="card">' +
-              '<span class="card-tag">' +
-              esc(it.subject || "Tutorial") +
-              "</span><h4>" +
-              esc(it.title || "Video") +
-              "</h4>" +
-              (src
-                ? '<div class="video-frame"><iframe src="' +
-                  esc(src) +
-                  '" title="' +
-                  esc(it.title || "Video") +
-                  '" allowfullscreen loading="lazy"></iframe></div>'
-                : "") +
-              "</div>"
-            );
-          })
-          .join("");
+        filterLessonNotes();
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "study-materials");
       });
   }
+
+  document.addEventListener("input", function (e) {
+    if (e.target && e.target.id === "lessonNotesSearch") filterLessonNotes();
+  });
 
   document.addEventListener("click", function (e) {
     if (e.target.closest("#libReaderClose")) {

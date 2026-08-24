@@ -36,7 +36,7 @@
         </div>
         <nav class="side-nav" id="studentNav">
           <button class="side-link is-active" data-page="home" type="button"><span class="ico">⌂</span>Home</button>
-          <button class="side-link" data-page="study-materials" type="button"><span class="ico">▶</span>Video Tutorials</button>
+          <button class="side-link" data-page="study-materials" type="button"><span class="ico">▶</span>Lesson Notes</button>
           <button class="side-link" data-page="past-questions" type="button"><span class="ico">📄</span>Past Questions</button>
           <button class="side-link" data-page="cbt" type="button"><span class="ico">📝</span>My CBT</button>
           <button class="side-link" data-page="school-portal" type="button"><span class="ico">🏫</span>Examinations</button>
@@ -138,12 +138,21 @@
             <div class="panel">
               <div class="panel-head">
                 <div>
-                  <h2>Video Tutorials</h2>
-                  <p>Lessons posted by Scholaxia admin — watch here, on the app, and on desktop.</p>
+                  <h2>Lesson Notes</h2>
+                  <p>Video lessons posted by Scholaxia admin — search by topic or tutor name.</p>
                 </div>
                 <button type="button" class="btn btn-mini" data-refresh="study-materials">⟲ Refresh</button>
               </div>
-              <div class="card-grid" id="studyMaterialsList"><div class="loading-state">Loading recommendations…</div></div>
+              <div class="form-field" style="margin:0.75rem 0 1rem">
+                <label for="lessonNotesSearch">Search</label>
+                <input
+                  id="lessonNotesSearch"
+                  type="search"
+                  placeholder="Search by topic or tutor name…"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="card-grid" id="studyMaterialsList"><div class="loading-state">Loading lesson notes…</div></div>
             </div>
           </section>
 
@@ -758,8 +767,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260824k"></script>
+    <script src="js/api.js?v=20260824m"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260824k"></script>
+    <script src="js/student.js?v=20260824m"></script>
   </body>
 </html>
