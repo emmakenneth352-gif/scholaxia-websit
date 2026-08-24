@@ -238,9 +238,37 @@
     var email = $("loginEmail").value.trim();
     var password = $("loginPassword").value;
     var btn = $("btnLogin");
-    showErr($("loginError"));
+    var errEl = $("loginError");
+    showErr(errEl);
+    if (!email || !password) {
+      showErr(errEl, "Enter email and password.");
+      return;
+    }
     btn.disabled = true;
     btn.textContent = "Logging in…";
+    showErr(errEl, "Connecting to server…");
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.style.color = "#334155";
+    }
+
+    var finished = false;
+    var watchdog = setTimeout(function () {
+      if (finished) return;
+      finished = true;
+      btn.disabled = false;
+      btn.textContent = "Log in";
+      showErr(errEl, "Login is taking too long. Check your internet, wait 20 seconds, then try again.");
+      if (errEl) errEl.style.color = "";
+    }, 30000);
+
+    // Wake API in background (do not block login)
+    if (api.wakeServer) {
+      try {
+        api.wakeServer(12000);
+      } catch (w) {}
+    }
+
     try {
       var data = api.loginApi
         ? await api.loginApi(email, password)
@@ -248,15 +276,31 @@
             method: "POST",
             noAuth: true,
             body: { email: email, password: password },
-            timeout: 60000,
-            retries: 3,
+            timeout: 25000,
+            retries: 0,
+            preferXhr: true,
           });
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
       if (!data || !data.access_token) {
         throw new Error("Login did not return a session. Try again.");
       }
+      showErr(errEl, "Success — opening your portal…");
+      if (errEl) errEl.style.color = "#166534";
       await afterAuth(data, email, data.user && data.user.full_name);
     } catch (err) {
-      showErr($("loginError"), (err && err.message) || "Login failed");
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
+      var msg = (err && err.message) || "Login failed";
+      if (err && err.data && err.data.detail) {
+        var d = err.data.detail;
+        if (typeof d === "string") msg = d;
+        else if (d && d.message) msg = d.message;
+      }
+      showErr(errEl, msg);
+      if (errEl) errEl.style.color = "";
       btn.disabled = false;
       btn.textContent = "Log in";
     }

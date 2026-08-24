@@ -120,16 +120,26 @@
         method: "POST",
         noAuth: true,
         body: { email: email, password: password },
-        timeout: 60000,
-        retries: 1,
+        timeout: 25000,
+        retries: 0,
+        preferXhr: true,
       });
     } catch (err) {
       last = err;
+      // Wrong password / locked account — do not fall through to a second long attempt
+      if (err && err.status && err.status >= 400 && err.status < 500) {
+        throw err;
+      }
     }
     try {
-      return await formPost("/api/v1/auth/login", { email: email, password: password }, 60000);
+      return await formPost("/api/v1/auth/login", { email: email, password: password }, 20000);
     } catch (formErr) {
-      throw new Error(friendlyFetchError(last || formErr));
+      var e = last || formErr;
+      var friendly = friendlyFetchError(e);
+      var out = new Error(friendly || (e && e.message) || "Login failed");
+      out.status = e && e.status;
+      out.data = e && e.data;
+      throw out;
     }
   }
 
@@ -302,7 +312,7 @@
     // Prefer XHR for flaky browser fetch (CBT, profile save, payments)
     var preferXhr =
       !!options.preferXhr ||
-      /\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/cbt\/practice\/start$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
+      /\/auth\/login$|\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/cbt\/practice\/start$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
         path
       );
     if (preferXhr) {
