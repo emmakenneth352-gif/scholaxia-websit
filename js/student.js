@@ -1851,6 +1851,11 @@
     cbtSelectedBoard = board;
     if (!cbtHomeCache) cbtHomeCache = defaultCbtHome();
 
+    // Never show pay/coupon until the student taps START
+    try {
+      closeCbtUnlockModal(true);
+    } catch (eClose) {}
+
     var home = $("cbtHomePanel");
     var panel = $("cbtBoardPanel");
     var body = $("cbtBoardBody");
@@ -1858,7 +1863,7 @@
     var hint = $("cbtBoardHint");
     if (home) home.hidden = true;
     if (panel) panel.hidden = false;
-    if (title) title.textContent = board + " CBT";
+    if (title) title.textContent = board === "JAMB" ? "Your JAMB exam" : board + " CBT";
     if (!body) return;
 
     var types = (cbtHomeCache && cbtHomeCache.exam_types) || [];
@@ -1872,55 +1877,95 @@
     if (board === "JAMB") {
       var need = settings.jamb_subjects_required || 4;
       var jambSubs = (profile.jamb_subjects || []).filter(Boolean);
-      if (jambSubs.length !== need) {
+      if (jambSubs.length < need) {
         var localJamb = readLocalJson("sia_jamb_subjects", null) || readLocalJson("sia_subjects", []);
-        if (Array.isArray(localJamb) && localJamb.length === need) jambSubs = localJamb.slice();
+        if (Array.isArray(localJamb) && localJamb.length) jambSubs = localJamb.filter(Boolean);
       }
+      // Dedupe keep order
+      jambSubs = jambSubs.filter(function (s, i, arr) {
+        return arr.indexOf(s) === i;
+      });
       var dur = settings.jamb_duration_minutes || 180;
       if (hint) {
-        hint.textContent = unlocked
-          ? "Your saved subjects. Tap START CBT to begin."
-          : "Preview your saved exam first. Pay or use a coupon only when you tap START CBT.";
-      }
-      if (jambSubs.length !== need) {
-        body.innerHTML =
-          '<div class="empty-state"><strong>Set your JAMB subjects in Profile first</strong>' +
-          "<p>CBT needs exactly " +
+        hint.textContent =
+          "This is one JAMB exam package. Your " +
           need +
-          " JAMB subjects from your registration/profile. Current: " +
-          jambSubs.length +
-          ".</p>" +
+          " profile subjects are combined into a single CBT — review them below before you pay or use a coupon.";
+      }
+      if (!jambSubs.length) {
+        body.innerHTML =
+          '<div class="empty-state"><strong>No JAMB subjects saved yet</strong>' +
+          "<p>Go to Profile, choose your " +
+          need +
+          " JAMB subjects, save, then come back here to preview the exam.</p>" +
           '<button type="button" class="btn btn-primary" data-goto="profile">Open Profile</button></div>';
+        // Refresh from API in case subjects exist only on server
+        api.api("/api/v1/students/me", { timeout: 15000, retries: 0, preferXhr: true }).then(function (me) {
+          var p = (me && (me.profile || me)) || {};
+          var remote = p.jamb_subjects || p.subjects || [];
+          if (Array.isArray(remote) && remote.length) {
+            writeLocalJson("sia_jamb_subjects", remote);
+            writeLocalJson("sia_subjects", remote);
+            openCbtBoard("JAMB");
+          }
+        }).catch(function () {});
         return;
       }
       body.innerHTML =
-        "<h3 style=\"margin:0 0 0.5rem\">Your Subjects</h3>" +
-        '<p class="muted" style="margin:0 0 0.75rem">One JAMB CBT · ' +
+        '<div style="margin:0 0 1rem;padding:1rem 1.1rem;border-radius:14px;border:1px solid #ddd6fe;background:linear-gradient(180deg,#faf8ff,#f5f3ff)">' +
+        '<div style="font-size:0.75rem;font-weight:800;letter-spacing:0.06em;color:#6d28d9;text-transform:uppercase">What you are unlocking</div>' +
+        '<h3 style="margin:0.35rem 0 0.35rem;font-size:1.35rem">1 JAMB CBT exam</h3>' +
+        '<p style="margin:0;color:#5b21b6;font-size:0.95rem">Not ' +
+        esc(String(jambSubs.length)) +
+        " separate exams — your subjects below run together as <strong>one</strong> timed paper (" +
         esc(String(dur)) +
-        " minutes</p>" +
-        (unlocked
-          ? ""
-          : '<p style="margin:0 0 1rem;padding:0.75rem 0.9rem;border-radius:10px;background:#f5f3ff;color:#4c1d95;font-size:0.92rem">You can review this exam now. When you start, you will unlock with a <strong>coupon</strong> or <strong>Paystack</strong>.</p>') +
-        '<div class="card-grid one-col" style="gap:0.45rem">' +
+        " minutes).</p>" +
+        "</div>" +
+        "<h3 style=\"margin:0 0 0.55rem\">Your " +
+        esc(String(jambSubs.length)) +
+        " subjects</h3>" +
+        '<ol style="margin:0 0 1rem;padding:0;list-style:none;display:grid;gap:0.45rem">' +
         jambSubs
-          .map(function (s) {
+          .map(function (s, idx) {
             return (
-              '<div style="padding:0.7rem 0.9rem;border:1px solid #e2e8f0;border-radius:10px;font-weight:700">' +
+              '<li style="display:flex;align-items:center;gap:0.75rem;padding:0.85rem 1rem;border:1px solid #e2e8f0;border-radius:12px;background:#fff">' +
+              '<span style="width:1.75rem;height:1.75rem;border-radius:999px;background:#ede9fe;color:#5b21b6;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.85rem">' +
+              (idx + 1) +
+              "</span>" +
+              '<span style="font-weight:700;font-size:1.02rem">' +
               esc(s) +
-              "</div>"
+              "</span></li>"
             );
           })
           .join("") +
-        "</div>" +
-        '<div class="btn-row" style="margin-top:1.1rem">' +
+        "</ol>" +
+        (jambSubs.length !== need
+          ? '<p class="form-status err" style="margin:0 0 0.85rem">JAMB usually needs exactly ' +
+            need +
+            " subjects. You have " +
+            jambSubs.length +
+            '. <button type="button" class="btn btn-mini" data-goto="profile">Edit in Profile</button></p>'
+          : "") +
+        (unlocked
+          ? ""
+          : '<p style="margin:0 0 1rem;padding:0.75rem 0.9rem;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:0.92rem">Preview only for now. Coupon or Paystack appears when you tap <strong>Start this JAMB exam</strong>.</p>') +
+        '<div class="btn-row" style="margin-top:0.5rem">' +
         '<button type="button" class="btn btn-primary" id="cbtStartJambBtn">' +
-        (unlocked ? "START CBT" : "START CBT (coupon or pay)") +
+        (unlocked ? "START CBT" : "Start this JAMB exam") +
         "</button>" +
         "</div>" +
         '<p id="cbtJambPickMsg" class="form-status" style="margin-top:0.75rem"></p>';
       var startJ = $("cbtStartJambBtn");
       if (startJ) {
         startJ.onclick = function () {
+          if (jambSubs.length !== need) {
+            var msg = $("cbtJambPickMsg");
+            if (msg) {
+              msg.className = "form-status err";
+              msg.textContent = "Save exactly " + need + " JAMB subjects in Profile first.";
+            }
+            return;
+          }
           ensureBoardUnlockedThen(board, function () {
             startPracticeAttempt("JAMB", jambSubs.slice(), startJ);
           });
@@ -1938,7 +1983,7 @@
     if (hint) {
       hint.textContent = unlocked
         ? "Pick a subject and start."
-        : "Preview your saved subjects. Pay or use a coupon only when you tap START CBT.";
+        : "Preview your saved subjects first. Pay or coupon only when you tap START.";
     }
     if (!registered.length) {
       body.innerHTML =
@@ -1954,7 +1999,7 @@
     body.innerHTML =
       (unlocked
         ? ""
-        : '<p style="margin:0 0 0.85rem;padding:0.75rem 0.9rem;border-radius:10px;background:#f5f3ff;color:#4c1d95;font-size:0.92rem">Review your subjects first. Unlock with coupon or pay when you start.</p>') +
+        : '<p style="margin:0 0 0.85rem;padding:0.75rem 0.9rem;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:0.92rem">Review your subjects first. Unlock with coupon or pay when you start.</p>') +
       '<p class="muted" style="margin:0 0 0.85rem">Pick one subject to practice · ' +
       esc(String(packDur)) +
       " min</p>" +
@@ -1970,7 +2015,7 @@
             '<div class="card-foot"><button type="button" class="btn btn-primary btn-mini" data-cbt-start-subject="' +
             esc(s) +
             '">' +
-            (unlocked ? "START CBT" : "START (pay/coupon)") +
+            (unlocked ? "START CBT" : "START") +
             "</button></div></div>"
           );
         })
