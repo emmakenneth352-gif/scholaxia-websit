@@ -1555,26 +1555,44 @@
     });
   }
 
+  function closeExamScreen() {
+    stopExamTimer();
+    Exam.current = null;
+    var screen = $("exam-screen");
+    if (!screen) return;
+    screen.classList.remove("is-on");
+    // openPracticeAttempt sets inline display:flex — must clear or Quit looks broken
+    screen.style.display = "";
+    screen.style.removeProperty("display");
+  }
+
   if ($("examSubmitBtn")) {
     $("examSubmitBtn").addEventListener("click", confirmSubmitExam);
   }
 
   if ($("examQuitBtn")) {
     $("examQuitBtn").addEventListener("click", function () {
-      if (!Exam.current) return;
+      if (!Exam.current) {
+        closeExamScreen();
+        return;
+      }
       if (Exam.current.isPractice) {
         if (!confirm("Leave this CBT? Your answers will be saved so you can resume later.")) return;
+        var leaving = Exam.current;
         savePracticeAnswers(function () {
-          stopExamTimer();
-          Exam.current = null;
-          $("exam-screen").classList.remove("is-on");
+          // Only close if we are still on the same attempt
+          if (Exam.current === leaving || !Exam.current) {
+            closeExamScreen();
+          }
         });
+        // Safety: never stay stuck if save hangs
+        setTimeout(function () {
+          if (Exam.current === leaving) closeExamScreen();
+        }, 2500);
         return;
       }
       if (confirm("Quit this exam? Your progress will be lost.")) {
-        stopExamTimer();
-        Exam.current = null;
-        $("exam-screen").classList.remove("is-on");
+        closeExamScreen();
       }
     });
   }
@@ -1612,7 +1630,12 @@
     var st = Exam.current;
     if (!st) return;
     stopExamTimer();
-    $("exam-screen").classList.remove("is-on");
+    var screen = $("exam-screen");
+    if (screen) {
+      screen.classList.remove("is-on");
+      screen.style.display = "";
+      screen.style.removeProperty("display");
+    }
 
     var answersOut = {};
     Object.keys(st.answers).forEach(function (k) {
