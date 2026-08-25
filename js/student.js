@@ -2337,7 +2337,7 @@
       answers: answers,
       sessionId: null,
       isPractice: true,
-      awaitingSectionPick: multi && !hasAnyAnswer,
+      awaitingSectionPick: false,
       isExternal: false,
       isSchool: false,
       index: 0,
@@ -2365,11 +2365,10 @@
     } catch (eScroll) {}
     startExamTimer();
 
-    if (Exam.current.awaitingSectionPick) {
-      showPracticeSectionChooser();
-    } else {
-      enterPracticeSection(idx, true);
-    }
+    // No chooser popup — load the selected top subject (or first) immediately
+    var chooser = $("examSectionChooser");
+    if (chooser) chooser.hidden = true;
+    enterPracticeSection(idx, true);
   }
 
   function setPracticeQuestionView(showQuestions) {
@@ -2562,15 +2561,7 @@
         );
       })
       .join("");
-    html +=
-      '<button type="button" class="exam-section-tab" id="examShowChooserBtn" style="margin-left:0.25rem">All subjects</button>';
     tabs.innerHTML = html;
-    var allBtn = $("examShowChooserBtn");
-    if (allBtn) {
-      allBtn.onclick = function () {
-        showPracticeSectionChooser();
-      };
-    }
   }
 
   function switchPracticeSection(nextIndex) {
@@ -2646,8 +2637,16 @@
     }).length;
 
     if (remaining > 0) {
+      var nextIdx = -1;
+      for (var i = 0; i < sections.length; i++) {
+        if (i !== st.sectionIndex && !sections[i].completed) {
+          nextIdx = i;
+          break;
+        }
+      }
       savePracticeAnswers(function () {
-        showPracticeSectionChooser();
+        if (nextIdx >= 0) enterPracticeSection(nextIdx, true);
+        else confirmSubmitExam();
       });
       return;
     }
