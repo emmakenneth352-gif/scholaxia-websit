@@ -1760,6 +1760,8 @@
   }
 
   var lastExamReview = null;
+  var lastExamFullReview = null;
+  var lastReviewMeta = null;
 
   function optionLabel(options, key) {
     if (!options || !key) return key || "—";
@@ -1770,46 +1772,240 @@
     return key;
   }
 
-  function showReviewScreen(items) {
-    items = items || [];
-    var wrap = $("reviewList");
-    var screen = $("review-screen");
-    if (!wrap || !screen) return;
-    if (!items.length) {
-      wrap.innerHTML = '<p class="muted">You got every question right — nothing to review.</p>';
-    } else {
-      wrap.innerHTML = items
-        .map(function (q, i) {
-          var expl = (q.explanation || "").trim();
+  function loadReviewBookTips(subjects) {
+    var panel = $("reviewBooksPanel");
+    var list = $("reviewBooksList");
+    if (!panel || !list || !subjects || !subjects.length) return;
+    panel.hidden = false;
+    list.innerHTML = '<p class="muted">Loading book tips…</p>';
+    var seen = {};
+    var books = [];
+    Promise.all(
+      subjects
+        .filter(function (s) {
+          return s && !seen[s] && (seen[s] = true);
+        })
+        .slice(0, 4)
+        .map(function (sub) {
+          return api
+            .api("/api/v1/sia/recommendations?subject=" + encodeURIComponent(sub), {
+              timeout: 35000,
+              retries: 0,
+            })
+            .then(function (data) {
+              (data && data.recommended_books || []).forEach(function (b) {
+                if (b && b.title) books.push({ title: b.title, author: b.author, subject: sub });
+              });
+            })
+            .catch(function () {});
+        })
+    ).then(function () {
+      if (!books.length) {
+        list.innerHTML =
+          '<p class="muted">No library books tagged for these subjects yet. Check Library → Books or Study Materials.</p>';
+        return;
+      }
+      var uniq = {};
+      list.innerHTML = books
+        .filter(function (b) {
+          var k = b.title + "|" + b.subject;
+          if (uniq[k]) return false;
+          uniq[k] = true;
+          return true;
+        })
+        .slice(0, 8)
+        .map(function (b) {
           return (
-            '<article class="review-item">' +
-            '<p class="review-meta">Question ' +
-            (i + 1) +
-            (q.subject ? " · " + esc(q.subject) : "") +
-            "</p>" +
-            '<p class="review-q">' +
-            esc(q.question_text || "") +
-            "</p>" +
-            '<p class="review-wrong"><strong>Your answer:</strong> ' +
-            esc(optionLabel(q.options, q.your_answer)) +
-            "</p>" +
-            '<p class="review-correct"><strong>Correct answer:</strong> ' +
-            esc(optionLabel(q.options, q.correct_key)) +
-            "</p>" +
-            (expl
-              ? '<div class="review-expl"><strong>Explanation</strong><p>' + esc(expl) + "</p></div>"
-              : '<p class="muted">No explanation added for this question yet.</p>') +
-            "</article>"
+            '<span class="review-book-chip"><strong>' +
+            esc(b.subject) +
+            "</strong> · " +
+            esc(b.title) +
+            (b.author ? " — " + esc(b.author) : "") +
+            "</span>"
           );
         })
         .join("");
-    }
-    screen.classList.add("is-on");
+    });
   }
+
+  function fetchSiaDeepExplain(q) {
+    var subject = q.subject || "General";
+    var correctText = optionLabel(q.options, q.correct_key);
+    var yourText = q.your_answer ? optionLabel(q.options, q.your_answer) : "Not answered";
+    var prompt =
+      "I just finished a CBT practice question in " +
+      subject +
+      ".\n\nQuestion: " +
+      (q.question_text || "") +
+      "\nMy answer: " +
+      yourText +
+      "\nCorrect answer: " +
+      correctText +
+      (q.explanation ? "\nShort explanation: " + q.explanation : "") +
+      "\n\nGive a deeper step-by-step explanation so I understand this type of question. " +
+      "Then list 2–3 specific books or topics from Scholaxia library I should read to master similar questions.";
+
+    if (!q.is_correct && q.your_answer) {
+      return api.api("/api/v1/sia/explain-wrong", {
+        method: "POST",
+        body: {
+          question: q.question_text || "",
+          wrong_answer: yourText,
+          correct_answer: correctText,
+          subject: subject,
+          language: "english",
+        },
+        timeout: 90000,
+        retries: 0,
+      });
+    }
+    return api.api("/api/v1/sia/ask", {
+      method: "POST",
+      body: {
+        question: prompt,
+        subject: subject,
+        language: "english",
+        tutor_mode: "smart",
+      },
+      timeout: 90000,
+      retries: 0,
+    });
+  }
+
+  function renderReviewQuestionCard(q, index) {
+    var expl = (q.explanation || "").trim();
+    var cls = q.is_skipped ? "is-skipped" : q.is_correct ? "is-correct" : "is-wrong";
+    var status = q.is_skipped ? "Skipped" : q.is_correct ? "Correct" : "Wrong";
+    return (
+      '<article class="review-item ' +
+      cls +
+      '" data-review-q="' +
+      esc(q.id) +
+      '">' +
+      '<p class="review-meta">Question ' +
+      (index + 1) +
+      " · " +
+      esc(q.subject || "") +
+      " · " +
+      status +
+      (q.topic ? " · " + esc(q.topic) : "") +
+      "</p>" +
+      '<p class="review-q">' +
+      esc(q.question_text || "") +
+      "</p>" +
+      '<p class="review-answer-row ' +
+      cls +
+      '"><strong>Your answer:</strong> ' +
+      esc(q.your_answer ? optionLabel(q.options, q.your_answer) : "Not answered") +
+      "</p>" +
+      '<p class="review-answer-row is-correct"><strong>Correct answer:</strong> ' +
+      esc(optionLabel(q.options, q.correct_key)) +
+      "</p>" +
+      (expl
+        ? '<div class="review-expl"><strong>Explanation</strong><p>' + esc(expl) + "</p></div>"
+        : "") +
+      '<div class="review-sia-actions">' +
+      '<button type="button" class="btn btn-secondary btn-mini" data-sia-deep="' +
+      esc(q.id) +
+      '">Ask Sia for deeper explanation</button>' +
+      "</div>" +
+      '<div class="review-sia" id="review-sia-' +
+      esc(q.id) +
+      '" hidden></div>' +
+      "</article>"
+    );
+  }
+
+  function showReviewScreen(items, meta) {
+    items = items || [];
+    meta = meta || lastReviewMeta || {};
+    var wrap = $("reviewList");
+    var screen = $("review-screen");
+    var titleEl = $("reviewPageTitle");
+    var subEl = $("reviewPageSub");
+    if (!wrap || !screen) return;
+    if (titleEl) {
+      titleEl.textContent =
+        (meta.title || "Your answers & explanations") +
+        (meta.percent != null ? " · " + meta.percent + "%" : "");
+    }
+    if (subEl) {
+      subEl.textContent =
+        items.length +
+        " questions · " +
+        (meta.wrong_count != null ? meta.wrong_count + " wrong · " : "") +
+        "Tap Ask Sia on any question for a deeper explanation and study tips.";
+    }
+    if (!items.length) {
+      wrap.innerHTML =
+        '<div class="empty-state"><strong>No review data yet</strong><p>Finish a CBT exam and tap Review all answers on the result screen.</p></div>';
+    } else {
+      wrap.innerHTML = items.map(renderReviewQuestionCard).join("");
+    }
+    var subjects = [];
+    var seen = {};
+    items.forEach(function (q) {
+      if (q.subject && !seen[q.subject]) {
+        seen[q.subject] = true;
+        subjects.push(q.subject);
+      }
+    });
+    loadReviewBookTips(subjects);
+    screen.classList.add("is-on");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeReviewScreen() {
+    var screen = $("review-screen");
+    if (screen) screen.classList.remove("is-on");
+    document.body.style.overflow = "";
+  }
+
+  document.addEventListener("click", function (e) {
+    var siaBtn = e.target.closest("[data-sia-deep]");
+    if (!siaBtn) return;
+    var qid = siaBtn.dataset.siaDeep;
+    var q = (lastExamFullReview || lastExamReview || []).find(function (x) {
+      return String(x.id) === String(qid);
+    });
+    if (!q) return;
+    var box = $("review-sia-" + qid);
+    if (!box) return;
+    siaBtn.disabled = true;
+    siaBtn.textContent = "Sia is thinking…";
+    box.hidden = false;
+    box.innerHTML = "<strong>Sia</strong><p>Loading deeper explanation…</p>";
+    fetchSiaDeepExplain(q)
+      .then(function (res) {
+        var text = (res && (res.sia || res.answer || res.message)) || "Could not load explanation.";
+        box.innerHTML = "<strong>Sia — deeper explanation</strong><p>" + esc(text) + "</p>";
+        siaBtn.textContent = "Refresh Sia explanation";
+        siaBtn.disabled = false;
+      })
+      .catch(function (err) {
+        box.innerHTML =
+          "<strong>Sia</strong><p>" +
+          esc(errMsg(err) || "Sia is unavailable right now. Try again in a moment.") +
+          "</p>";
+        siaBtn.textContent = "Try Sia again";
+        siaBtn.disabled = false;
+      });
+  });
 
   function showResult(res, st) {
     res = res || {};
     lastExamReview = Array.isArray(res.review) ? res.review : null;
+    lastExamFullReview = Array.isArray(res.full_review)
+      ? res.full_review
+      : lastExamReview
+      ? lastExamReview.slice()
+      : null;
+    lastReviewMeta = {
+      title: st ? st.title : "",
+      percent: pct,
+      wrong_count: res.wrong_count != null ? res.wrong_count : lastExamReview ? lastExamReview.length : 0,
+      attempt_id: res.attempt_id || (st && st.practiceAttemptId),
+    };
     var score = res.score != null ? res.score : res.correct_count;
     var total =
       res.total != null
@@ -1841,9 +2037,8 @@
       "</strong><span>Status</span></div>";
     var reviewBtn = $("resultReviewBtn");
     if (reviewBtn) {
-      var wrongN = res.wrong_count != null ? res.wrong_count : lastExamReview ? lastExamReview.length : 0;
-      reviewBtn.hidden = !(lastExamReview && lastExamReview.length);
-      reviewBtn.textContent = wrongN ? "Review wrong answers (" + wrongN + ")" : "Review answers";
+      reviewBtn.hidden = !(st && st.isPractice);
+      reviewBtn.textContent = "Review all answers";
     }
     $("result-screen").classList.add("is-on");
     Exam.current = null;
@@ -1852,14 +2047,31 @@
   if ($("resultReviewBtn")) {
     $("resultReviewBtn").addEventListener("click", function () {
       $("result-screen").classList.remove("is-on");
-      showReviewScreen(lastExamReview || []);
+      var items = lastExamFullReview || lastExamReview || [];
+      if (!items.length && lastReviewMeta && lastReviewMeta.attempt_id) {
+        api
+          .api("/api/v1/cbt/practice/attempts/" + lastReviewMeta.attempt_id + "/review", {
+            timeout: 60000,
+            retries: 0,
+          })
+          .then(function (data) {
+            lastExamFullReview = data.full_review || [];
+            lastExamReview = data.review || [];
+            lastReviewMeta.wrong_count = data.wrong_count;
+            lastReviewMeta.percent = data.percent;
+            showReviewScreen(lastExamFullReview, lastReviewMeta);
+          })
+          .catch(function (err) {
+            alert(errMsg(err) || "Could not load review.");
+          });
+        return;
+      }
+      showReviewScreen(items, lastReviewMeta);
     });
   }
 
   if ($("reviewCloseBtn")) {
-    $("reviewCloseBtn").addEventListener("click", function () {
-      if ($("review-screen")) $("review-screen").classList.remove("is-on");
-    });
+    $("reviewCloseBtn").addEventListener("click", closeReviewScreen);
   }
 
   if ($("resultCloseBtn")) {

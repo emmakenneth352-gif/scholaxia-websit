@@ -759,22 +759,27 @@
         <p class="muted" id="resultSub"></p>
         <div class="result-stats" id="resultStats"></div>
         <div class="btn-row result-actions">
-          <button type="button" class="btn btn-primary" id="resultReviewBtn" hidden>Review wrong answers</button>
+          <button type="button" class="btn btn-primary" id="resultReviewBtn">Review all answers</button>
           <button type="button" class="btn btn-secondary" id="resultCloseBtn">Close</button>
         </div>
       </div>
     </div>
 
     <div class="review-screen" id="review-screen">
-      <div class="review-card">
-        <div class="review-head">
-          <h2>Review your answers</h2>
-          <p class="muted">Questions you got wrong, with explanations.</p>
+      <div class="review-page">
+        <header class="review-page-head">
+          <div>
+            <span class="hub-kicker">CBT Review</span>
+            <h2 id="reviewPageTitle">Your answers &amp; explanations</h2>
+            <p class="muted" id="reviewPageSub">Every question with the correct answer. Ask Sia for a deeper explanation and book tips.</p>
+          </div>
+          <button type="button" class="btn btn-secondary" id="reviewCloseBtn">Close</button>
+        </header>
+        <div class="review-books-panel" id="reviewBooksPanel" hidden>
+          <h3>Books to read for similar questions</h3>
+          <div id="reviewBooksList" class="review-books-list"></div>
         </div>
         <div class="review-list" id="reviewList"></div>
-        <div class="btn-row result-actions">
-          <button type="button" class="btn btn-secondary" id="reviewCloseBtn">Close</button>
-        </div>
       </div>
     </div>
 
@@ -788,8 +793,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260826a"></script>
+    <script src="js/api.js?v=20260826b"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260826a"></script>
+    <script src="js/student.js?v=20260826b"></script>
   </body>
 </html>
