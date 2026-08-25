@@ -1482,6 +1482,51 @@ button { font: inherit; cursor: pointer; border: 0; background: none; color: inh
 
 .result-actions { justify-content: center; }
 
+.review-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 12, 30, 0.55);
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1rem;
+  overflow-y: auto;
+}
+.review-screen.is-on { display: flex; }
+
+.review-card {
+  width: min(640px, 100%);
+  background: var(--surface);
+  border-radius: 16px;
+  padding: 1.25rem 1.35rem 1.5rem;
+  margin: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+.review-head { margin-bottom: 1rem; }
+.review-head h2 { margin: 0 0 0.25rem; font-size: 1.15rem; }
+.review-list { display: flex; flex-direction: column; gap: 1rem; max-height: 60vh; overflow-y: auto; }
+.review-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: #faf9ff;
+}
+.review-meta { font-size: 0.72rem; color: var(--purple); font-weight: 600; margin: 0 0 0.35rem; }
+.review-q { margin: 0 0 0.5rem; font-weight: 600; line-height: 1.45; }
+.review-wrong { margin: 0 0 0.35rem; color: #b42318; font-size: 0.88rem; }
+.review-correct { margin: 0 0 0.5rem; color: #027a48; font-size: 0.88rem; }
+.review-expl {
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  background: #fff;
+  border-left: 3px solid var(--purple);
+  font-size: 0.88rem;
+}
+.review-expl strong { display: block; margin-bottom: 0.25rem; color: var(--purple-dark); }
+.review-expl p { margin: 0; line-height: 1.5; }
+
 .dash-actions { margin-bottom: 0.5rem; }
 
 .assignment-form { margin-bottom: 1.5rem; }

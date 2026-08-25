@@ -160,7 +160,7 @@
           <section class="page" id="page-past-questions">
             <div class="panel">
               <h2>Past Questions</h2>
-              <p>Admin uploads past papers under <strong>CBT → Past Questions</strong>. You sit them here as timed CBT. They are not CBT Practice papers and not library PDFs.</p>
+              <p>Buy and download past-question <strong>PDFs</strong> here. Admin uploads them under <strong>Library → Past Questions</strong>. These are not timed CBT — use <strong>CBT Practice</strong> for interactive exams.</p>
               <div class="tabs" id="pqFilterTabs">
                 <button type="button" class="tab is-active" data-cat="all">All</button>
                 <button type="button" class="tab" data-cat="jamb">JAMB</button>
@@ -759,7 +759,21 @@
         <p class="muted" id="resultSub"></p>
         <div class="result-stats" id="resultStats"></div>
         <div class="btn-row result-actions">
+          <button type="button" class="btn btn-primary" id="resultReviewBtn" hidden>Review wrong answers</button>
           <button type="button" class="btn btn-secondary" id="resultCloseBtn">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="review-screen" id="review-screen">
+      <div class="review-card">
+        <div class="review-head">
+          <h2>Review your answers</h2>
+          <p class="muted">Questions you got wrong, with explanations.</p>
+        </div>
+        <div class="review-list" id="reviewList"></div>
+        <div class="btn-row result-actions">
+          <button type="button" class="btn btn-secondary" id="reviewCloseBtn">Close</button>
         </div>
       </div>
     </div>
@@ -774,8 +788,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260825i"></script>
+    <script src="js/api.js?v=20260826a"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260825i"></script>
+    <script src="js/student.js?v=20260826a"></script>
   </body>
 </html>

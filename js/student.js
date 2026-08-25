@@ -591,20 +591,41 @@
 
   async function fetchLibraryPdf(id) {
     var token = api.getToken();
-    var res = await fetch(api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file", {
-      headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
-      credentials: "omit",
-      cache: "no-store",
-      signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
-    });
-    if (res.status === 402) throw new Error("Pay to unlock this material.");
-    if (!res.ok) {
-      var data = await res.json().catch(function () { return {}; });
-      var detail = data && data.detail;
-      if (typeof detail === "object") detail = JSON.stringify(detail);
-      throw new Error(detail || "Could not open this material (" + res.status + ")");
+    var url = api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file";
+    var lastErr = null;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt === 0 && api.wakeServer) {
+        try {
+          await api.wakeServer(45000);
+        } catch (e) {}
+      }
+      try {
+        var res = await fetch(url, {
+          headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
+          credentials: "omit",
+          cache: "no-store",
+          signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
+        });
+        if (res.status === 402) throw new Error("Pay to unlock this material.");
+        if (!res.ok) {
+          var data = await res.json().catch(function () { return {}; });
+          var detail = data && data.detail;
+          if (typeof detail === "object") detail = JSON.stringify(detail);
+          throw new Error(detail || "Could not open this material (" + res.status + ")");
+        }
+        return new Uint8Array(await res.arrayBuffer());
+      } catch (err) {
+        lastErr = err;
+        if (attempt === 0 && api.wakeServer) {
+          try {
+            await api.wakeServer(30000);
+          } catch (e) {}
+          continue;
+        }
+        throw err;
+      }
     }
-    return new Uint8Array(await res.arrayBuffer());
+    throw lastErr || new Error("Could not open this material.");
   }
 
   function isLibraryDownloadable(it) {
@@ -660,6 +681,7 @@
 
   function openLibraryRead(id, btn) {
     if (!id) return;
+    if ($("result-screen")) $("result-screen").classList.remove("is-on");
     var prevText = btn ? btn.textContent : "";
     if (btn) {
       btn.disabled = true;
@@ -700,29 +722,70 @@
   }
 
   /* =====================================================================
-     PAST QUESTIONS — timed CBT papers (not library PDFs, not CBT Practice)
+     PAST QUESTIONS — paid library PDFs (buy + download, not CBT)
      ===================================================================== */
 
   var pastQuestionsCache = null;
   var pqActiveCat = "all";
 
+  function renderPastQuestionCard(it) {
+    var title = it.title || it.name || "Past paper";
+    var exam = it.exam_type || "";
+    var desc = it.description || it.subject || "";
+    var price = Number(it.price || 0);
+    var hasAccess = !!(it.has_access || it.is_free || price <= 0);
+    var canDownload = isLibraryDownloadable(it);
+    var foot;
+    if (hasAccess) {
+      if (canDownload) {
+        foot =
+          '<button type="button" class="btn btn-primary btn-mini" data-download-book="' +
+          esc(it.id) +
+          '">Download PDF</button>';
+      } else {
+        foot =
+          '<button type="button" class="btn btn-primary btn-mini" data-open-book="' +
+          esc(it.id) +
+          '">Read</button>';
+      }
+    } else {
+      foot =
+        "<strong>₦" +
+        price.toLocaleString("en-NG") +
+        '</strong><button type="button" class="btn btn-primary btn-mini" data-pay-type="library_book" data-pay-id="' +
+        esc(it.id) +
+        '">Buy &amp; download</button>';
+    }
+    return (
+      '<div class="card">' +
+      '<span class="card-tag">' +
+      esc(exam || "Past Questions") +
+      "</span>" +
+      (canDownload ? '<span class="card-tag is-downloadable">PDF</span>' : "") +
+      "<h4>" +
+      esc(title) +
+      "</h4>" +
+      (desc ? "<p>" + esc(desc) + "</p>" : "") +
+      '<div class="card-foot">' +
+      foot +
+      "</div></div>"
+    );
+  }
+
   function loadPastQuestions() {
     var wrap = $("pastQuestionsList");
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading past question papers…");
-    fetchExamsForMe("past_questions")
+    var load = function () {
+      return api.api("/api/v1/library/student?category=Past%20Questions", {
+        timeout: 45000,
+        retries: 1,
+        preferXhr: true,
+      });
+    };
+    (api.wakeServer ? api.wakeServer(30000).then(load).catch(load) : load())
       .then(function (data) {
-        var seen = {};
-        pastQuestionsCache = []
-          .concat((data && data.practice_exams) || [])
-          .concat((data && data.jamb_exams) || [])
-          .concat((data && data.ssce_exams) || [])
-          .filter(function (exam) {
-            var id = exam && (exam.id || exam.exam_id);
-            if (!id || seen[id]) return false;
-            seen[id] = true;
-            return true;
-          });
+        pastQuestionsCache = firstArray(data, ["items", "results", "library", "books"]);
         renderPastQuestions();
       })
       .catch(function (err) {
@@ -736,22 +799,26 @@
     var items = pastQuestionsCache;
     if (pqActiveCat !== "all") {
       items = items.filter(function (it) {
-        var hay = ((it.exam_type || "") + " " + (it.title || "") + " " + (it.subject || "")).toLowerCase();
+        var hay = (
+          (it.exam_type || "") +
+          " " +
+          (it.title || "") +
+          " " +
+          (it.subject || "") +
+          " " +
+          (it.category || "")
+        ).toLowerCase();
         return hay.indexOf(pqActiveCat) > -1 || (pqActiveCat === "post" && hay.indexOf("utme") > -1);
       });
     }
     if (!items.length) {
       wrap.innerHTML = emptyHtml(
         "📄",
-        "No past-question papers yet. Admin uploads them under the Past Questions tab. You sit them here as timed CBT — not as library PDFs, and not mixed with CBT Practice."
+        "No past-question PDFs yet. Admin uploads them under Library → Past Questions. Buy a pack here, then download the PDF — not timed CBT."
       );
       return;
     }
-    wrap.innerHTML = items
-      .map(function (exam) {
-        return renderExamCard(exam, { badge: exam.exam_type || "PAST" });
-      })
-      .join("");
+    wrap.innerHTML = items.map(renderPastQuestionCard).join("");
   }
 
   var pqTabs = $("pqFilterTabs");
@@ -1692,8 +1759,57 @@
     showResult(localScore(st), st);
   }
 
+  var lastExamReview = null;
+
+  function optionLabel(options, key) {
+    if (!options || !key) return key || "—";
+    var found = options.find(function (o) {
+      return String(o.key || o.label || "").toUpperCase() === String(key).toUpperCase();
+    });
+    if (found) return (found.key || "") + ". " + (found.text || found.label || "");
+    return key;
+  }
+
+  function showReviewScreen(items) {
+    items = items || [];
+    var wrap = $("reviewList");
+    var screen = $("review-screen");
+    if (!wrap || !screen) return;
+    if (!items.length) {
+      wrap.innerHTML = '<p class="muted">You got every question right — nothing to review.</p>';
+    } else {
+      wrap.innerHTML = items
+        .map(function (q, i) {
+          var expl = (q.explanation || "").trim();
+          return (
+            '<article class="review-item">' +
+            '<p class="review-meta">Question ' +
+            (i + 1) +
+            (q.subject ? " · " + esc(q.subject) : "") +
+            "</p>" +
+            '<p class="review-q">' +
+            esc(q.question_text || "") +
+            "</p>" +
+            '<p class="review-wrong"><strong>Your answer:</strong> ' +
+            esc(optionLabel(q.options, q.your_answer)) +
+            "</p>" +
+            '<p class="review-correct"><strong>Correct answer:</strong> ' +
+            esc(optionLabel(q.options, q.correct_key)) +
+            "</p>" +
+            (expl
+              ? '<div class="review-expl"><strong>Explanation</strong><p>' + esc(expl) + "</p></div>"
+              : '<p class="muted">No explanation added for this question yet.</p>') +
+            "</article>"
+          );
+        })
+        .join("");
+    }
+    screen.classList.add("is-on");
+  }
+
   function showResult(res, st) {
     res = res || {};
+    lastExamReview = Array.isArray(res.review) ? res.review : null;
     var score = res.score != null ? res.score : res.correct_count;
     var total =
       res.total != null
@@ -1723,8 +1839,27 @@
       '<div><strong>' +
       (res.offline ? "Offline" : "Synced") +
       "</strong><span>Status</span></div>";
+    var reviewBtn = $("resultReviewBtn");
+    if (reviewBtn) {
+      var wrongN = res.wrong_count != null ? res.wrong_count : lastExamReview ? lastExamReview.length : 0;
+      reviewBtn.hidden = !(lastExamReview && lastExamReview.length);
+      reviewBtn.textContent = wrongN ? "Review wrong answers (" + wrongN + ")" : "Review answers";
+    }
     $("result-screen").classList.add("is-on");
     Exam.current = null;
+  }
+
+  if ($("resultReviewBtn")) {
+    $("resultReviewBtn").addEventListener("click", function () {
+      $("result-screen").classList.remove("is-on");
+      showReviewScreen(lastExamReview || []);
+    });
+  }
+
+  if ($("reviewCloseBtn")) {
+    $("reviewCloseBtn").addEventListener("click", function () {
+      if ($("review-screen")) $("review-screen").classList.remove("is-on");
+    });
   }
 
   if ($("resultCloseBtn")) {
@@ -4286,8 +4421,11 @@
   var selectedSubjects = [];
 
   function loadProfile() {
+    var examType = localStorage.getItem("sia_exam_type");
+    if (examType && $("examTypeSelect")) $("examTypeSelect").value = examType;
+
     api
-      .api("/api/v1/students/me", { preferXhr: true, timeout: 35000, retries: 1 })
+      .api("/api/v1/students/me", { preferXhr: true, timeout: 45000, retries: 1 })
       .then(function (me) {
         if (!me) return;
         var name = me.full_name || me.name || user.name;
@@ -4302,22 +4440,22 @@
             ? me.jamb_subjects
             : null) ||
           (Array.isArray(me.ssce_subjects) && me.ssce_subjects.length ? me.ssce_subjects : null) ||
-          (Array.isArray(me.selected_subjects) ? me.selected_subjects : null) ||
+          (Array.isArray(me.selected_subjects) && me.selected_subjects.length ? me.selected_subjects : null) ||
           (Array.isArray(me.subjects) ? me.subjects : null) ||
           [];
         selectedSubjects = loaded.slice();
         writeLocalJson("sia_subjects", selectedSubjects);
+        if (me.exam_type === "JAMB") writeLocalJson("sia_jamb_subjects", selectedSubjects);
+        if (me.exam_type === "WAEC" || me.exam_type === "NECO") writeLocalJson("sia_ssce_subjects", selectedSubjects);
         refreshLocalExamBadges();
         renderSubjectChips();
       })
       .catch(function () {
+        selectedSubjects = readLocalJson("sia_subjects", []);
+        if (!Array.isArray(selectedSubjects)) selectedSubjects = [];
         refreshLocalExamBadges();
+        renderSubjectChips();
       });
-
-    var examType = localStorage.getItem("sia_exam_type");
-    if (examType && $("examTypeSelect")) $("examTypeSelect").value = examType;
-    selectedSubjects = readLocalJson("sia_subjects", []);
-    if (!Array.isArray(selectedSubjects)) selectedSubjects = [];
 
     api
       .api("/api/v1/students/subjects", { preferXhr: true, timeout: 35000, retries: 1 })
@@ -4396,7 +4534,7 @@
       setStatus(statusEl, "Saving…", true);
 
       // Always keep a local copy so CBT can use subjects even if the network flakes
-      function commitLocal(note) {
+      function commitLocalCache() {
         localStorage.setItem("sia_exam_type", examType);
         writeLocalJson("sia_subjects", selectedSubjects.slice());
         if (examType === "JAMB") writeLocalJson("sia_jamb_subjects", selectedSubjects.slice());
@@ -4407,7 +4545,6 @@
           if (examType === "JAMB") cbtHomeCache.profile.jamb_subjects = selectedSubjects.slice();
           else cbtHomeCache.profile.ssce_subjects = selectedSubjects.slice();
         }
-        setStatus(statusEl, note || "Saved on this device.", true);
       }
 
       function postSetup(payload) {
@@ -4415,7 +4552,7 @@
           var xhr = new XMLHttpRequest();
           var url = (api.API_BASE || "https://scholaxia1.onrender.com") + "/api/v1/students/setup-exam";
           xhr.open("POST", url, true);
-          xhr.timeout = 45000;
+          xhr.timeout = 90000;
           xhr.setRequestHeader("Content-Type", "application/json");
           xhr.setRequestHeader("Accept", "application/json");
           var tok = api.getToken ? api.getToken() : localStorage.getItem("sia_token");
@@ -4469,21 +4606,34 @@
         ssce_subjects: examType === "WAEC" || examType === "NECO" ? selectedSubjects.slice() : undefined,
       };
 
-      postSetup(legacyBody)
-        .catch(function () {
+      function saveToServer() {
+        return postSetup(legacyBody).catch(function () {
           return postSetup(dualBody);
+        });
+      }
+
+      var wake = api.wakeServer ? api.wakeServer(45000) : Promise.resolve();
+      wake
+        .then(saveToServer)
+        .catch(function () {
+          return saveToServer();
         })
         .then(function (res) {
-          commitLocal("Saved! Your CBT will use these subjects.");
+          commitLocalCache();
+          setStatus(statusEl, "Saved to your account — syncs on every device you log into.", true);
           if (res && Array.isArray(res.jamb_subjects)) {
             writeLocalJson("sia_jamb_subjects", res.jamb_subjects);
           }
+          if (res && Array.isArray(res.ssce_subjects)) {
+            writeLocalJson("sia_ssce_subjects", res.ssce_subjects);
+          }
         })
         .catch(function (err) {
-          // Network flake: keep subjects locally so CBT / JAMB package still works
           if (!err || !err.status || err.message === "NETWORK" || err.message === "TIMEOUT") {
-            commitLocal(
-              "Saved on this device (server unreachable). CBT can use these subjects. Try Save again when online."
+            setStatus(
+              statusEl,
+              "Could not reach the server. Wait 30 seconds (Render may be waking up) and tap Save again.",
+              false
             );
             return;
           }
