@@ -2171,40 +2171,46 @@
         btn.setAttribute("data-start-label", btn.textContent || "Start this JAMB exam");
       }
       btn.disabled = true;
-      btn.textContent = "Starting…";
+      btn.textContent = "Opening…";
     }
-    setStartStatus("Opening your " + (examType || "CBT") + " exam…", true);
+    setStartStatus("Opening exam…", true);
 
-    // Close any leftover result overlay from a previous broken attempt
     try {
       if ($("result-screen")) $("result-screen").classList.remove("is-on");
     } catch (e0) {}
 
-    // Wake in background — do not block Start on Render cold wake
     if (api.wakeServer) {
       try {
-        api.wakeServer(15000);
+        api.wakeServer(12000);
       } catch (eWake) {}
     }
 
     var finished = false;
     var watchdog = setTimeout(function () {
       if (finished) return;
-      setStartStatus("Almost ready… keep this page open.", true);
-      if (btn) btn.textContent = "Opening…";
-    }, 8000);
+      setStartStatus("Still opening… one moment.", true);
+    }, 5000);
+    var hardStop = setTimeout(function () {
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
+      resetStartBtn();
+      setStartStatus("Start timed out. Tap Start again.", false);
+    }, 35000);
 
     api
       .api("/api/v1/cbt/practice/start", {
         method: "POST",
         body: { exam_type: examType, subjects: subjects },
-        timeout: 45000,
+        timeout: 30000,
         retries: 0,
         preferXhr: true,
       })
       .then(function (attempt) {
+        if (finished && !attempt) return;
         finished = true;
         clearTimeout(watchdog);
+        clearTimeout(hardStop);
         resetStartBtn();
         try {
           openPracticeAttempt(attempt);
@@ -2214,8 +2220,10 @@
         }
       })
       .catch(function (err) {
+        if (finished) return;
         finished = true;
         clearTimeout(watchdog);
+        clearTimeout(hardStop);
         resetStartBtn();
         if (isCbtPackageError(err)) {
           setStartStatus("Unlock required — use coupon or pay, then start again.", false);
@@ -2224,8 +2232,7 @@
           });
           return;
         }
-        var msg = errMsg(err) || "Could not start CBT. Try again.";
-        setStartStatus(msg, false);
+        setStartStatus(errMsg(err) || "Could not start CBT. Try again.", false);
       });
   }
 
