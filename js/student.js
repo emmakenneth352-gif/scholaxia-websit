@@ -2196,13 +2196,13 @@
       clearTimeout(watchdog);
       resetStartBtn();
       setStartStatus("Start timed out. Tap Start again.", false);
-    }, 35000);
+    }, 60000);
 
     api
       .api("/api/v1/cbt/practice/start", {
         method: "POST",
         body: { exam_type: examType, subjects: subjects },
-        timeout: 30000,
+        timeout: 55000,
         retries: 0,
         preferXhr: true,
       })
