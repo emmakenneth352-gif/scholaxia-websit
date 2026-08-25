@@ -2138,7 +2138,7 @@
       btn.disabled = true;
       btn.textContent = "Starting…";
     }
-    setStartStatus("Building your " + (examType || "CBT") + " paper…", true);
+    setStartStatus("Opening your " + (examType || "CBT") + " exam…", true);
 
     // Close any leftover result overlay from a previous broken attempt
     try {
@@ -2153,18 +2153,17 @@
     }
 
     var finished = false;
-    // Soft notice only — do not abort or re-enable Start while the request is still running
     var watchdog = setTimeout(function () {
       if (finished) return;
-      setStartStatus("Still building on the server… keep this page open.", true);
-      if (btn) btn.textContent = "Still starting…";
-    }, 20000);
+      setStartStatus("Almost ready… keep this page open.", true);
+      if (btn) btn.textContent = "Opening…";
+    }, 8000);
 
     api
       .api("/api/v1/cbt/practice/start", {
         method: "POST",
         body: { exam_type: examType, subjects: subjects },
-        timeout: 90000,
+        timeout: 45000,
         retries: 0,
         preferXhr: true,
       })
@@ -2172,12 +2171,11 @@
         finished = true;
         clearTimeout(watchdog);
         resetStartBtn();
-        setStartStatus("Opening exam…", true);
         try {
           openPracticeAttempt(attempt);
           setStartStatus("", true);
         } catch (openErr) {
-          setStartStatus(errMsg(openErr) || "Exam built but could not open. Tap Start again.", false);
+          setStartStatus(errMsg(openErr) || "Could not open exam. Tap Start again.", false);
         }
       })
       .catch(function (err) {
