@@ -1467,27 +1467,42 @@
   function renderExamQuestion() {
     var st = Exam.current;
     if (!st) return;
-    var q = st.questions[st.index];
-    $("examQCount").textContent = "Question " + (st.index + 1) + " of " + st.questions.length;
-    $("examQuestionText").textContent = q.text;
+    var qCount = $("examQCount");
+    var qText = $("examQuestionText");
+    var qOpts = $("examOptions");
+    var q = st.questions && st.questions[st.index];
+    if (!q) {
+      if (qCount) qCount.textContent = "No question loaded";
+      if (qText) qText.textContent = "Pick a subject again, or tap Start to reopen the exam.";
+      if (qOpts) qOpts.innerHTML = "";
+      return;
+    }
+    if (qCount) qCount.textContent = "Question " + (st.index + 1) + " of " + st.questions.length;
+    if (qText) qText.textContent = q.text || q.question_text || "";
     var selected = st.answers[q.id];
-    $("examOptions").innerHTML = q.options
-      .map(function (opt) {
-        return (
-          '<button type="button" class="exam-option' +
-          (selected === opt.key ? " is-selected" : "") +
-          '" data-opt-key="' +
-          esc(opt.key) +
-          '"><span class="opt-key">' +
-          esc(opt.key) +
-          "</span><span>" +
-          esc(opt.text) +
-          "</span></button>"
-        );
-      })
-      .join("");
-    $("examPrevBtn").disabled = st.index === 0;
-    $("examNextBtn").textContent = st.index === st.questions.length - 1 ? "Finish" : "Next →";
+    var options = q.options || [];
+    if (qOpts) {
+      qOpts.innerHTML = options
+        .map(function (opt) {
+          return (
+            '<button type="button" class="exam-option' +
+            (selected === opt.key ? " is-selected" : "") +
+            '" data-opt-key="' +
+            esc(opt.key) +
+            '"><span class="opt-key">' +
+            esc(opt.key) +
+            "</span><span>" +
+            esc(opt.text) +
+            "</span></button>"
+          );
+        })
+        .join("");
+    }
+    if ($("examPrevBtn")) $("examPrevBtn").disabled = st.index === 0;
+    if ($("examNextBtn")) {
+      $("examNextBtn").textContent =
+        st.index === st.questions.length - 1 ? "Finish" : "Next →";
+    }
     renderExamNav();
   }
 
@@ -2422,40 +2437,68 @@
         alert("Could not load this subject. Tap Start again.");
         return;
       }
-      var body = $("examBody");
-      var chooser = $("examSectionChooser");
-      if (chooser) chooser.hidden = true;
-      if (body) {
-        body.hidden = false;
-        body.innerHTML =
-          '<p class="muted" style="padding:1.5rem;text-align:center">Loading ' +
-          esc((next && next.subject) || "subject") +
-          "…</p>";
+
+      // Never replace #examBody HTML — that destroys question/option nodes permanently.
+      var loadId = (st._sectionLoadId = (st._sectionLoadId || 0) + 1);
+      var subjectName = (next && next.subject) || "subject";
+      st.awaitingSectionPick = false;
+      st.sectionIndex = nextIndex;
+      st.questions = [];
+      st.title = (st.examType || "CBT") + " · " + subjectName;
+      if ($("examTitle")) $("examTitle").textContent = st.title;
+      setPracticeQuestionView(true);
+      renderPracticeSectionTabs();
+      if ($("examQuestionText")) {
+        $("examQuestionText").textContent = "Loading " + subjectName + " questions…";
       }
-      if ($("examSub")) {
-        $("examSub").textContent = "Loading questions…";
-      }
+      if ($("examOptions")) $("examOptions").innerHTML = "";
+      if ($("examQCount")) $("examQCount").textContent = "Loading…";
+      if ($("examQuestionNav")) $("examQuestionNav").innerHTML = "";
+      if ($("examSub")) $("examSub").textContent = "Loading " + subjectName + "…";
+
       api
         .api(
           "/api/v1/cbt/practice/attempts/" +
             encodeURIComponent(st.practiceAttemptId) +
             "/sections/" +
             nextIndex,
-          { timeout: 60000, retries: 1, preferXhr: true }
+          { timeout: 90000, retries: 1, preferXhr: true }
         )
         .then(function (sec) {
+          if (!Exam.current || Exam.current._sectionLoadId !== loadId) return;
           if (!sec || !(sec.questions || []).length) {
-            throw new Error("No questions for " + ((next && next.subject) || "this subject"));
+            throw new Error(
+              "No questions in the bank for " +
+                subjectName +
+                ". Ask admin to upload/publish JAMB practice questions for this subject."
+            );
           }
           sections[nextIndex] = sec;
           st.sections = sections;
           apply();
         })
         .catch(function (err) {
-          if (chooser) chooser.hidden = false;
-          if (body) body.hidden = true;
-          alert(errMsg(err) || "Could not load subject questions. Try again.");
-          showPracticeSectionChooser();
+          if (!Exam.current || Exam.current._sectionLoadId !== loadId) return;
+          var msg = errMsg(err) || "Could not load subject questions. Try again.";
+          if ($("examQuestionText")) $("examQuestionText").textContent = msg;
+          if ($("examOptions")) {
+            $("examOptions").innerHTML =
+              '<button type="button" class="btn btn-primary btn-mini" id="cbtRetrySectionBtn">Try again</button>' +
+              '<button type="button" class="btn btn-secondary btn-mini" id="cbtBackChooserBtn" style="margin-left:0.5rem">All subjects</button>';
+            var retry = $("cbtRetrySectionBtn");
+            var back = $("cbtBackChooserBtn");
+            if (retry) {
+              retry.onclick = function () {
+                enterPracticeSection(nextIndex, true);
+              };
+            }
+            if (back) {
+              back.onclick = function () {
+                showPracticeSectionChooser();
+              };
+            }
+          }
+          if ($("examSub")) $("examSub").textContent = "Could not load " + subjectName;
         });
     }
 
