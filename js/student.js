@@ -4178,6 +4178,14 @@
     $("communityAv").textContent = (user.name || "S").charAt(0).toUpperCase();
   }
 
+  function siaDefaultSubject() {
+    var jamb = readLocalJson("sia_jamb_subjects", null) || readLocalJson("sia_subjects", []);
+    if (Array.isArray(jamb) && jamb.length) return String(jamb[0]);
+    var ssce = readLocalJson("sia_ssce_subjects", null) || [];
+    if (Array.isArray(ssce) && ssce.length) return String(ssce[0]);
+    return "General";
+  }
+
   function addBubble(text, isMe) {
     var box = $("siaChat");
     if (!box) return;
@@ -4209,6 +4217,7 @@
         method: "POST",
         body: {
           question: text,
+          subject: siaDefaultSubject(),
           language: "english",
           education_level: (siaLevelSelect && siaLevelSelect.value) || "SS3",
           conversation_history: siaHistory,
@@ -4225,7 +4234,11 @@
       })
       .catch(function (err) {
         thinking.remove();
-        addBubble("Sorry, I ran into a problem: " + errMsg(err), false);
+        var msg = errMsg(err);
+        if (/Field required|validation/i.test(msg)) {
+          msg = "Sia could not start that chat. Refresh the page and try again.";
+        }
+        addBubble("Sorry, I ran into a problem: " + msg, false);
       });
   }
 

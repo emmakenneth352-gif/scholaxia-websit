@@ -876,6 +876,9 @@ body.app-body {
   background: linear-gradient(135deg, #7c3aed, #6d28d9);
   color: #fff;
   border-bottom-right-radius: 6px;
+  justify-self: end;
+  width: fit-content;
+  max-width: 85%;
 }
 
 .chat-form input {
@@ -1183,6 +1186,9 @@ body.app-body {
 }
 .sia-chip:hover { background: #f3e8ff; }
 .sia-chat {
+  display: grid;
+  gap: 0.65rem;
+  align-content: start;
   max-height: min(52vh, 520px);
   min-height: 320px;
   margin: 0.75rem 1.1rem;
@@ -1190,6 +1196,7 @@ body.app-body {
   border: 1px solid #ede9fe;
   background: linear-gradient(180deg, #faf5ff, #f8fafc);
   padding: 1rem;
+  overflow: auto;
 }
 .sia-welcome {
   display: flex;
@@ -1203,10 +1210,34 @@ body.app-body {
 .sia-welcome strong { display: block; margin-bottom: 0.2rem; }
 .sia-welcome p { color: var(--muted); font-size: 0.88rem; margin: 0; line-height: 1.45; }
 .sia-compose {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
   border-top: 1px solid var(--line);
   padding: 0.9rem 1.1rem 1.1rem;
   background: #fff;
   margin: 0;
+}
+.sia-compose input {
+  width: 100%;
+  min-height: 2.75rem;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 0 0.95rem;
+  font: inherit;
+  background: #fff;
+  outline: none;
+}
+.sia-compose input:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+.sia-compose button {
+  min-height: 2.75rem;
+  padding: 0 1.15rem;
+  border-radius: 14px;
+  white-space: nowrap;
 }
 .bubble.bot {
   white-space: pre-wrap;
