@@ -189,7 +189,7 @@
 
   var PAGE_TITLES = {
     home: "Home",
-    "study-materials": "Lesson Notes",
+    "study-materials": "Video Tutorials",
     "past-questions": "Past Questions",
     cbt: "CBT Practice",
     school: "Scholaxia Exam",
@@ -433,39 +433,16 @@
     return u;
   }
 
-  var lessonNotesCache = [];
   var lessonVideosCache = [];
 
-  function isLessonNotesCategory(cat) {
-    var c = String(cat || "")
-      .toLowerCase()
-      .replace(/[_-]+/g, " ")
-      .trim();
-    if (!c) return false;
-    if (c === "notes" || c === "lesson notes" || c === "lesson note") return true;
-    if (c === "study materials" || c === "study material" || c === "materials") return true;
-    if (c.indexOf("lesson note") >= 0 || c.indexOf("study material") >= 0) return true;
-    return false;
-  }
-
-  function renderLessonNoteCards(items) {
+  function renderLessonVideos(items) {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
     if (!items.length) {
       wrap.innerHTML = emptyHtml(
-        "📝",
-        "No lesson notes or study materials yet. Admin uploads PDFs under Library and chooses Material type: Lesson Notes or Study Materials."
+        "▶",
+        "No video tutorials yet. Admin posts YouTube lessons under Video Tutorials. PDF Lesson Notes are in Library."
       );
-      return;
-    }
-    wrap.innerHTML = items.map(renderLibraryCard).join("");
-  }
-
-  function renderLessonVideos(items) {
-    var wrap = $("lessonVideosList");
-    if (!wrap) return;
-    if (!items.length) {
-      wrap.innerHTML = '<p class="muted">No video lessons posted yet.</p>';
       return;
     }
     wrap.innerHTML = items
@@ -498,17 +475,9 @@
   function filterLessonNotes() {
     var q = (($("lessonNotesSearch") && $("lessonNotesSearch").value) || "").trim().toLowerCase();
     if (!q) {
-      renderLessonNoteCards(lessonNotesCache);
       renderLessonVideos(lessonVideosCache);
       return;
     }
-    var filteredNotes = lessonNotesCache.filter(function (it) {
-      var blob = [it.title, it.subject, it.description, it.scheme_topic, it.category, it.author]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return blob.indexOf(q) >= 0;
-    });
     var filteredVideos = lessonVideosCache.filter(function (it) {
       var blob = [
         it.title,
@@ -525,42 +494,21 @@
         .toLowerCase();
       return blob.indexOf(q) >= 0;
     });
-    renderLessonNoteCards(filteredNotes);
     renderLessonVideos(filteredVideos);
   }
 
   function loadStudyMaterials() {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
-    wrap.innerHTML = loadingHtml("Loading lesson notes…");
-    var videosWrap = $("lessonVideosList");
-    if (videosWrap) videosWrap.innerHTML = loadingHtml("Loading videos…");
-
-    var notesPromise = api.api("/api/v1/library/student", { timeout: 45000, retries: 1, preferXhr: true });
-    var videosPromise = api.api("/api/v1/videos", { timeout: 30000, retries: 0, preferXhr: true }).catch(function () {
-      return [];
-    });
-
-    Promise.all([notesPromise, videosPromise])
-      .then(function (pair) {
-        var books = firstArray(pair[0], ["items", "results", "library", "books"]);
-        lessonNotesCache = books.filter(function (b) {
-          return isLessonNotesCategory(b.category || b.type);
-        });
-        lessonVideosCache = firstArray(pair[1], ["videos", "items", "results"]);
-        if (!lessonNotesCache.length && !lessonVideosCache.length) {
-          wrap.innerHTML = emptyHtml(
-            "📝",
-            "No lesson notes yet. In Admin → Library, upload a PDF and set Material type to Lesson Notes or Study Materials."
-          );
-          if (videosWrap) videosWrap.innerHTML = "";
-          return;
-        }
+    wrap.innerHTML = loadingHtml("Loading video tutorials…");
+    api
+      .api("/api/v1/videos", { timeout: 30000, retries: 1, preferXhr: true })
+      .then(function (data) {
+        lessonVideosCache = firstArray(data, ["videos", "items", "results"]);
         filterLessonNotes();
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "study-materials");
-        if (videosWrap) videosWrap.innerHTML = "";
       });
   }
 
@@ -873,17 +821,31 @@
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading library…");
     api
-      .api("/api/v1/library/student")
+      .api("/api/v1/library/student", { timeout: 45000, retries: 1, preferXhr: true })
       .then(function (data) {
-        libraryCache = firstArray(data, ["items", "results", "library"]);
-        var cats = Array.from(
-          new Set(libraryCache.map(function (it) { return it.category || it.type; }).filter(Boolean))
+        libraryCache = firstArray(data, ["items", "results", "library", "books"]);
+        var fixed = ["Books", "Study Materials", "Scheme of Work", "Lesson Notes"];
+        var extras = libraryCache
+          .map(function (it) {
+            return it.category || it.type;
+          })
+          .filter(function (c) {
+            return c && fixed.indexOf(c) < 0;
+          });
+        var cats = fixed.concat(
+          Array.from(new Set(extras)).sort(function (a, b) {
+            return String(a).localeCompare(String(b));
+          })
         );
         var sel = $("libFilter");
+        var prev = sel ? sel.value : "";
         if (sel) {
           sel.innerHTML =
             '<option value="">All categories</option>' +
-            cats.map(function (c) { return '<option value="' + esc(c) + '">' + esc(c) + "</option>"; }).join("");
+            cats.map(function (c) {
+              return '<option value="' + esc(c) + '">' + esc(c) + "</option>";
+            }).join("");
+          if (prev) sel.value = prev;
         }
         renderLibrary();
       })
@@ -892,13 +854,30 @@
       });
   }
 
+  function libraryCategoryMatches(itemCat, filterCat) {
+    if (!filterCat) return true;
+    var a = String(itemCat || "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .trim();
+    var b = String(filterCat || "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .trim();
+    if (a === b) return true;
+    if (b === "lesson notes" && (a === "notes" || a === "lesson note")) return true;
+    if (b === "study materials" && (a === "study material" || a === "materials")) return true;
+    if (b === "scheme of work" && (a === "scheme" || a.indexOf("scheme") === 0)) return true;
+    return false;
+  }
+
   function renderLibrary() {
     var wrap = $("libraryGrid");
     if (!wrap) return;
     var q = ($("libSearch") && $("libSearch").value || "").toLowerCase().trim();
     var cat = ($("libFilter") && $("libFilter").value) || "";
     var items = libraryCache.filter(function (it) {
-      if (cat && (it.category || it.type) !== cat) return false;
+      if (!libraryCategoryMatches(it.category || it.type, cat)) return false;
       if (q) {
         var hay = ((it.title || "") + " " + (it.description || "") + " " + (it.subject || "")).toLowerCase();
         if (hay.indexOf(q) < 0) return false;
@@ -906,7 +885,12 @@
       return true;
     });
     if (!items.length) {
-      wrap.innerHTML = emptyHtml("📚", "No library resources match your search.");
+      wrap.innerHTML = emptyHtml(
+        "📚",
+        cat
+          ? "No materials in «" + cat + "» yet. Admin uploads them under Library with that Material type."
+          : "No library resources match your search."
+      );
       return;
     }
     wrap.innerHTML = items.map(renderLibraryCard).join("");

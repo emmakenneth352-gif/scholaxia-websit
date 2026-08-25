@@ -36,7 +36,7 @@
         </div>
         <nav class="side-nav" id="studentNav">
           <button class="side-link is-active" data-page="home" type="button"><span class="ico">⌂</span>Home</button>
-          <button class="side-link" data-page="study-materials" type="button"><span class="ico">▶</span>Lesson Notes</button>
+          <button class="side-link" data-page="study-materials" type="button"><span class="ico">▶</span>Video Tutorials</button>
           <button class="side-link" data-page="past-questions" type="button"><span class="ico">📄</span>Past Questions</button>
           <button class="side-link" data-page="cbt" type="button"><span class="ico">📝</span>My CBT</button>
           <button class="side-link" data-page="school-portal" type="button"><span class="ico">🏫</span>Examinations</button>
@@ -138,8 +138,8 @@
             <div class="panel">
               <div class="panel-head">
                 <div>
-                  <h2>Lesson Notes</h2>
-                  <p>PDF notes and study materials uploaded by admin (Library → Material type: Lesson Notes or Study Materials).</p>
+                  <h2>Video Tutorials</h2>
+                  <p>YouTube lessons from Admin → Video Tutorials. PDF lesson notes are under <strong>Library</strong>.</p>
                 </div>
                 <button type="button" class="btn btn-mini" data-refresh="study-materials">⟲ Refresh</button>
               </div>
@@ -148,14 +148,11 @@
                 <input
                   id="lessonNotesSearch"
                   type="search"
-                  placeholder="Search by title, subject, or topic…"
+                  placeholder="Search by topic or tutor name…"
                   autocomplete="off"
                 />
               </div>
-              <div class="card-grid" id="studyMaterialsList"><div class="loading-state">Loading lesson notes…</div></div>
-              <h3 style="margin:1.5rem 0 0.5rem;font-size:1.05rem">Video lessons</h3>
-              <p class="muted" style="margin:0 0 0.75rem">Optional YouTube lessons from Admin → Video Tutorials.</p>
-              <div class="card-grid" id="lessonVideosList"></div>
+              <div class="card-grid" id="studyMaterialsList"><div class="loading-state">Loading video tutorials…</div></div>
             </div>
           </section>
 
@@ -329,12 +326,19 @@
               <div class="panel-head">
                 <div>
                   <h2>Library</h2>
-                  <p>Browse curated notes, ebooks, and revision resources.</p>
+                  <p>PDF materials by category: <strong>Books</strong>, <strong>Study Materials</strong>, <strong>Scheme of Work</strong>, and <strong>Lesson Notes</strong>.</p>
                 </div>
+                <button type="button" class="btn btn-mini" data-refresh="library">⟲ Refresh</button>
               </div>
               <div class="btn-row lib-toolbar">
                 <input type="search" id="libSearch" placeholder="Search library…" />
-                <select id="libFilter"><option value="">All categories</option></select>
+                <select id="libFilter">
+                  <option value="">All categories</option>
+                  <option value="Books">Books</option>
+                  <option value="Study Materials">Study Materials</option>
+                  <option value="Scheme of Work">Scheme of Work</option>
+                  <option value="Lesson Notes">Lesson Notes</option>
+                </select>
               </div>
               <div class="card-grid" id="libraryGrid"><div class="loading-state">Loading library…</div></div>
             </div>
@@ -770,8 +774,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260825b"></script>
+    <script src="js/api.js?v=20260825c"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260825b"></script>
+    <script src="js/student.js?v=20260825c"></script>
   </body>
 </html>
