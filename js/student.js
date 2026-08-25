@@ -2505,18 +2505,11 @@
           if ($("examQuestionText")) $("examQuestionText").textContent = msg;
           if ($("examOptions")) {
             $("examOptions").innerHTML =
-              '<button type="button" class="btn btn-primary btn-mini" id="cbtRetrySectionBtn">Try again</button>' +
-              '<button type="button" class="btn btn-secondary btn-mini" id="cbtBackChooserBtn" style="margin-left:0.5rem">All subjects</button>';
+              '<button type="button" class="btn btn-primary btn-mini" id="cbtRetrySectionBtn">Try again</button>';
             var retry = $("cbtRetrySectionBtn");
-            var back = $("cbtBackChooserBtn");
             if (retry) {
               retry.onclick = function () {
                 enterPracticeSection(nextIndex, true);
-              };
-            }
-            if (back) {
-              back.onclick = function () {
-                showPracticeSectionChooser();
               };
             }
           }
