@@ -139,7 +139,7 @@
               <div class="panel-head">
                 <div>
                   <h2>Lesson Notes</h2>
-                  <p>Video lessons posted by Scholaxia admin — search by topic or tutor name.</p>
+                  <p>PDF notes and study materials uploaded by admin (Library → Material type: Lesson Notes or Study Materials).</p>
                 </div>
                 <button type="button" class="btn btn-mini" data-refresh="study-materials">⟲ Refresh</button>
               </div>
@@ -148,11 +148,14 @@
                 <input
                   id="lessonNotesSearch"
                   type="search"
-                  placeholder="Search by topic or tutor name…"
+                  placeholder="Search by title, subject, or topic…"
                   autocomplete="off"
                 />
               </div>
               <div class="card-grid" id="studyMaterialsList"><div class="loading-state">Loading lesson notes…</div></div>
+              <h3 style="margin:1.5rem 0 0.5rem;font-size:1.05rem">Video lessons</h3>
+              <p class="muted" style="margin:0 0 0.75rem">Optional YouTube lessons from Admin → Video Tutorials.</p>
+              <div class="card-grid" id="lessonVideosList"></div>
             </div>
           </section>
 
@@ -767,8 +770,8 @@
       </div>
     </div>
 
-    <script src="js/api.js?v=20260824o"></script>
+    <script src="js/api.js?v=20260825b"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260825a"></script>
+    <script src="js/student.js?v=20260825b"></script>
   </body>
 </html>

@@ -434,12 +434,38 @@
   }
 
   var lessonNotesCache = [];
+  var lessonVideosCache = [];
 
-  function renderLessonNotes(items) {
+  function isLessonNotesCategory(cat) {
+    var c = String(cat || "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .trim();
+    if (!c) return false;
+    if (c === "notes" || c === "lesson notes" || c === "lesson note") return true;
+    if (c === "study materials" || c === "study material" || c === "materials") return true;
+    if (c.indexOf("lesson note") >= 0 || c.indexOf("study material") >= 0) return true;
+    return false;
+  }
+
+  function renderLessonNoteCards(items) {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
     if (!items.length) {
-      wrap.innerHTML = emptyHtml("▶", "No lesson notes match your search.");
+      wrap.innerHTML = emptyHtml(
+        "📝",
+        "No lesson notes or study materials yet. Admin uploads PDFs under Library and chooses Material type: Lesson Notes or Study Materials."
+      );
+      return;
+    }
+    wrap.innerHTML = items.map(renderLibraryCard).join("");
+  }
+
+  function renderLessonVideos(items) {
+    var wrap = $("lessonVideosList");
+    if (!wrap) return;
+    if (!items.length) {
+      wrap.innerHTML = '<p class="muted">No video lessons posted yet.</p>';
       return;
     }
     wrap.innerHTML = items
@@ -449,9 +475,9 @@
         return (
           '<div class="card">' +
           '<span class="card-tag">' +
-          esc(it.subject || "Lesson") +
+          esc(it.subject || "Video") +
           "</span><h4>" +
-          esc(it.title || "Lesson note") +
+          esc(it.title || "Lesson video") +
           "</h4>" +
           (tutor
             ? '<p class="muted" style="margin:0.25rem 0 0.65rem">Tutor: ' + esc(tutor) + "</p>"
@@ -472,10 +498,18 @@
   function filterLessonNotes() {
     var q = (($("lessonNotesSearch") && $("lessonNotesSearch").value) || "").trim().toLowerCase();
     if (!q) {
-      renderLessonNotes(lessonNotesCache);
+      renderLessonNoteCards(lessonNotesCache);
+      renderLessonVideos(lessonVideosCache);
       return;
     }
-    var filtered = lessonNotesCache.filter(function (it) {
+    var filteredNotes = lessonNotesCache.filter(function (it) {
+      var blob = [it.title, it.subject, it.description, it.scheme_topic, it.category, it.author]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+    var filteredVideos = lessonVideosCache.filter(function (it) {
       var blob = [
         it.title,
         it.subject,
@@ -491,25 +525,42 @@
         .toLowerCase();
       return blob.indexOf(q) >= 0;
     });
-    renderLessonNotes(filtered);
+    renderLessonNoteCards(filteredNotes);
+    renderLessonVideos(filteredVideos);
   }
 
   function loadStudyMaterials() {
     var wrap = $("studyMaterialsList");
     if (!wrap) return;
     wrap.innerHTML = loadingHtml("Loading lesson notes…");
-    api
-      .api("/api/v1/videos")
-      .then(function (data) {
-        lessonNotesCache = firstArray(data, ["videos", "items", "results"]);
-        if (!lessonNotesCache.length) {
-          wrap.innerHTML = emptyHtml("▶", "No lesson notes yet. Admin will post YouTube lessons here.");
+    var videosWrap = $("lessonVideosList");
+    if (videosWrap) videosWrap.innerHTML = loadingHtml("Loading videos…");
+
+    var notesPromise = api.api("/api/v1/library/student", { timeout: 45000, retries: 1, preferXhr: true });
+    var videosPromise = api.api("/api/v1/videos", { timeout: 30000, retries: 0, preferXhr: true }).catch(function () {
+      return [];
+    });
+
+    Promise.all([notesPromise, videosPromise])
+      .then(function (pair) {
+        var books = firstArray(pair[0], ["items", "results", "library", "books"]);
+        lessonNotesCache = books.filter(function (b) {
+          return isLessonNotesCategory(b.category || b.type);
+        });
+        lessonVideosCache = firstArray(pair[1], ["videos", "items", "results"]);
+        if (!lessonNotesCache.length && !lessonVideosCache.length) {
+          wrap.innerHTML = emptyHtml(
+            "📝",
+            "No lesson notes yet. In Admin → Library, upload a PDF and set Material type to Lesson Notes or Study Materials."
+          );
+          if (videosWrap) videosWrap.innerHTML = "";
           return;
         }
         filterLessonNotes();
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "study-materials");
+        if (videosWrap) videosWrap.innerHTML = "";
       });
   }
 
