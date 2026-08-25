@@ -1,4 +1,4 @@
-/* Scholaxia Kids website — Home, Sia, Live, Saved, CBT, Profile (no games, no search) */
+/* Scholaxia Kids website — Home, Sia, Live, Saved, Library, Videos, CBT, Profile */
 (function () {
   var api = window.ScholaxiaAPI;
   if (!api || typeof api.requireAuth !== "function") {
@@ -12,6 +12,8 @@
     sia: "Sia AI",
     live: "Live Class",
     saved: "Saved",
+    library: "Library",
+    videos: "Videos",
     cbt: "CBT",
     profile: "Profile",
   };
@@ -20,6 +22,8 @@
   var currentPage = "home";
   var siaHistory = [];
   var cbtState = { exam: null, session: null, answers: {}, index: 0 };
+  var kindLibraryCache = [];
+  var kindVideosCache = [];
   var shell = document.getElementById("kindShell");
 
   function $(id) {
@@ -103,6 +107,8 @@
       if (id === "home") loadHome();
       else if (id === "live") loadLive();
       else if (id === "saved") loadSaved();
+      else if (id === "library") loadKindLibrary();
+      else if (id === "videos") loadKindVideos();
       else if (id === "cbt") loadCbt();
       else if (id === "profile") loadProfile();
       else if (id === "sia") renderSia();
@@ -353,6 +359,254 @@
         .join("");
     } catch (e) {
       el.innerHTML = '<div class="empty">' + esc(e.message || "Could not load saved") + "</div>";
+    }
+  }
+
+  function firstArray(data, keys) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== "object") return [];
+    for (var i = 0; i < keys.length; i++) {
+      if (Array.isArray(data[keys[i]])) return data[keys[i]];
+    }
+    return [];
+  }
+
+  function youtubeEmbed(url) {
+    var u = String(url || "").trim();
+    var m = u.match(/(?:youtu\.be\/|v=)([A-Za-z0-9_-]{6,})/);
+    if (m) return "https://www.youtube.com/embed/" + m[1];
+    return u;
+  }
+
+  async function fetchKindLibraryPdf(id) {
+    if (api.fetchBinary) {
+      return api.fetchBinary("/api/v1/library/" + encodeURIComponent(id) + "/file", {
+        timeout: 180000,
+        retries: 3,
+        headers: { Accept: "application/pdf" },
+      });
+    }
+    var token = api.getToken();
+    var url = api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file";
+    if (api.wakeServer) {
+      try {
+        await api.wakeServer(60000);
+      } catch (e) {}
+    }
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", url, true);
+      xhr.responseType = "arraybuffer";
+      xhr.timeout = 180000;
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.setRequestHeader("Accept", "application/pdf");
+      xhr.onload = function () {
+        if (xhr.status === 402) {
+          reject(new Error("Pay to unlock this book."));
+          return;
+        }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(new Uint8Array(xhr.response));
+          return;
+        }
+        reject(new Error("Could not open this book (" + xhr.status + ")"));
+      };
+      xhr.onerror = function () {
+        reject(new Error("Failed to fetch"));
+      };
+      xhr.ontimeout = function () {
+        reject(new Error("The server took too long. Try again."));
+      };
+      xhr.send();
+    });
+  }
+
+  async function openKindBook(id, btn) {
+    if (!id) return;
+    var prev = btn ? btn.textContent : "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Opening…";
+    }
+    try {
+      if (api.wakeServer) {
+        try {
+          await api.wakeServer(45000);
+        } catch (e) {}
+      }
+      var bytes = await fetchKindLibraryPdf(id);
+      var blob = new Blob([bytes], { type: "application/pdf" });
+      var blobUrl = URL.createObjectURL(blob);
+      var win = window.open(blobUrl, "_blank", "noopener");
+      if (!win) alert("Allow pop-ups to read this PDF, or try again.");
+      setTimeout(function () {
+        URL.revokeObjectURL(blobUrl);
+      }, 60000);
+    } catch (e) {
+      var msg = e.message || "Could not open book.";
+      if (/402|pay|unlock/i.test(msg)) {
+        try {
+          var paid = await window.paystackPurchase({
+            productType: "library_book",
+            productId: id,
+            returnPage: "library",
+          });
+          if (paid) openKindBook(id, btn);
+          return;
+        } catch (payErr) {
+          msg = payErr.message || msg;
+        }
+      }
+      alert(msg);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prev || "Read";
+      }
+    }
+  }
+
+  function renderKindLibrary(items) {
+    var el = $("kindLibraryList");
+    if (!el) return;
+    if (!items.length) {
+      el.innerHTML =
+        '<div class="empty">No kids library books yet. Admin uploads them under Kids Library in the admin panel.</div>';
+      return;
+    }
+    el.innerHTML = items
+      .map(function (it) {
+        var title = it.title || it.name || "Book";
+        var cat = it.category || it.subject || "Library";
+        var desc = it.description || it.author || "";
+        var price = Number(it.price || 0);
+        var hasAccess = !!(it.has_access || it.is_free || price <= 0);
+        var foot;
+        if (hasAccess) {
+          foot =
+            '<button type="button" class="btn btn-primary" data-open-book="' +
+            esc(String(it.id)) +
+            '">Read</button>';
+        } else {
+          foot =
+            "<strong>₦" +
+            price.toLocaleString("en-NG") +
+            '</strong><button type="button" class="btn btn-primary" data-pay-book="' +
+            esc(String(it.id)) +
+            '">Buy with Paystack</button>';
+        }
+        return (
+          '<article class="saved-card"><strong>' +
+          esc(title) +
+          '</strong><span style="color:var(--muted);font-weight:700">' +
+          esc(cat) +
+          "</span>" +
+          (desc ? '<p style="margin:0.35rem 0 0.65rem;color:var(--muted)">' + esc(desc) + "</p>" : "") +
+          foot +
+          "</article>"
+        );
+      })
+      .join("");
+  }
+
+  function filterKindLibrary() {
+    var q = (($("kindLibrarySearch") && $("kindLibrarySearch").value) || "").trim().toLowerCase();
+    if (!q) {
+      renderKindLibrary(kindLibraryCache);
+      return;
+    }
+    var filtered = kindLibraryCache.filter(function (it) {
+      var blob = [it.title, it.author, it.subject, it.description, it.category]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+    renderKindLibrary(filtered);
+  }
+
+  async function loadKindLibrary() {
+    var el = $("kindLibraryList");
+    if (!el) return;
+    el.innerHTML = '<div class="loading">Loading library…</div>';
+    try {
+      if (api.wakeServer) {
+        try {
+          await api.wakeServer(30000);
+        } catch (e) {}
+      }
+      var data = await api.api("/api/v1/library/kind", { timeout: 45000, retries: 1, preferXhr: true });
+      kindLibraryCache = firstArray(data, ["items", "results", "library", "books"]);
+      if (!Array.isArray(kindLibraryCache) && Array.isArray(data)) kindLibraryCache = data;
+      filterKindLibrary();
+    } catch (e) {
+      el.innerHTML = '<div class="empty">' + esc(e.message || "Could not load library") + "</div>";
+    }
+  }
+
+  function renderKindVideos(items) {
+    var el = $("kindVideosList");
+    if (!el) return;
+    if (!items.length) {
+      el.innerHTML =
+        '<div class="empty">No kid videos yet. Admin uploads them under Kids Videos in the admin panel.</div>';
+      return;
+    }
+    el.innerHTML = items
+      .map(function (it) {
+        var src = youtubeEmbed(it.video_url || it.url || "");
+        var tutor = it.tutor_name || it.tutor || "";
+        return (
+          '<article class="saved-card">' +
+          "<strong>" +
+          esc(it.title || "Video lesson") +
+          '</strong><span style="color:var(--muted);font-weight:700">' +
+          esc(it.subject || "Video") +
+          "</span>" +
+          (tutor
+            ? '<p style="margin:0.35rem 0 0.65rem;color:var(--muted)">Tutor: ' + esc(tutor) + "</p>"
+            : "") +
+          (src
+            ? '<div class="video-frame"><iframe src="' +
+              esc(src) +
+              '" title="' +
+              esc(it.title || "Video") +
+              '" allowfullscreen loading="lazy"></iframe></div>'
+            : '<a class="btn btn-primary" href="' +
+              esc(it.video_url || "#") +
+              '" target="_blank" rel="noopener">Watch</a>') +
+          "</article>"
+        );
+      })
+      .join("");
+  }
+
+  function filterKindVideos() {
+    var q = (($("kindVideosSearch") && $("kindVideosSearch").value) || "").trim().toLowerCase();
+    if (!q) {
+      renderKindVideos(kindVideosCache);
+      return;
+    }
+    var filtered = kindVideosCache.filter(function (it) {
+      var blob = [it.title, it.subject, it.tutor_name, it.tutor, it.exam_type]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.indexOf(q) >= 0;
+    });
+    renderKindVideos(filtered);
+  }
+
+  async function loadKindVideos() {
+    var el = $("kindVideosList");
+    if (!el) return;
+    el.innerHTML = '<div class="loading">Loading videos…</div>';
+    try {
+      var data = await api.api("/api/v1/videos/kind", { timeout: 30000, retries: 1, preferXhr: true });
+      kindVideosCache = firstArray(data, ["videos", "items", "results"]);
+      filterKindVideos();
+    } catch (e) {
+      el.innerHTML = '<div class="empty">' + esc(e.message || "Could not load videos") + "</div>";
     }
   }
 
@@ -641,6 +895,20 @@
     if (start) {
       e.preventDefault();
       startCbt(start.getAttribute("data-start-cbt"), start);
+      return;
+    }
+
+    var openBook = t.closest("[data-open-book]");
+    if (openBook) {
+      e.preventDefault();
+      openKindBook(openBook.getAttribute("data-open-book"), openBook);
+      return;
+    }
+
+    var payBook = t.closest("[data-pay-book]");
+    if (payBook) {
+      e.preventDefault();
+      openKindBook(payBook.getAttribute("data-pay-book"), payBook);
     }
   });
 
@@ -671,6 +939,10 @@
   if ($("refreshLiveBtn")) $("refreshLiveBtn").addEventListener("click", loadLive);
   if ($("bookPayBtn")) $("bookPayBtn").addEventListener("click", bookClass);
   if ($("cbtPayBtn")) $("cbtPayBtn").addEventListener("click", payCbt);
+  if ($("kindLibrarySearch")) $("kindLibrarySearch").addEventListener("input", filterKindLibrary);
+  if ($("kindLibraryRefresh")) $("kindLibraryRefresh").addEventListener("click", loadKindLibrary);
+  if ($("kindVideosSearch")) $("kindVideosSearch").addEventListener("input", filterKindVideos);
+  if ($("kindVideosRefresh")) $("kindVideosRefresh").addEventListener("click", loadKindVideos);
 
   if ($("mobileMenuBtn")) {
     $("mobileMenuBtn").addEventListener("click", function () {
