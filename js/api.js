@@ -451,10 +451,89 @@
     return true;
   }
 
+  async function fetchBinary(path, options) {
+    options = options || {};
+    var token = getToken();
+    var headers = Object.assign({ Accept: "application/octet-stream,*/*" }, options.headers || {});
+    if (token && !options.noAuth && !headers.Authorization) {
+      headers.Authorization = "Bearer " + token;
+    }
+    var timeoutMs = options.timeout || 180000;
+    var tries = options.retries == null ? 3 : options.retries;
+    var lastErr = null;
+    var url = API_BASE + path;
+
+    for (var i = 0; i <= tries; i++) {
+      if (i > 0) {
+        wakePromise = null;
+        lastWakeOkAt = 0;
+        try {
+          await wakeServer(60000);
+        } catch (w) {}
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 1500 * i);
+        });
+      } else {
+        try {
+          await wakeServer(45000);
+        } catch (w2) {}
+      }
+      try {
+        var bytes = await new Promise(function (resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open("GET", url, true);
+          xhr.responseType = "arraybuffer";
+          xhr.timeout = timeoutMs;
+          Object.keys(headers).forEach(function (k) {
+            xhr.setRequestHeader(k, headers[k]);
+          });
+          xhr.onload = function () {
+            if (xhr.status === 402) {
+              var err402 = new Error("Pay to unlock this material.");
+              err402.status = 402;
+              reject(err402);
+              return;
+            }
+            if (xhr.status === 403) {
+              var err403 = new Error("This file is not downloadable.");
+              err403.status = 403;
+              reject(err403);
+              return;
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+              lastWakeOkAt = Date.now();
+              resolve(new Uint8Array(xhr.response));
+              return;
+            }
+            var err = new Error("Request failed (" + xhr.status + ")");
+            err.status = xhr.status;
+            reject(err);
+          };
+          xhr.onerror = function () {
+            reject(new Error("Failed to fetch"));
+          };
+          xhr.ontimeout = function () {
+            reject(new Error("The user aborted a request."));
+          };
+          xhr.send();
+        });
+        return bytes;
+      } catch (err) {
+        lastErr = err;
+        var msg = (err && err.message) || "";
+        var retryable =
+          !err.status || err.status >= 500 || /failed to fetch|networkerror|load failed|aborted/i.test(msg);
+        if (!retryable || i === tries) break;
+      }
+    }
+    throw new Error(friendlyFetchError(lastErr) || "Could not download file.");
+  }
+
   global.ScholaxiaAPI = {
     API_BASE: API_BASE,
     api: api,
     apiUpload: apiUpload,
+    fetchBinary: fetchBinary,
     wakeServer: wakeServer,
     loginApi: loginApi,
     friendlyFetchError: friendlyFetchError,

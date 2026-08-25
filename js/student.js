@@ -590,38 +590,53 @@
   }
 
   async function fetchLibraryPdf(id) {
+    if (api.fetchBinary) {
+      return api.fetchBinary("/api/v1/library/" + encodeURIComponent(id) + "/file", {
+        timeout: 180000,
+        retries: 3,
+        headers: { Accept: "application/pdf" },
+      });
+    }
     var token = api.getToken();
     var url = api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file";
     var lastErr = null;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      if (attempt === 0 && api.wakeServer) {
+    for (var attempt = 0; attempt < 4; attempt++) {
+      if (api.wakeServer) {
         try {
-          await api.wakeServer(45000);
+          await api.wakeServer(60000);
         } catch (e) {}
       }
       try {
-        var res = await fetch(url, {
-          headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
-          credentials: "omit",
-          cache: "no-store",
-          signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
+        var bytes = await new Promise(function (resolve, reject) {
+          var xhr = new XMLHttpRequest();
+          xhr.open("GET", url, true);
+          xhr.responseType = "arraybuffer";
+          xhr.timeout = 180000;
+          xhr.setRequestHeader("Authorization", "Bearer " + token);
+          xhr.setRequestHeader("Accept", "application/pdf");
+          xhr.onload = function () {
+            if (xhr.status === 402) {
+              reject(new Error("Pay to unlock this material."));
+              return;
+            }
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(new Uint8Array(xhr.response));
+              return;
+            }
+            reject(new Error("Could not open this material (" + xhr.status + ")"));
+          };
+          xhr.onerror = function () {
+            reject(new Error("Failed to fetch"));
+          };
+          xhr.ontimeout = function () {
+            reject(new Error("The user aborted a request."));
+          };
+          xhr.send();
         });
-        if (res.status === 402) throw new Error("Pay to unlock this material.");
-        if (!res.ok) {
-          var data = await res.json().catch(function () { return {}; });
-          var detail = data && data.detail;
-          if (typeof detail === "object") detail = JSON.stringify(detail);
-          throw new Error(detail || "Could not open this material (" + res.status + ")");
-        }
-        return new Uint8Array(await res.arrayBuffer());
+        return bytes;
       } catch (err) {
         lastErr = err;
-        if (attempt === 0 && api.wakeServer) {
-          try {
-            await api.wakeServer(30000);
-          } catch (e) {}
-          continue;
-        }
+        if (attempt < 3) continue;
         throw err;
       }
     }
@@ -642,25 +657,21 @@
       btn.textContent = "Saving…";
     }
     try {
-      var token = api.getToken();
-      var res = await fetch(
-        api.API_BASE + "/api/v1/library/" + encodeURIComponent(id) + "/file?download=1",
-        {
-          headers: { Authorization: "Bearer " + token, Accept: "application/pdf" },
-          credentials: "omit",
-          cache: "no-store",
-          signal: api.fetchTimeout ? api.fetchTimeout(120000) : undefined,
-        }
-      );
-      if (res.status === 402) throw new Error("Pay to unlock this material.");
-      if (res.status === 403) throw new Error("This file is not downloadable.");
-      if (!res.ok) {
-        var data = await res.json().catch(function () { return {}; });
-        var detail = data && data.detail;
-        if (typeof detail === "object") detail = JSON.stringify(detail);
-        throw new Error(detail || "Could not download this material.");
+      if (api.wakeServer) {
+        try {
+          await api.wakeServer(45000);
+        } catch (e) {}
       }
-      var blob = await res.blob();
+      var bytes;
+      if (api.fetchBinary) {
+        bytes = await api.fetchBinary(
+          "/api/v1/library/" + encodeURIComponent(id) + "/file?download=1",
+          { timeout: 180000, retries: 3, headers: { Accept: "application/pdf" } }
+        );
+      } else {
+        bytes = await fetchLibraryPdf(id);
+      }
+      var blob = new Blob([bytes], { type: "application/pdf" });
       var url = URL.createObjectURL(blob);
       var a = document.createElement("a");
       a.href = url;
@@ -701,7 +712,7 @@
     var titleEl = $("libReaderTitle");
     var pages = $("libReaderPages");
     if (titleEl) titleEl.textContent = title || "Reading";
-    if (pages) pages.innerHTML = '<p class="lib-reader-status">Loading PDF…</p>';
+    if (pages) pages.innerHTML = '<p class="lib-reader-status">Waking server… then loading PDF. Large books can take up to 2 minutes on first open.</p>';
     if (overlay) overlay.hidden = false;
     var taskId = ++libReaderTask;
     fetchLibraryPdf(id)
