@@ -8,8 +8,8 @@
     <title>Scholaxia — Student</title>
     <link rel="icon" type="image/png" href="media/logo-main.png" />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/app.css?v=14" />
-    <link rel="stylesheet" href="css/student-pretty.css?v=20260826d" />
+    <link rel="stylesheet" href="css/app.css?v=15" />
+    <link rel="stylesheet" href="css/student-pretty.css?v=20260827a" />
     <script>
       // Drop stale caches so CBT updates are not stuck on old JS
       try {
@@ -45,6 +45,7 @@
           <button class="side-link" data-page="subscription" type="button"><span class="ico">💳</span>Subscription</button>
           <button class="side-link" data-page="skills" type="button"><span class="ico">🎓</span>Skills</button>
           <button class="side-link" data-page="library" type="button"><span class="ico">📚</span>Library</button>
+          <button class="side-link" data-page="games" type="button"><span class="ico">🎮</span>Games</button>
           <button class="side-link" data-page="assignments" type="button"><span class="ico">📋</span>Assignments</button>
           <button class="side-link" data-page="sia" type="button"><span class="ico">✨</span>Tutor AI</button>
           <button class="side-link" data-page="community" type="button"><span class="ico">💬</span>Community</button>
@@ -130,6 +131,7 @@
               <button type="button" class="quick action qa-cbt" data-goto="cbt"><span>📝</span><strong>CBT Packages</strong><small>Annual CBT access</small></button>
               <button type="button" class="quick action qa-school" data-goto="school-portal"><span>🏫</span><strong>Examinations</strong><small>Papers your school published for your class</small></button>
               <button type="button" class="quick action qa-library" data-goto="library"><span>📚</span><strong>Library</strong><small>Notes &amp; resources</small></button>
+              <button type="button" class="quick action qa-games" data-goto="games"><span>🎮</span><strong>Games</strong><small>Brain Breakers — 30 levels</small></button>
             </div>
           </section>
 
@@ -341,6 +343,19 @@
                 </select>
               </div>
               <div class="card-grid" id="libraryGrid"><div class="loading-state">Loading library…</div></div>
+            </div>
+          </section>
+
+          <!-- ================= GAMES ================= -->
+          <section class="page" id="page-games">
+            <div class="games-hub">
+              <div class="games-hero">
+                <h2>🎮 Brain Breakers</h2>
+                <p>Three hard games — <strong>30 levels each</strong>, no repeated questions. Same as the Scholaxia student app.</p>
+              </div>
+              <h3 class="section-title" style="margin-bottom:14px">Pick a challenge</h3>
+              <div id="games-list" class="games-grid games-tile-list"></div>
+              <div id="games-play-area" class="hidden"></div>
             </div>
           </section>
 
@@ -795,6 +810,7 @@
 
     <script src="js/api.js?v=20260826c"></script>
     <script src="js/paystack.js?v=9"></script>
-    <script src="js/student.js?v=20260826d"></script>
+    <script src="js/games.js?v=20260827a"></script>
+    <script src="js/student.js?v=20260827a"></script>
   </body>
 </html>

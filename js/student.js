@@ -199,6 +199,7 @@
     subscription: "Subscription",
     skills: "Skills",
     library: "Library",
+    games: "Games",
     assignments: "Assignments",
     sia: "Tutor AI",
     community: "Community",
@@ -223,6 +224,9 @@
     subscription: loadSubscription,
     skills: loadSkills,
     library: loadLibrary,
+    games: function () {
+      if (typeof loadGamesPage === "function") loadGamesPage();
+    },
     assignments: loadAssignments,
     community: loadCommunity,
     groups: loadGroups,
@@ -256,8 +260,8 @@
 
     updateBackBtn();
 
-    if (!loadedPages[id] && PAGE_LOADERS[id]) {
-      loadedPages[id] = true;
+    if ((!loadedPages[id] || id === "games") && PAGE_LOADERS[id]) {
+      if (id !== "games") loadedPages[id] = true;
       try {
         PAGE_LOADERS[id]();
       } catch (e) {

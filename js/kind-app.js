@@ -1,4 +1,4 @@
-/* Scholaxia Kids website — Home, Sia, Live, Saved, Library, Videos, CBT, Profile */
+/* Scholaxia Kids website — Home, Sia, Live, Saved, Library, Videos, Games, CBT, Profile */
 (function () {
   var api = window.ScholaxiaAPI;
   if (!api || typeof api.requireAuth !== "function") {
@@ -14,6 +14,7 @@
     saved: "Saved",
     library: "Library",
     videos: "Videos",
+    games: "Games",
     cbt: "CBT",
     profile: "Profile",
   };
@@ -24,6 +25,7 @@
   var cbtState = { exam: null, session: null, answers: {}, index: 0 };
   var kindLibraryCache = [];
   var kindVideosCache = [];
+  var kindActiveGame = null;
   var shell = document.getElementById("kindShell");
 
   function $(id) {
@@ -109,6 +111,7 @@
       else if (id === "saved") loadSaved();
       else if (id === "library") loadKindLibrary();
       else if (id === "videos") loadKindVideos();
+      else if (id === "games") loadKindGames();
       else if (id === "cbt") loadCbt();
       else if (id === "profile") loadProfile();
       else if (id === "sia") renderSia();
@@ -121,6 +124,10 @@
   window.kindShowPage = showPage;
 
   function goBack() {
+    if (currentPage === "games" && kindActiveGame) {
+      exitKindGame();
+      return;
+    }
     if (currentPage === "cbt" && $("cbtPlay") && !$("cbtPlay").hidden) {
       exitCbtPlayer();
       return;
@@ -610,6 +617,242 @@
     }
   }
 
+  /* —— Games —— */
+  var KIND_SAMPLE_QUESTIONS = [
+    { prompt: "What color is the sky on a sunny day?", options: ["Green", "Blue", "Red", "Yellow"], correct: 1 },
+    { prompt: "How many legs does a dog have?", options: ["2", "4", "6", "8"], correct: 1 },
+    { prompt: "Which animal says 'Meow'?", options: ["Dog", "Cat", "Cow", "Bird"], correct: 1 },
+    { prompt: "What comes after 5?", options: ["4", "6", "7", "3"], correct: 1 },
+    { prompt: "What do plants need to grow?", options: ["Ice", "Sunlight", "Darkness", "Salt"], correct: 1 },
+  ];
+
+  function kindSpeakText(text) {
+    if (!text || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(String(text));
+      u.rate = 0.95;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* ignore */ }
+  }
+
+  function kindSpeakQuestion(q) {
+    if (!q) return;
+    var text = q.speak_word || q.prompt || "";
+    kindSpeakText(text);
+  }
+
+  async function loadKindGames() {
+    var grid = $("kind-games-grid");
+    var play = $("kind-game-play");
+    if (!grid) return;
+    if (play) play.classList.add("hidden");
+    kindActiveGame = null;
+    grid.classList.remove("hidden");
+    grid.innerHTML = '<div class="loading">Loading games…</div>';
+    try {
+      var data = await api.api("/api/v1/kind/games/catalog");
+      var games = (data && data.games) || [];
+      if (!games.length) {
+        grid.innerHTML = '<div class="empty">No games available yet.</div>';
+        return;
+      }
+      grid.innerHTML = games
+        .map(function (g) {
+          var leaf = localStorage.getItem("kind_leaf_" + g.id) || "1";
+          return (
+            '<button type="button" class="kind-game-card" data-game-id="' +
+            esc(g.id) +
+            '" data-game-title="' +
+            esc(g.title) +
+            '">' +
+            '<div class="kind-game-ico">🎮</div>' +
+            "<strong>" +
+            esc(g.title) +
+            "</strong>" +
+            '<div class="leaf">🍃 Leaf ' +
+            esc(leaf) +
+            "</div>" +
+            "</button>"
+          );
+        })
+        .join("");
+    } catch (e) {
+      grid.innerHTML = '<div class="empty">' + esc(e.message || "Could not load games") + "</div>";
+    }
+  }
+
+  async function startKindGame(gameId, title) {
+    kindActiveGame = { id: gameId, title: title, qi: 0, score: 0, questions: [], answered: false };
+    var grid = $("kind-games-grid");
+    var play = $("kind-game-play");
+    if (grid) grid.classList.add("hidden");
+    if (play) {
+      play.classList.remove("hidden");
+      play.innerHTML = '<div class="loading">Loading questions…</div>';
+    }
+    try {
+      var data = await api.api("/api/v1/kind/games/" + encodeURIComponent(gameId) + "/questions");
+      var qs = (data && data.questions) || [];
+      kindActiveGame.questions = qs.length
+        ? qs.map(function (q) {
+            return {
+              prompt: q.prompt,
+              options: q.options,
+              correct: q.correct_index,
+              speak_word: q.speak_word || null,
+            };
+          })
+        : KIND_SAMPLE_QUESTIONS.slice();
+    } catch (e) {
+      kindActiveGame.questions = KIND_SAMPLE_QUESTIONS.slice();
+    }
+    showKindGameQuestion();
+  }
+
+  function showKindGameQuestion() {
+    var play = $("kind-game-play");
+    if (!play || !kindActiveGame) return;
+    var qs = kindActiveGame.questions;
+    if (kindActiveGame.qi >= qs.length) {
+      finishKindGame();
+      return;
+    }
+    if (kindActiveGame.answered) return;
+    var q = qs[kindActiveGame.qi];
+    var progress = Math.round(((kindActiveGame.qi + 1) / qs.length) * 100);
+    play.innerHTML =
+      '<div class="kind-game-play-area">' +
+      '<div class="kind-game-play-head">' +
+      "<strong>" +
+      esc(kindActiveGame.title) +
+      "</strong>" +
+      "<span>Question " +
+      (kindActiveGame.qi + 1) +
+      " of " +
+      qs.length +
+      " · Score " +
+      kindActiveGame.score +
+      "</span></div>" +
+      '<div class="kind-game-progress"><div class="kind-game-progress-fill" style="width:' +
+      progress +
+      '%"></div></div>' +
+      '<div class="kind-game-prompt-card">' +
+      '<p class="kind-game-prompt">' +
+      esc(q.prompt) +
+      "</p>" +
+      '<button type="button" class="kind-hear-btn" id="kindHearBtn">🔊 Hear question</button>' +
+      "</div>" +
+      '<div class="kind-game-options">' +
+      q.options
+        .map(function (opt, i) {
+          return (
+            '<button type="button" class="kind-game-opt" data-pick="' +
+            i +
+            '" data-correct="' +
+            q.correct +
+            '">' +
+            esc(opt) +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>" +
+      '<button type="button" class="btn btn-secondary" style="margin-top:16px" id="kindExitGame">← Back to games</button></div>';
+    setTimeout(function () {
+      kindSpeakQuestion(q);
+    }, 300);
+  }
+
+  function answerKindGame(picked, correct) {
+    if (!kindActiveGame || kindActiveGame.answered) return;
+    kindActiveGame.answered = true;
+    var ok = picked === correct;
+    if (ok) kindActiveGame.score += 1;
+    var play = $("kind-game-play");
+    if (!play) return;
+    var q = kindActiveGame.questions[kindActiveGame.qi];
+    var feedback = ok ? "🎉 Correct! Great job!" : "💡 Good try!";
+    var optsHtml = q.options
+      .map(function (opt, i) {
+        var cls = "kind-game-opt";
+        if (i === correct) cls += " kind-opt-correct";
+        else if (i === picked && !ok) cls += " kind-opt-wrong";
+        return (
+          '<button type="button" class="' +
+          cls +
+          '" disabled>' +
+          esc(opt) +
+          "</button>"
+        );
+      })
+      .join("");
+    play.innerHTML =
+      '<div class="kind-game-play-area">' +
+      '<div class="kind-game-play-head"><strong>' +
+      esc(kindActiveGame.title) +
+      "</strong></div>" +
+      '<div class="kind-game-prompt-card"><p class="kind-game-prompt">' +
+      esc(q.prompt) +
+      "</p></div>" +
+      '<div class="kind-game-options">' +
+      optsHtml +
+      "</div>" +
+      '<p class="kind-game-feedback' +
+      (ok ? " ok" : "") +
+      '">' +
+      feedback +
+      "</p>" +
+      '<button type="button" class="btn btn-primary" id="kindNextGame">' +
+      (kindActiveGame.qi + 1 >= kindActiveGame.questions.length ? "See my score" : "Next") +
+      "</button></div>";
+  }
+
+  function nextKindGameQuestion() {
+    if (!kindActiveGame) return;
+    kindActiveGame.qi += 1;
+    kindActiveGame.answered = false;
+    showKindGameQuestion();
+  }
+
+  function finishKindGame() {
+    var play = $("kind-game-play");
+    if (!kindActiveGame || !play) return;
+    var leaf = parseInt(localStorage.getItem("kind_leaf_" + kindActiveGame.id) || "1", 10);
+    if (kindActiveGame.score >= Math.ceil(kindActiveGame.questions.length * 0.6)) {
+      leaf = Math.min(30, leaf + 1);
+      localStorage.setItem("kind_leaf_" + kindActiveGame.id, String(leaf));
+    }
+    play.innerHTML =
+      '<div class="kind-game-play-area" style="text-align:center;padding:40px">' +
+      '<div style="font-size:3.5rem">🌟</div>' +
+      '<h2 style="color:#7c3aed;margin:16px 0 8px">Great job!</h2>' +
+      "<p style=\"font-size:1.1rem;margin-bottom:8px\">Score: <strong>" +
+      kindActiveGame.score +
+      "/" +
+      kindActiveGame.questions.length +
+      "</strong></p>" +
+      '<p style="color:#10b981;font-weight:700">🍃 Leaf level ' +
+      leaf +
+      "</p>" +
+      '<button type="button" class="btn btn-primary" style="margin-top:20px" id="kindExitGame">Play more games</button></div>';
+  }
+
+  function exitKindGame() {
+    try {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    } catch (e) { /* ignore */ }
+    kindActiveGame = null;
+    var grid = $("kind-games-grid");
+    var play = $("kind-game-play");
+    if (grid) grid.classList.remove("hidden");
+    if (play) {
+      play.classList.add("hidden");
+      play.innerHTML = "";
+    }
+    loadKindGames();
+  }
+
   /* —— CBT —— */
   function exitCbtPlayer() {
     cbtState = { exam: null, session: null, answers: {}, index: 0 };
@@ -881,6 +1124,38 @@
       e.preventDefault();
       e.stopPropagation();
       showPage(goto.getAttribute("data-goto"));
+      return;
+    }
+
+    var gameCard = t.closest(".kind-game-card[data-game-id]");
+    if (gameCard) {
+      e.preventDefault();
+      startKindGame(gameCard.getAttribute("data-game-id"), gameCard.getAttribute("data-game-title") || "Game");
+      return;
+    }
+
+    if (t.closest("#kindHearBtn") && kindActiveGame) {
+      e.preventDefault();
+      kindSpeakQuestion(kindActiveGame.questions[kindActiveGame.qi]);
+      return;
+    }
+
+    var opt = t.closest(".kind-game-opt[data-pick]");
+    if (opt && !opt.disabled) {
+      e.preventDefault();
+      answerKindGame(parseInt(opt.getAttribute("data-pick"), 10), parseInt(opt.getAttribute("data-correct"), 10));
+      return;
+    }
+
+    if (t.closest("#kindNextGame")) {
+      e.preventDefault();
+      nextKindGameQuestion();
+      return;
+    }
+
+    if (t.closest("#kindExitGame")) {
+      e.preventDefault();
+      exitKindGame();
       return;
     }
 

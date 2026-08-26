@@ -1590,3 +1590,135 @@ button { font: inherit; cursor: pointer; border: 0; background: none; color: inh
   .page-title { display: block; }
 }
 
+
+/* —— Student Brain Breakers games —— */
+.hidden { display: none !important; }
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 12px;
+  padding: 0.75rem 1.15rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  color: #fff;
+}
+.btn-action:hover { filter: brightness(1.05); }
+.games-hero {
+  padding: 28px 32px;
+  border-radius: 20px;
+  color: #fff;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #4c1d95, #7c3aed 55%, #a855f7);
+}
+.games-hero h2 { margin: 0 0 8px; font-size: 1.45rem; }
+.games-hero p { margin: 0; opacity: 0.92; line-height: 1.45; }
+.games-grid { display: grid; gap: 16px; margin-bottom: 24px; }
+.games-tile-list { display: flex; flex-direction: column; gap: 14px; max-width: 640px; }
+.game-card,
+.game-tile-btn {
+  background: #fff;
+  border: 1px solid rgba(124,58,237,0.16);
+  border-radius: 16px;
+  padding: 20px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  width: 100%;
+}
+.game-tile-btn {
+  display: flex !important;
+  align-items: center;
+  gap: 14px;
+  padding: 16px !important;
+  border-radius: 20px !important;
+}
+.game-card:hover,
+.game-tile-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(124,58,237,0.14);
+  border-color: #a78bfa;
+}
+.game-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.game-tile-body { flex: 1; }
+.game-tile-body h3,
+.game-card h3 { font-size: 1rem; font-weight: 800; margin: 0 0 4px; }
+.game-tile-body p,
+.game-card p { font-size: 0.82rem; color: #6b7280; margin: 0; line-height: 1.4; }
+.game-tile-chevron { font-size: 1.4rem; color: #9ca3af; }
+.game-play-area {
+  background: #fff;
+  border: 1px solid rgba(124,58,237,0.16);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 640px;
+}
+.game-play-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.game-timer { font-size: 1.1rem; font-weight: 800; color: #7c3aed; }
+.game-score { font-weight: 700; color: #6b7280; }
+.game-lives { color: #ef4444; font-weight: 700; }
+.game-prompt {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #111827;
+}
+.game-math-expr {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 12px 0;
+  font-family: ui-monospace, monospace;
+}
+.game-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgba(124,58,237,0.18);
+  border-radius: 12px;
+  font-size: 1rem;
+  margin-bottom: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+.game-input:focus { border-color: #7c3aed; }
+.game-options { display: grid; gap: 10px; margin-bottom: 16px; }
+.game-option-btn,
+.scramble-chip {
+  padding: 14px 16px;
+  border: 2px solid rgba(124,58,237,0.18);
+  border-radius: 12px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+}
+.game-option-btn:hover:not(:disabled),
+.scramble-chip:hover:not(:disabled) {
+  border-color: #a78bfa;
+  background: #f8f5ff;
+}
+.game-feedback { font-size: 0.85rem; color: #ef4444; margin: 8px 0; min-height: 1.2em; }
+.quick.action.qa-games { background: linear-gradient(135deg, #fef3c7, #fde68a); }
