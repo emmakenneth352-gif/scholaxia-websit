@@ -292,9 +292,14 @@
     options = options || {};
     var method = (options.method || "GET").toUpperCase();
     var hasBody = !!options.body;
+    var isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
     var headers = Object.assign({ Accept: "application/json" }, options.headers || {});
-    if (hasBody && !headers["Content-Type"] && !headers["content-type"]) {
+    if (hasBody && !isFormData && !headers["Content-Type"] && !headers["content-type"]) {
       headers["Content-Type"] = "application/json";
+    }
+    if (isFormData) {
+      delete headers["Content-Type"];
+      delete headers["content-type"];
     }
     var token = getToken();
     if (token && !options.noAuth && !headers.Authorization) {
@@ -312,7 +317,7 @@
     // Prefer XHR for flaky browser fetch (CBT, profile save, payments)
     var preferXhr =
       !!options.preferXhr ||
-      /\/auth\/login$|\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/cbt\/practice\/start$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$/i.test(
+      /\/auth\/login$|\/cbt\/coupons\/redeem$|\/payments\/paystack\/initialize$|\/payments\/paystack\/verify$|\/cbt\/practice\/home$|\/cbt\/practice\/start$|\/students\/setup-exam$|\/students\/me$|\/students\/subjects$|\/live-classes\/[^/]+\/join$/i.test(
         path
       );
     if (preferXhr) {
@@ -343,7 +348,7 @@
           method: method,
           mode: "cors",
           headers: headers,
-          body: hasBody ? JSON.stringify(options.body) : undefined,
+          body: hasBody ? (isFormData ? options.body : JSON.stringify(options.body)) : undefined,
           credentials: "omit",
           cache: "no-store",
           signal: t.signal,
@@ -408,7 +413,13 @@
       };
       xhr.onerror = function () { reject(new Error("Failed to fetch")); };
       xhr.ontimeout = function () { reject(new Error("The user aborted a request.")); };
-      xhr.send(options.body ? JSON.stringify(options.body) : null);
+      xhr.send(
+        options.body
+          ? options.body instanceof FormData
+            ? options.body
+            : JSON.stringify(options.body)
+          : null
+      );
     });
   }
 
@@ -419,14 +430,19 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
+    var t = options.signal ? null : fetchTimeout(options.timeout || 90000);
     var res = await fetch(API_BASE + path, {
       method: options.method || "POST",
       headers: headers,
       body: formData,
       credentials: "omit",
-      signal: options.signal || fetchTimeout(90000),
+      signal: options.signal || (t && t.signal),
     });
-    return parseResponse(res);
+    try {
+      return await parseResponse(res);
+    } finally {
+      if (t) t.clear();
+    }
   }
 
   function dashboardForRole(role) {
