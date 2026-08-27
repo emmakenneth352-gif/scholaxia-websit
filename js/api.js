@@ -206,6 +206,14 @@
     var schoolTok = localStorage.getItem("sia_school_token") || "";
     var teacherTok = localStorage.getItem("sia_teacher_token") || localStorage.getItem("sia_admin_token") || "";
     var studentTok = localStorage.getItem("sia_token") || "";
+    function clean(tok) {
+      tok = String(tok || "").replace(/^Bearer\s+/i, "").replace(/\s+/g, "").trim();
+      if (!tok || tok === "null" || tok === "undefined" || tok.length < 16) return "";
+      return tok;
+    }
+    schoolTok = clean(schoolTok);
+    teacherTok = clean(teacherTok);
+    studentTok = clean(studentTok);
     var role = "";
     try {
       role = localStorage.getItem("sia_role") || "";
