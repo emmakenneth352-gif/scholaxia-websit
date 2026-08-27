@@ -90,8 +90,51 @@
       (retryAttr
         ? '<br /><button type="button" data-retry="' + retryAttr + '">Try again</button>'
         : "") +
+      '<div class="api-ping" style="margin-top:0.65rem;font-size:0.78rem;opacity:.85" data-api-ping>Checking API…</div>' +
       "</div>"
     );
+  }
+
+  function runApiPing() {
+    var nodes = document.querySelectorAll("[data-api-ping]");
+    if (!nodes.length) return;
+    var base = (api && api.API_BASE) || "https://scholaxia1.onrender.com";
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      try {
+        if (ctrl) ctrl.abort();
+      } catch (e) {}
+    }, 12000);
+    fetch(base + "/health", {
+      method: "GET",
+      mode: "cors",
+      cache: "no-store",
+      signal: ctrl ? ctrl.signal : undefined,
+    })
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { ok: res.ok, data: data };
+        });
+      })
+      .then(function (out) {
+        clearTimeout(timer);
+        var text =
+          out.ok && out.data && out.data.status === "ok"
+            ? "API is online from this browser. Log out, log in again, then Try again. Or open the Render student link."
+            : "API health returned an unexpected response.";
+        nodes.forEach(function (n) {
+          n.textContent = text;
+        });
+      })
+      .catch(function () {
+        clearTimeout(timer);
+        nodes.forEach(function (n) {
+          n.textContent =
+            "This browser cannot reach " +
+            base +
+            ". Try https://scholaxia1.onrender.com/app/student.html after Render finishes deploy, or another network.";
+        });
+      });
   }
 
   function setStatus(el, msg, ok) {
@@ -4359,6 +4402,8 @@
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "community");
+      runApiPing();
+        runApiPing();
       });
   }
 
@@ -4392,6 +4437,8 @@
       })
       .catch(function (err) {
         wrap.innerHTML = errorHtml(errMsg(err), "community");
+      runApiPing();
+        runApiPing();
       });
   }
 
@@ -4426,6 +4473,7 @@
         : emptyHtml("👥", "No groups yet. Open Groups to create or join one.");
     }).catch(function (err) {
       wrap.innerHTML = errorHtml(errMsg(err), "community");
+      runApiPing();
     });
   }
 
@@ -4580,6 +4628,7 @@
       })
       .catch(function (err) {
         if (mineWrap) mineWrap.innerHTML = errorHtml(errMsg(err), "groups");
+        runApiPing();
       });
 
     api
@@ -4598,6 +4647,7 @@
       })
       .catch(function (err) {
         if (commWrap) commWrap.innerHTML = errorHtml(errMsg(err), "groups");
+        runApiPing();
       });
   }
 
