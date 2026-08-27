@@ -535,6 +535,9 @@
   }
 
   function dashboardForRole(role) {
+    role = String(role || "")
+      .toLowerCase()
+      .replace(/^userrole\./, "");
     if (role === "school_admin") return "office.html";
     if (role === "teacher" || role === "admin") return "teacher.html";
     if (role === "kind") return "kind.html";
@@ -542,17 +545,47 @@
     return "student.html";
   }
 
+  function currentPageName() {
+    try {
+      var parts = String(location.pathname || "").split("/");
+      return (parts[parts.length - 1] || "").toLowerCase() || "index.html";
+    } catch (e) {
+      return "";
+    }
+  }
+
   function requireAuth(expectedRoles) {
-    var role = localStorage.getItem("sia_role") || "";
+    var role = String(localStorage.getItem("sia_role") || "")
+      .toLowerCase()
+      .replace(/^userrole\./, "");
     var token = getToken();
     if (!token) {
-      window.location.href = "portal.html";
+      try {
+        clearSession();
+      } catch (e) {}
+      if (currentPageName() !== "portal.html") {
+        window.location.replace("portal.html?force=1&reason=auth");
+      }
       return false;
     }
     if (expectedRoles && expectedRoles.indexOf(role) < 0) {
-      window.location.href = dashboardForRole(role);
+      var dest = dashboardForRole(role);
+      var here = currentPageName();
+      // Prevent blink loop: never redirect to the same page.
+      if (here === String(dest || "").toLowerCase()) {
+        try {
+          clearSession();
+        } catch (e2) {}
+        window.location.replace("portal.html?force=1&reason=role");
+        return false;
+      }
+      window.location.replace(dest);
       return false;
     }
+    // Persist normalized role so later checks stay stable
+    try {
+      if (role) localStorage.setItem("sia_role", role);
+    } catch (e3) {}
     return true;
   }
 
