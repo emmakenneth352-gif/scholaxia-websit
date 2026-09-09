@@ -144,6 +144,8 @@ var board = {
   imageCache: {}
 };
 var boardWsQueue = [];
+window.SX_WHITEBOARD_ENABLED = false;
+var WHITEBOARD_ENABLED = window.SX_WHITEBOARD_ENABLED;
 var BOARD_BASE_WIDTH = 1280;
 var BOARD_BASE_MIN_HEIGHT = 720;
 
@@ -229,12 +231,14 @@ function pullBoardStateFromServer() {
 }
 
 function startStudentBoardHttpSync() {
+  if (!WHITEBOARD_ENABLED) return;
   if (isTeacherRole() || window._sxBoardHttpSync) return;
   pullBoardStateFromServer();
   window._sxBoardHttpSync = setInterval(pullBoardStateFromServer, 10000);
 }
 
 function startTeacherBoardHeartbeat() {
+  if (!WHITEBOARD_ENABLED) return;
   if (!isTeacherRole() || window._sxBoardHeartbeat) return;
   window._sxBoardHeartbeat = setInterval(function () {
     if (!board.open) return;
@@ -2435,6 +2439,7 @@ function syncBoardToRoom() {
 }
 
 function initWhiteboard() {
+  if (!WHITEBOARD_ENABLED) return;
   board.canvas = document.getElementById("whiteboard");
   if (!board.canvas) return;
   board.ctx = board.canvas.getContext("2d");
@@ -3319,7 +3324,7 @@ function connectChat(isReconnect) {
     }
     maybeHideJoinOverlay();
     flushBoardEventQueue();
-    if (!isTeacherRole()) {
+    if (WHITEBOARD_ENABLED && !isTeacherRole()) {
       if (isReconnect) {
         board.history = [];
         board.liveText = "";
@@ -4131,10 +4136,20 @@ window.onload = function () {
     showVideoPlaceholder("Joining live video…");
   }
 
-  // Whiteboard must be ready before chat — early WS replay otherwise misses the canvas.
-  try {
-    initWhiteboard();
-  } catch (boardErr) { /* non-fatal */ }
+  if (WHITEBOARD_ENABLED) {
+    // Whiteboard must be ready before chat — early WS replay otherwise misses the canvas.
+    try {
+      initWhiteboard();
+    } catch (boardErr) { /* non-fatal */ }
+  } else {
+    ["board-overlay", "btn-board"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.classList.add("hidden");
+    });
+    document.querySelectorAll('[data-spot="board"]').forEach(function (el) {
+      el.classList.add("hidden");
+    });
+  }
 
   try {
     connectChat();
@@ -4147,7 +4162,7 @@ window.onload = function () {
     }
   }
 
-  if (!isTeacherRole()) {
+  if (WHITEBOARD_ENABLED && !isTeacherRole()) {
     startStudentBoardHttpSync();
   }
 

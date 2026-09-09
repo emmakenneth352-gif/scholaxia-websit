@@ -3,6 +3,7 @@
  * Loaded before classroom.js — uses globals: liveSession, api, isTeacherRole, etc.
  */
 (function () {
+  var WHITEBOARD_ENABLED = window.SX_WHITEBOARD_ENABLED === true;
   var liveRoom = null;
   var liveVideoJoined = false;
   var liveKitConnecting = false;

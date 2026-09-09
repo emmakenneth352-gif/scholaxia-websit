@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.datetime_utils import naive_utc_now
 from app.core.deps import require_admin
 from app.core.security import hash_password, create_access_token, create_refresh_token, issue_auth_tokens
-from app.models.user import User, UserRole, TeacherProfile, StudentProfile, KindProfile, VendorProfile
+from app.models.user import User, UserRole, ExamType, TeacherProfile, StudentProfile, KindProfile, VendorProfile
 from app.models.content import Book, LibraryTarget
 from app.models.cbt import CBTExam, CBTQuestion, CBTSession, ExamProctorLog, normalize_paper_kind
 from app.models.community import CommunityPost, CommunityChannel
@@ -1996,6 +1996,55 @@ class StudentAdminResponse(BaseModel):
     selected_subjects: list[str] = []
     has_active_subscription: bool = False
     created_at: Optional[datetime] = None
+
+
+class StudentSubjectsUpdateRequest(BaseModel):
+    exam_type: Optional[str] = None
+    education_level: Optional[str] = None
+    selected_subjects: list[str]
+    jamb_subjects: Optional[list[str]] = None
+    ssce_subjects: Optional[list[str]] = None
+    ssce_exam_type: Optional[str] = None
+
+
+@router.patch("/students/{student_id}/cbt-subjects")
+async def update_student_cbt_subjects(
+    student_id: uuid.UUID,
+    payload: StudentSubjectsUpdateRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Controlled admin correction for a student's locked CBT configuration."""
+    result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == student_id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+    profile.selected_subjects = list(dict.fromkeys(s.strip() for s in payload.selected_subjects if s and s.strip()))
+    if payload.exam_type is not None:
+        try:
+            profile.exam_type = ExamType(payload.exam_type.upper())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid exam type") from exc
+    if payload.education_level is not None:
+        profile.education_level = payload.education_level
+    if payload.jamb_subjects is not None:
+        profile.jamb_subjects = payload.jamb_subjects
+    if payload.ssce_subjects is not None:
+        profile.ssce_subjects = payload.ssce_subjects
+    if payload.ssce_exam_type is not None:
+        profile.ssce_exam_type = payload.ssce_exam_type
+    profile.cbt_subjects_locked = True
+    profile.locked_at = datetime.utcnow()
+    profile.locked_by = uuid.UUID(str(current_user["sub"]))
+    await db.flush()
+    return {
+        "message": "Student CBT subjects updated",
+        "student_id": str(student_id),
+        "selected_subjects": profile.selected_subjects,
+        "locked": True,
+    }
 
 
 @router.get("/students", response_model=list[StudentAdminResponse])

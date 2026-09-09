@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 import httpx
 import json
+import uuid
 from app.core.database import get_db
 from app.core.deps import (
     require_student,
@@ -13,10 +14,11 @@ from app.core.deps import (
     require_admin,
     get_current_user,
     require_teacher,
+    require_teacher_or_admin,
 )
 from app.models.cbt import CBTExam, CBTQuestion, CBTSession, ExamProctorLog, normalize_paper_kind
 from app.models.user import StudentProfile, User
-from app.core.subjects import subject_matches
+from app.core.subjects import subject_matches, AVAILABLE_SUBJECTS
 from app.services.cbt_access import has_board_access, normalize_board
 
 router = APIRouter(prefix="/cbt", tags=["CBT"])
@@ -340,6 +342,578 @@ class ExamDownload(BaseModel):
     duration_minutes: int
     total_questions: int
     questions: List[QuestionOut]
+
+
+# ── CBT SUBJECT LOCK ENDPOINTS ──
+
+class CBTSubjectUpdateRequest(BaseModel):
+    """Request to update CBT subjects."""
+    exam_type: str = Field(..., description="JAMB, WAEC, NECO, or GENERAL")
+    subjects: List[str] = Field(..., description="List of subject names")
+
+
+class CBTProfileActivateRequest(BaseModel):
+    """Request to activate a CBT profile."""
+    exam_types: List[str] = Field(..., description="Exam types to activate (JAMB, WAEC, NECO)")
+    subjects: dict = Field(..., description="Subjects for each exam type")
+
+
+class AdminSubjectChangeRequest(BaseModel):
+    """Admin request to change a student's subjects."""
+    student_id: str
+    exam_type: str
+    subjects: List[str]
+    reason: Optional[str] = Field(None, description="Reason for the change")
+
+
+class AdminUnlockRequest(BaseModel):
+    """Admin request to unlock a student's CBT profile."""
+    student_id: str
+    reason: Optional[str] = Field(None, description="Reason for unlocking")
+
+
+@router.get("/profile/subjects")
+async def get_cbt_subjects(
+    current_user: dict = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get the current student's CBT subjects and lock state."""
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_user["sub"])
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        return {
+            "has_profile": False,
+            "is_locked": False,
+            "is_active": False,
+            "subjects": {},
+            "available_exams": [],
+            "message": "Complete exam setup in Profile first"
+        }
+
+    # Build subjects dict
+    subjects = {}
+    if profile.jamb_subjects:
+        subjects["JAMB"] = profile.jamb_subjects
+    if profile.ssce_subjects and profile.ssce_exam_type:
+        subjects[profile.ssce_exam_type.upper()] = profile.ssce_subjects
+    if profile.selected_subjects and not subjects:
+        # Fallback for legacy profiles
+        subjects["GENERAL"] = profile.selected_subjects
+
+    # Build available exams list
+    available_exams = []
+    if profile.jamb_subjects:
+        available_exams.append("JAMB")
+    if profile.ssce_exam_type:
+        available_exams.append(profile.ssce_exam_type.upper())
+    if not available_exams and profile.selected_subjects:
+        available_exams = ["GENERAL"]
+
+    return {
+        "has_profile": True,
+        "is_locked": profile.cbt_subjects_locked,
+        "is_active": bool(profile.jamb_subjects or profile.ssce_subjects or profile.selected_subjects),
+        "subjects": subjects,
+        "available_exams": available_exams,
+        "education_level": profile.education_level,
+        "exam_type": profile.exam_type.value if profile.exam_type else None,
+    }
+
+
+@router.post("/profile/subjects")
+async def update_cbt_subjects(
+    request: CBTSubjectUpdateRequest,
+    current_user: dict = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update a student's CBT subjects.
+
+    IMPORTANT: This will be rejected if the profile is locked.
+    Students cannot change subjects after activation.
+    """
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_user["sub"])
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        from app.models.user import ExamType
+        profile = StudentProfile(
+            user_id=current_user["sub"],
+            exam_type=ExamType.JAMB,
+            selected_subjects=[],
+            cbt_subjects_locked=False,
+        )
+        db.add(profile)
+        await db.flush()
+
+    # ===== CRITICAL: Check if profile is locked =====
+    if profile.cbt_subjects_locked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your CBT profile is locked. You cannot change subjects after activation. Contact your school admin for assistance."
+        )
+
+    exam_type = request.exam_type.upper().strip()
+
+    # Validate subjects against available list
+    valid_subjects = AVAILABLE_SUBJECTS
+    valid_lower = {s.lower(): s for s in valid_subjects}
+    validated = []
+
+    for subj in request.subjects:
+        subj_lower = subj.strip().lower()
+        if subj_lower in valid_lower:
+            validated.append(valid_lower[subj_lower])
+        else:
+            # Try fuzzy match
+            found = False
+            for valid in valid_subjects:
+                if subj_lower in valid.lower() or valid.lower() in subj_lower:
+                    validated.append(valid)
+                    found = True
+                    break
+            if not found:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid subject '{subj}'. Available subjects: {', '.join(valid_subjects[:10])}..."
+                )
+
+    # Update the appropriate subject list
+    if exam_type == "JAMB":
+        profile.jamb_subjects = validated
+        profile.selected_subjects = validated  # Backward compatibility
+    elif exam_type in ("WAEC", "NECO"):
+        profile.ssce_subjects = validated
+        profile.ssce_exam_type = exam_type
+        profile.selected_subjects = validated  # Backward compatibility
+    else:
+        # General fallback
+        profile.selected_subjects = validated
+
+    profile.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"{exam_type} subjects updated successfully",
+        "subjects": validated,
+        "is_locked": profile.cbt_subjects_locked,
+        "exam_type": exam_type,
+    }
+
+
+@router.post("/profile/activate")
+async def activate_cbt_profile(
+    request: CBTProfileActivateRequest,
+    current_user: dict = Depends(require_student),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Activate a student's CBT profile.
+
+    IMPORTANT: Once activated, the profile is LOCKED and subjects cannot be changed.
+    This is the point of no return for subject selection.
+    """
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == current_user["sub"])
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        from app.models.user import ExamType
+        profile = StudentProfile(
+            user_id=current_user["sub"],
+            exam_type=ExamType.JAMB,
+            selected_subjects=[],
+            cbt_subjects_locked=False,
+        )
+        db.add(profile)
+        await db.flush()
+
+    # ===== CRITICAL: Check if already locked =====
+    if profile.cbt_subjects_locked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your CBT profile is already activated and locked. Contact your school admin for subject changes."
+        )
+
+    valid_subjects = AVAILABLE_SUBJECTS
+    valid_lower = {s.lower(): s for s in valid_subjects}
+
+    # Validate and set subjects for each exam type
+    for exam_type, subjects in request.subjects.items():
+        exam_type = exam_type.upper().strip()
+        validated = []
+
+        for subj in subjects:
+            subj_lower = subj.strip().lower()
+            if subj_lower in valid_lower:
+                validated.append(valid_lower[subj_lower])
+            else:
+                # Fuzzy match
+                found = False
+                for valid in valid_subjects:
+                    if subj_lower in valid.lower() or valid.lower() in subj_lower:
+                        validated.append(valid)
+                        found = True
+                        break
+                if not found:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid subject '{subj}' for {exam_type}"
+                    )
+
+        if exam_type == "JAMB":
+            profile.jamb_subjects = validated
+        elif exam_type in ("WAEC", "NECO"):
+            profile.ssce_subjects = validated
+            profile.ssce_exam_type = exam_type
+        else:
+            profile.selected_subjects = validated
+
+    # Update selected_subjects for backward compatibility
+    if profile.jamb_subjects:
+        profile.selected_subjects = profile.jamb_subjects
+    elif profile.ssce_subjects:
+        profile.selected_subjects = profile.ssce_subjects
+
+    # ===== CRITICAL: Lock the profile =====
+    profile.cbt_subjects_locked = True
+    profile.locked_at = datetime.utcnow()
+    profile.locked_by = uuid.UUID(str(current_user["sub"]))
+    profile.updated_at = datetime.utcnow()
+    await db.commit()
+
+    # Build response subjects
+    subjects_response = {}
+    if profile.jamb_subjects:
+        subjects_response["JAMB"] = profile.jamb_subjects
+    if profile.ssce_subjects and profile.ssce_exam_type:
+        subjects_response[profile.ssce_exam_type.upper()] = profile.ssce_subjects
+
+    return {
+        "success": True,
+        "message": "CBT profile activated and locked. You cannot change subjects now.",
+        "is_locked": True,
+        "is_active": True,
+        "subjects": subjects_response,
+    }
+
+
+# ── ADMIN CBT SUBJECT MANAGEMENT ──
+
+@router.post("/admin/subjects/change")
+async def admin_change_student_subjects(
+    request: AdminSubjectChangeRequest,
+    current_user: dict = Depends(require_teacher_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin/Teacher endpoint to change a student's subjects.
+
+    This bypasses the lock mechanism and is the ONLY way to change
+    subjects after a student's profile has been activated/locked.
+    """
+    try:
+        student_id = uuid.UUID(request.student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid student_id format"
+        )
+
+    # Verify student exists
+    student_result = await db.execute(
+        select(User).where(User.id == student_id)
+    )
+    student = student_result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student with ID {request.student_id} not found"
+        )
+
+    # Get or create profile
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == student_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        from app.models.user import ExamType
+        profile = StudentProfile(
+            user_id=student_id,
+            exam_type=ExamType.JAMB,
+            selected_subjects=[],
+            cbt_subjects_locked=False,
+        )
+        db.add(profile)
+        await db.flush()
+
+    exam_type = request.exam_type.upper().strip()
+
+    # Validate subjects
+    valid_subjects = AVAILABLE_SUBJECTS
+    valid_lower = {s.lower(): s for s in valid_subjects}
+    validated = []
+
+    for subj in request.subjects:
+        subj_lower = subj.strip().lower()
+        if subj_lower in valid_lower:
+            validated.append(valid_lower[subj_lower])
+        else:
+            found = False
+            for valid in valid_subjects:
+                if subj_lower in valid.lower() or valid.lower() in subj_lower:
+                    validated.append(valid)
+                    found = True
+                    break
+            if not found:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid subject '{subj}' for {exam_type}"
+                )
+
+    # Update the appropriate subject list
+    if exam_type == "JAMB":
+        profile.jamb_subjects = validated
+        profile.selected_subjects = validated
+    elif exam_type in ("WAEC", "NECO"):
+        profile.ssce_subjects = validated
+        profile.ssce_exam_type = exam_type
+        profile.selected_subjects = validated
+    else:
+        profile.selected_subjects = validated
+
+    # Profile remains locked (admin override)
+    profile.cbt_subjects_locked = True
+    profile.locked_at = datetime.utcnow()
+    profile.locked_by = uuid.UUID(str(current_user["sub"]))
+    profile.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Updated {exam_type} subjects for student {student.full_name or student.email}",
+        "admin": current_user.get("sub"),
+        "student_id": str(student_id),
+        "exam_type": exam_type,
+        "subjects": validated,
+        "reason": request.reason,
+        "is_locked": profile.cbt_subjects_locked,
+    }
+
+
+@router.post("/admin/profile/unlock")
+async def admin_unlock_cbt_profile(
+    request: AdminUnlockRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin endpoint to unlock a student's CBT profile.
+
+    Use this if a student needs to change subjects after activation.
+    After unlocking, the student can update subjects again.
+    """
+    try:
+        student_id = uuid.UUID(request.student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid student_id format"
+        )
+
+    # Verify student exists
+    student_result = await db.execute(
+        select(User).where(User.id == student_id)
+    )
+    if not student_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student with ID {request.student_id} not found"
+        )
+
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == student_id)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        return {
+            "success": True,
+            "message": "No profile found for this student",
+            "student_id": request.student_id,
+            "is_locked": False
+        }
+
+    if not profile.cbt_subjects_locked:
+        return {
+            "success": True,
+            "message": "Profile is already unlocked",
+            "student_id": request.student_id,
+            "is_locked": False
+        }
+
+    # Unlock the profile
+    profile.cbt_subjects_locked = False
+    profile.locked_at = None
+    profile.locked_by = None
+    profile.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Profile unlocked by admin. Reason: {request.reason or 'Not specified'}",
+        "student_id": request.student_id,
+        "is_locked": False
+    }
+
+
+@router.post("/admin/profile/lock")
+async def admin_lock_cbt_profile(
+    student_id: str,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin endpoint to lock a student's CBT profile.
+
+    Use this after a student has confirmed their subjects.
+    """
+    try:
+        uid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid student_id format"
+        )
+
+    # Verify student exists
+    student_result = await db.execute(
+        select(User).where(User.id == uid)
+    )
+    if not student_result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student with ID {student_id} not found"
+        )
+
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == uid)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        return {
+            "success": True,
+            "message": "No profile found for this student",
+            "student_id": student_id,
+            "is_locked": False
+        }
+
+    if profile.cbt_subjects_locked:
+        return {
+            "success": True,
+            "message": "Profile is already locked",
+            "student_id": student_id,
+            "is_locked": True
+        }
+
+    # Lock the profile
+    profile.cbt_subjects_locked = True
+    profile.locked_at = datetime.utcnow()
+    profile.locked_by = uuid.UUID(str(current_user["sub"]))
+    profile.updated_at = datetime.utcnow()
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": "Profile locked by admin",
+        "student_id": student_id,
+        "is_locked": True
+    }
+
+
+@router.get("/admin/profile/{student_id}")
+async def admin_get_student_profile(
+    student_id: str,
+    current_user: dict = Depends(require_teacher_or_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin/Teacher endpoint to view a student's subjects and lock state.
+    """
+    try:
+        uid = uuid.UUID(student_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid student_id format"
+        )
+
+    # Verify student exists
+    student_result = await db.execute(
+        select(User).where(User.id == uid)
+    )
+    student = student_result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Student with ID {student_id} not found"
+        )
+
+    profile_result = await db.execute(
+        select(StudentProfile).where(StudentProfile.user_id == uid)
+    )
+    profile = profile_result.scalar_one_or_none()
+
+    if not profile:
+        return {
+            "student_id": student_id,
+            "student_email": student.email,
+            "student_name": student.full_name or "Student",
+            "has_profile": False,
+            "is_locked": False,
+            "is_active": False,
+            "subjects": {},
+            "available_exams": []
+        }
+
+    # Build subjects dict
+    subjects = {}
+    if profile.jamb_subjects:
+        subjects["JAMB"] = profile.jamb_subjects
+    if profile.ssce_subjects and profile.ssce_exam_type:
+        subjects[profile.ssce_exam_type.upper()] = profile.ssce_subjects
+    if profile.selected_subjects and not subjects:
+        subjects["GENERAL"] = profile.selected_subjects
+
+    available_exams = []
+    if profile.jamb_subjects:
+        available_exams.append("JAMB")
+    if profile.ssce_exam_type:
+        available_exams.append(profile.ssce_exam_type.upper())
+    if not available_exams and profile.selected_subjects:
+        available_exams = ["GENERAL"]
+
+    return {
+        "student_id": str(profile.user_id),
+        "student_email": student.email,
+        "student_name": student.full_name or "Student",
+        "has_profile": True,
+        "is_locked": profile.cbt_subjects_locked,
+        "is_active": bool(profile.jamb_subjects or profile.ssce_subjects or profile.selected_subjects),
+        "subjects": subjects,
+        "available_exams": available_exams,
+        "education_level": profile.education_level,
+        "exam_type": profile.exam_type.value if profile.exam_type else None,
+    }
 
 
 # ── List Exams (public) ───────────────────────────────────────────────────────

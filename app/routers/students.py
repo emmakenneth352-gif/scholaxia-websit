@@ -121,6 +121,9 @@ async def _ensure_student_profile_schema(db: AsyncSession) -> None:
         "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS community_channel_id UUID NULL",
         "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS school_student_id VARCHAR(40) NULL",
         "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS has_active_subscription BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS cbt_subjects_locked BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP NULL",
+        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS locked_by UUID NULL",
     )
     for stmt in stmts:
         try:
@@ -287,6 +290,13 @@ async def _setup_exam_impl(
     db: AsyncSession,
 ):
     user_id = _student_user_id(current_user)
+    existing_profile = await _get_or_create_profile(db, user_id)
+    if existing_profile.cbt_subjects_locked or _setup_complete(existing_profile):
+        existing_profile.cbt_subjects_locked = True
+        raise HTTPException(
+            status_code=403,
+            detail="CBT subjects are locked after activation. Contact an administrator to change them.",
+        )
     # Common Entrance — 3 fixed subjects, taken together like JAMB.
     if _is_common_entrance_level(payload.education_level):
         from app.core.subjects import COMMON_ENTRANCE_SUBJECTS
@@ -304,6 +314,7 @@ async def _setup_exam_impl(
         profile.jamb_subjects = []
         profile.ssce_subjects = subjects
         profile.ssce_exam_type = "COMMON_ENTRANCE"
+        profile.cbt_subjects_locked = True
         profile.education_level = payload.education_level
         await db.flush()
         return {
@@ -331,6 +342,7 @@ async def _setup_exam_impl(
         profile.jamb_subjects = []
         profile.ssce_subjects = subjects
         profile.ssce_exam_type = "JUNIOR_WAEC"
+        profile.cbt_subjects_locked = True
         profile.education_level = payload.education_level
         await db.flush()
         return {
@@ -421,6 +433,7 @@ async def _setup_exam_impl(
         profile.jamb_subjects = jamb or None
         profile.ssce_subjects = ssce or None
         profile.ssce_exam_type = ssce_board if enable_ssce else None
+        profile.cbt_subjects_locked = True
         profile.education_level = payload.education_level
         await db.flush()
         return {
@@ -469,6 +482,7 @@ async def _setup_exam_impl(
         profile.jamb_subjects = None
         profile.ssce_subjects = subjects
         profile.ssce_exam_type = "JUNIOR_WAEC"
+    profile.cbt_subjects_locked = True
     await db.flush()
 
     return {

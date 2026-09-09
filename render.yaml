@@ -55,7 +55,7 @@ services:
 
       # Email OTP — prefer Gmail SMTP for @gmail.com From (inbox, not spam)
       - key: EMAIL_PROVIDER
-        value: sendgrid
+        value: brevo
       - key: GMAIL_SMTP_EMAIL
         sync: false
       - key: GMAIL_SMTP_APP_PASSWORD

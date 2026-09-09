@@ -43,6 +43,7 @@ class LiveClassScreen extends StatefulWidget {
 
 class _LiveClassScreenState extends State<LiveClassScreen>
     with SingleTickerProviderStateMixin {
+  static const bool _whiteboardEnabled = false;
   late TabController _tabController;
   final TextEditingController _chatController = TextEditingController();
   final ScrollController _chatScroll = ScrollController();
@@ -89,7 +90,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: widget.isTeacher ? 3 : 2,
+      length: 2,
       vsync: this,
     );
     _tabController.addListener(() {
@@ -256,10 +257,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
       onDone: _scheduleWsReconnect,
       cancelOnError: true,
     );
-    // Late joiners need the current board; teachers reply with history.
-    try {
-      channel.sink.add(jsonEncode({'event': 'request_board_sync'}));
-    } catch (_) {}
   }
 
   void _scheduleWsReconnect() {
@@ -385,6 +382,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         }
         break;
       case 'whiteboard':
+        if (!_whiteboardEnabled) break;
         _board.handleRemoteMessage(msg);
         if (!widget.isTeacher) {
           final action = msg['action']?.toString() ?? '';
@@ -402,7 +400,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         }
         break;
       case 'request_board_sync':
-        if (widget.isTeacher) {
+        if (_whiteboardEnabled && widget.isTeacher) {
           _board.syncToRoom(boardOpen: _boardOpen);
         }
         break;
@@ -418,14 +416,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
       'action': action,
       'data': data,
     }));
-  }
-
-  Future<void> _toggleBoard() async {
-    if (!widget.isTeacher) return;
-    final next = !_boardOpen;
-    setState(() => _boardOpen = next);
-    _sendBoardEvent('board_open', {'open': next});
-    if (next) _tabController.animateTo(2);
   }
 
   bool get _isDesktop =>
@@ -1035,7 +1025,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 children: [
                   _chat(context),
                   _participants(context),
-                  if (widget.isTeacher) _boardTab(context),
                 ],
               ),
             ),
@@ -1154,7 +1143,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     // Board canvas lives at the top (video area) for everyone. The teacher's
     // toolbar + keyboard live at the bottom in the BOARD tab, both driven by
     // the same BoardController.
-    if (_boardOpen) {
+    if (_whiteboardEnabled && _boardOpen) {
       return SizedBox(
         height: stageHeight,
         child: LiveClassBoardCanvas(controller: _board),
@@ -1346,12 +1335,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
             if (widget.isTeacher) ...[
               _btn(
                 context,
-                _boardOpen ? Icons.close_fullscreen : Icons.draw_rounded,
-                'Board',
-                _toggleBoard,
-              ),
-              _btn(
-                context,
                 _screenShareOn ? Icons.stop_screen_share : Icons.screen_share,
                 'Share',
                 _toggleScreenShare,
@@ -1438,7 +1421,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                   ? 'STUDENTS (${_students.length})'
                   : 'IN CLASS (${_participantCount + 1})',
             ),
-            if (widget.isTeacher) const Tab(text: 'BOARD'),
           ],
         ),
       );
@@ -1648,42 +1630,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
           ),
         );
       },
-    );
-  }
-
-  Widget _boardTab(BuildContext context) {
-    return Column(
-      children: [
-        if (!_boardOpen)
-          Expanded(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.draw_rounded,
-                        color: context.accentColor, size: 40),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Tap "Board" above to open the whiteboard.\n'
-                      'The board shows at the top; draw or type here.',
-                      textAlign: TextAlign.center,
-                      style:
-                          TextStyle(color: context.greyColor, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          )
-        else
-          Expanded(
-            child: SingleChildScrollView(
-              child: LiveClassBoardControls(controller: _board),
-            ),
-          ),
-      ],
     );
   }
 

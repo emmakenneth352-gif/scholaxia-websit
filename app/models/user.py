@@ -49,7 +49,12 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    student_profile: Mapped["StudentProfile"] = relationship("StudentProfile", back_populates="user", uselist=False)
+    student_profile: Mapped["StudentProfile"] = relationship(
+        "StudentProfile",
+        back_populates="user",
+        uselist=False,
+        foreign_keys="StudentProfile.user_id",
+    )
     teacher_profile: Mapped["TeacherProfile"] = relationship("TeacherProfile", back_populates="user", uselist=False)
     vendor_profile: Mapped["VendorProfile"] = relationship("VendorProfile", back_populates="user", uselist=False)
     kind_profile: Mapped["KindProfile"] = relationship("KindProfile", back_populates="user", uselist=False)
@@ -62,6 +67,7 @@ class StudentProfile(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), unique=True)
     exam_type: Mapped[ExamType] = mapped_column(Enum(ExamType), nullable=True)
     selected_subjects: Mapped[list] = mapped_column(ARRAY(String), default=[])
+    cbt_subjects_locked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Dual-board support (SS students can pick JAMB + WAEC/NECO)
     jamb_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
     ssce_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
@@ -74,7 +80,19 @@ class StudentProfile(Base):
     live_plan_sessions_used: Mapped[int] = mapped_column(Integer, default=0)
     community_channel_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("community_channels.id"), nullable=True)
 
-    user: Mapped["User"] = relationship("User", back_populates="student_profile")
+    # ===== AUDIT TRAIL FOR CBT SUBJECT LOCK =====
+    # Tracks when the profile was locked and who locked it
+    locked_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    locked_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    # Relationships
+    user: Mapped["User"] = relationship(
+        "User",
+        back_populates="student_profile",
+        foreign_keys=[user_id],
+    )
+    # Relationship for the admin/teacher who locked the profile
+    locked_by_user: Mapped["User"] = relationship("User", foreign_keys=[locked_by])
 
 
 class TeacherProfile(Base):
