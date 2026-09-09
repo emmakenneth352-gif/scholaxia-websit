@@ -571,7 +571,11 @@ def _parse_id_list(raw: str | None) -> list[str]:
 
 
 async def _find_live_class_by_code(db: AsyncSession, code: str | None) -> LiveClass | None:
-    """Resolve a class by join code across common formatting variants."""
+    """Resolve a class by join code across common formatting variants.
+
+    A class can be missing its join_code in the live_classes table while still having
+    a valid access-code delivery row, so we recover from that table as a fallback.
+    """
     token = (code or "").strip()
     if not token:
         return None
@@ -591,18 +595,48 @@ async def _find_live_class_by_code(db: AsyncSession, code: str | None) -> LiveCl
         if variant and variant not in seen:
             seen.append(variant)
 
-    clauses = []
+    live_clauses = []
+    delivery_clauses = []
     for variant in seen:
-        clauses.append(LiveClass.join_code == variant)
-        clauses.append(LiveClass.join_code.ilike(f"%{variant}%"))
+        live_clauses.append(LiveClass.join_code == variant)
+        live_clauses.append(LiveClass.join_code.ilike(f"%{variant}%"))
+        delivery_clauses.append(LiveClassAccessCodeDelivery.join_code == variant)
+        delivery_clauses.append(LiveClassAccessCodeDelivery.join_code.ilike(f"%{variant}%"))
 
-    if not clauses:
-        return None
+    if live_clauses:
+        result = await db.execute(
+            select(LiveClass).where(or_(*live_clauses)).limit(1)
+        )
+        live_class = result.scalar_one_or_none()
+        if live_class:
+            if not live_class.join_code:
+                live_class.join_code = normalized
+                try:
+                    await db.flush()
+                except Exception:
+                    pass
+            return live_class
 
-    result = await db.execute(
-        select(LiveClass).where(or_(*clauses)).limit(1)
-    )
-    return result.scalar_one_or_none()
+    if delivery_clauses:
+        delivery_result = await db.execute(
+            select(LiveClassAccessCodeDelivery).where(or_(*delivery_clauses)).limit(1)
+        )
+        delivery_row = delivery_result.scalar_one_or_none()
+        if delivery_row:
+            class_result = await db.execute(
+                select(LiveClass).where(LiveClass.id == delivery_row.live_class_id)
+            )
+            live_class = class_result.scalar_one_or_none()
+            if live_class:
+                if not live_class.join_code and delivery_row.join_code:
+                    live_class.join_code = delivery_row.join_code
+                    try:
+                        await db.flush()
+                    except Exception:
+                        pass
+                return live_class
+
+    return None
 
 
 def _class_visibility(live_class: LiveClass) -> str:
