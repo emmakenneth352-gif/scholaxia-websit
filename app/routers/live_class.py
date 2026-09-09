@@ -94,9 +94,7 @@ async def join_preview(
         result = await db.execute(select(LiveClass).where(LiveClass.id == cid))
         live_class = result.scalar_one_or_none()
     else:
-        normalized = token.upper()
-        result = await db.execute(select(LiveClass).where(LiveClass.join_code == normalized))
-        live_class = result.scalar_one_or_none()
+        live_class = await _find_live_class_by_code(db, token)
         if not live_class:
             try:
                 cid = parse_uuid(token)
@@ -262,23 +260,7 @@ async def join_class_by_code(
     if not normalized:
         raise HTTPException(status_code=400, detail="Enter the access code from your Access Code tab.")
 
-    # Normalize SX-XXXX / spaced digits so students can paste flexibly
-    compact = normalized.replace(" ", "").replace("-", "")
-    result = await db.execute(select(LiveClass).where(LiveClass.join_code == normalized))
-    live_class = result.scalar_one_or_none()
-    if not live_class and compact != normalized:
-        result = await db.execute(
-            select(LiveClass).where(LiveClass.join_code == compact)
-        )
-        live_class = result.scalar_one_or_none()
-    if not live_class:
-        # Try matching SX- prefix variants
-        result = await db.execute(
-            select(LiveClass).where(LiveClass.join_code.ilike(f"%{compact[-8:]}"))
-        )
-        candidates = result.scalars().all()
-        if len(candidates) == 1:
-            live_class = candidates[0]
+    live_class = await _find_live_class_by_code(db, normalized)
     if not live_class:
         raise HTTPException(status_code=404, detail="Invalid or expired class code.")
 
@@ -586,6 +568,41 @@ def _parse_id_list(raw: str | None) -> list[str]:
         return [str(x) for x in data] if isinstance(data, list) else []
     except (json.JSONDecodeError, TypeError):
         return []
+
+
+async def _find_live_class_by_code(db: AsyncSession, code: str | None) -> LiveClass | None:
+    """Resolve a class by join code across common formatting variants."""
+    token = (code or "").strip()
+    if not token:
+        return None
+
+    normalized = token.upper()
+    compact = normalized.replace(" ", "").replace("-", "")
+    variants = [normalized, compact]
+
+    if compact.startswith("SX"):
+        variants.append(compact[2:])
+
+    if compact:
+        variants.append(compact[-8:])
+
+    seen = []
+    for variant in variants:
+        if variant and variant not in seen:
+            seen.append(variant)
+
+    clauses = []
+    for variant in seen:
+        clauses.append(LiveClass.join_code == variant)
+        clauses.append(LiveClass.join_code.ilike(f"%{variant}%"))
+
+    if not clauses:
+        return None
+
+    result = await db.execute(
+        select(LiveClass).where(or_(*clauses)).limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 def _class_visibility(live_class: LiveClass) -> str:
