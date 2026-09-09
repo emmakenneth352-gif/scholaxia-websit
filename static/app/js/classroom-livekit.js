@@ -3,8 +3,7 @@
  * Loaded before classroom.js — uses globals: liveSession, api, isTeacherRole, etc.
  */
 (function () {
-  // ===== WHITEBOARD DISABLED =====
-  var WHITEBOARD_ENABLED = false; // PERMANENTLY DISABLED for this release
+  var WHITEBOARD_ENABLED = window.SX_WHITEBOARD_ENABLED === true;
   var liveRoom = null;
   var liveVideoJoined = false;
   var liveKitConnecting = false;
@@ -200,6 +199,7 @@
       }
       return true;
     } catch (e) {
+      // Never block joining on a slow/cold API — try with the session token we already have.
       return true;
     }
   }
@@ -243,6 +243,7 @@
       window.liveSession = liveSession;
       return hasValidLiveKitToken(liveSession.livekit_token, liveSession.livekit_url);
     } catch (e) {
+      // Keep existing session token if refresh fails/times out.
       return hasValidLiveKitToken(
         liveSession.livekit_token || "",
         liveSession.livekit_url || ""
@@ -297,6 +298,7 @@
     return false;
   }
 
+  /** Screen-share publication exists (track may not be subscribed yet). */
   function participantHasScreenSharePublication(participant) {
     if (!participant) return false;
     var found = false;
@@ -378,6 +380,7 @@
     remoteAudioEls.forEach(playRemoteAudioElement);
   }
 
+  /** Token refresh may lag behind teacher grant — never downgrade local mic/cam grants here. */
   function applyTokenMediaPermissions(data) {
     if (isTeacherRole() || !data) return;
     var upgraded = false;
@@ -451,6 +454,7 @@
     remoteAudioEls = [];
   }
 
+  /** Student client: keep teacher microphone subscribed and playing. */
   function reattachTeacherAudio() {
     if (!liveRoom || isTeacherRole()) return;
     var c = lk();
@@ -488,6 +492,7 @@
     } catch (e) { /* ignore */ }
   }
 
+  /** Subscribe only to tracks we need — saves bandwidth vs Zoom-style full mesh. */
   function shouldSubscribePublication(pub, participant) {
     if (!pub || !participant) return false;
     var c = lk();
@@ -512,6 +517,7 @@
     return true;
   }
 
+  /** Subscription policy only — never attach media here (avoids attach ↔ sync loops). */
   function reconcileParticipantSubscriptions(participant) {
     if (!participant) return;
     wireParticipantVideoEvents(participant);
@@ -550,103 +556,187 @@
     }
   }
 
-  // ===== FIXED: IDEMPOTENT AUDIO ATTACHMENT =====
+  function reattachAllRemoteAudio() {
+    if (!liveRoom) return;
+    var c = lk();
+    liveRoom.remoteParticipants.forEach(function (participant) {
+      participant.trackPublications.forEach(function (pub) {
+        var isAudio = !!(c && (pub.kind === c.Track.Kind.Audio || pub.kind === "audio"));
+        if (!isAudio || !shouldSubscribePublication(pub, participant)) return;
+        setPublicationSubscribed(pub, true);
+        if (pub.track) attachRemoteAudio(pub.track, participant);
+      });
+    });
+    ensureRoomAudioPlayback();
+  }
+
+  function buildLiveKitRoomOptions(isHost) {
+    var c = LK();
+    var speech = c.AudioPresets && c.AudioPresets.speech;
+    var publishDefaults = {
+      dtx: true,
+      red: true,
+      simulcast: isHost,
+      videoCodec: "vp8",
+      audioPreset: speech || undefined,
+      videoEncoding: isHost
+        ? { maxBitrate: 750000, maxFramerate: 24 }
+        : { maxBitrate: 160000, maxFramerate: 15 },
+      screenShareEncoding: { maxBitrate: 1200000, maxFramerate: 15 },
+    };
+    if (isHost && c.VideoPresets) {
+      publishDefaults.videoSimulcastLayers = [
+        c.VideoPresets.h180,
+        c.VideoPresets.h360,
+      ];
+    }
+    return {
+      adaptiveStream: isHost
+        ? { pixelDensity: 1, pauseVideoInBackground: false }
+        : false,
+      dynacast: isHost,
+      disconnectOnPageLeave: true,
+      stopLocalTrackOnUnpublish: true,
+      publishDefaults: publishDefaults,
+      audioCaptureDefaults: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      videoCaptureDefaults: {
+        resolution: isHost
+          ? { width: 1280, height: 720, frameRate: 24 }
+          : { width: 426, height: 240, frameRate: 15 },
+      },
+    };
+  }
+
+  /** Student IDs with an active (or pending) camera publication — not only already-attached tracks. */
+  function collectStudentCameraIds() {
+    var ids = Object.keys(participantVideoTracks);
+    if (!liveRoom) return ids;
+    liveRoom.remoteParticipants.forEach(function (participant) {
+      if (isTeacherParticipant(participant)) return;
+      var studentId = resolveStudentIdFromParticipant(participant);
+      if (!studentId) return;
+      participant.trackPublications.forEach(function (pub) {
+        if (isCameraPublication(pub) && ids.indexOf(studentId) < 0) {
+          ids.push(studentId);
+        }
+      });
+    });
+    return ids;
+  }
+
+  function prioritizeSidebarVideoIds() {
+    var raised = (typeof window.raisedHands === "object" && window.raisedHands) || {};
+    var ids = collectStudentCameraIds();
+    ids.sort(function (a, b) {
+      var ar = raised[a] ? 1 : 0;
+      var br = raised[b] ? 1 : 0;
+      if (ar !== br) return br - ar;
+      var ai = sidebarVideoOrder.indexOf(a);
+      var bi = sidebarVideoOrder.indexOf(b);
+      if (ai < 0) ai = 9999;
+      if (bi < 0) bi = 9999;
+      return ai - bi;
+    });
+    return ids;
+  }
+
+  function scheduleApplyStudentVideoBudget() {
+    if (!isTeacherRole()) return;
+    if (_budgetScheduleTimer) clearTimeout(_budgetScheduleTimer);
+    _budgetScheduleTimer = setTimeout(function () {
+      _budgetScheduleTimer = null;
+      applyStudentVideoBudget();
+    }, 48);
+  }
+
+  function applyStudentVideoBudget() {
+    if (!isTeacherRole() || !liveRoom || _budgetApplying) return;
+    _budgetApplying = true;
+    try {
+    var ranked = prioritizeSidebarVideoIds();
+    var allowed = ranked.slice(0, MAX_SIDEBAR_VIDEOS);
+    var allowedSet = {};
+    allowed.forEach(function (id) { allowedSet[id] = true; });
+    sidebarVideoOrder = allowed;
+    liveRoom.remoteParticipants.forEach(function (participant) {
+      if (isTeacherParticipant(participant)) return;
+      var studentId = resolveStudentIdFromParticipant(participant);
+      if (!studentId) return;
+      participant.trackPublications.forEach(function (pub) {
+        if (!isCameraPublication(pub)) return;
+        var want = allowedSet[studentId] === true;
+        setPublicationSubscribed(pub, want);
+        if (!want) {
+          if (typeof detachParticipantCameraVideo === "function") {
+            detachParticipantCameraVideo(studentId);
+          }
+          return;
+        }
+        if (pub.track) {
+          participantVideoTracks[studentId] = {
+            track: pub.track,
+            publication: pub,
+            participant: participant,
+          };
+          if (typeof attachParticipantCameraVideo === "function") {
+            attachParticipantCameraVideo(studentId, pub.track);
+          }
+        }
+      });
+    });
+    } finally {
+      _budgetApplying = false;
+    }
+  }
+
   function attachRemoteAudio(track, participant) {
     var c = lk();
     if (!track || !c) return;
-
     var pid = participant && participant.identity ? String(participant.identity) : "remote";
     var trackId = getTrackElementId(track);
-
-    // CRITICAL: Check if this exact track is already attached
     var audioWrap = ensureRemoteAudioContainer();
-    var existingAudio = null;
-
-    // First, check by track ID (most reliable)
-    if (trackId) {
-      for (var i = 0; i < remoteAudioEls.length; i++) {
-        var el = remoteAudioEls[i];
-        if (el && el.getAttribute && el.getAttribute("data-lk-track-id") === trackId) {
-          existingAudio = el;
-          break;
-        }
+    var audioEl = null;
+    for (var i = 0; i < remoteAudioEls.length; i++) {
+      var el = remoteAudioEls[i];
+      if (!el || !el.getAttribute) continue;
+      if (el.getAttribute("data-participant-id") === pid) {
+        audioEl = el;
+        break;
       }
     }
-
-    // If not found by track ID, check by participant ID
-    if (!existingAudio) {
-      for (var i = 0; i < remoteAudioEls.length; i++) {
-        var el = remoteAudioEls[i];
-        if (el && el.getAttribute && el.getAttribute("data-participant-id") === pid) {
-          existingAudio = el;
-          break;
-        }
-      }
-    }
-
-    // If found and already playing this track, just ensure it's playing
-    if (existingAudio) {
+    if (audioEl) {
       try {
-        // Check if the current srcObject matches this track
-        if (existingAudio.srcObject) {
-          var tracks = existingAudio.srcObject.getTracks ? existingAudio.srcObject.getTracks() : [];
-          var alreadyAttached = false;
-          for (var j = 0; j < tracks.length; j++) {
-            if (tracks[j].id === track.mediaStreamTrack.id) {
-              alreadyAttached = true;
-              break;
-            }
-          }
-          if (alreadyAttached) {
-            playRemoteAudioElement(existingAudio);
-            return; // IDEMPOTENT: already attached
-          }
-        }
-        // Different track, need to reattach
-        try {
-          track.attach(existingAudio);
-          if (trackId) existingAudio.setAttribute("data-lk-track-id", trackId);
-          playRemoteAudioElement(existingAudio);
-          return;
-        } catch (eAttach) {
-          // Fall through to create new element
-          try { existingAudio.remove(); } catch (eRm) { /* ignore */ }
-          remoteAudioEls = remoteAudioEls.filter(function (x) { return x !== existingAudio; });
-          existingAudio = null;
-        }
-      } catch (e) {
-        // If anything fails, create new element
-        try { existingAudio.remove(); } catch (eRm) { /* ignore */ }
-        remoteAudioEls = remoteAudioEls.filter(function (x) { return x !== existingAudio; });
-        existingAudio = null;
-      }
-    }
-
-    // Create new audio element
-    if (!existingAudio) {
-      try {
-        existingAudio = track.attach();
+        track.attach(audioEl);
       } catch (eAttach) {
-        // Fallback: manual attachment
-        existingAudio = document.createElement("audio");
-        existingAudio.autoplay = true;
-        existingAudio.playsInline = true;
-        try {
-          if (track.mediaStreamTrack) {
-            existingAudio.srcObject = new MediaStream([track.mediaStreamTrack]);
-          }
-        } catch (eSrc) { /* ignore */ }
+        try { audioEl.remove(); } catch (eRm) { /* ignore */ }
+        remoteAudioEls = remoteAudioEls.filter(function (x) { return x !== audioEl; });
+        audioEl = null;
       }
-      existingAudio.setAttribute("data-participant-id", pid);
-      if (trackId) existingAudio.setAttribute("data-lk-track-id", trackId);
-      audioWrap.appendChild(existingAudio);
-      remoteAudioEls.push(existingAudio);
     }
-
-    playRemoteAudioElement(existingAudio);
+    if (!audioEl) {
+      audioEl = track.attach();
+      audioEl.setAttribute("data-participant-id", pid);
+      if (trackId) audioEl.setAttribute("data-lk-track-id", trackId);
+      audioWrap.appendChild(audioEl);
+      remoteAudioEls.push(audioEl);
+    } else if (trackId) {
+      audioEl.setAttribute("data-lk-track-id", trackId);
+    }
+    playRemoteAudioElement(audioEl);
     ensureRoomAudioPlayback();
-
     lkLog("TRACK_ATTACHED", Object.assign({ kind: "audio" }, participantLogInfo(participant)));
+    if (isTeacherRole()) {
+      if (typeof setStatus === "function") {
+        setStatus("Connected — you can hear students when they speak");
+      }
+    } else {
+      if (typeof hideVideoPlaceholder === "function") hideVideoPlaceholder();
+      if (typeof maybeShowSaveClassHint === "function") maybeShowSaveClassHint();
+    }
   }
 
   function isCameraPublication(pub) {
@@ -687,6 +777,7 @@
     if (!participant || isTeacherRole()) return false;
     var role = participantRoleFromMeta(participant);
     if (role === "teacher" || role === "host" || role === "admin") return true;
+    // Screen share is teacher-only in this product — reliable fallback for late join.
     if (participantHasScreenSharePublication(participant)) return true;
     var teacherId = getTeacherIdFromSession();
     var pid = String(participant.identity || "");
@@ -696,6 +787,7 @@
     var sess = window.liveSession || {};
     var selfId = sess.identity || sess.user_id || "";
     if (selfId && pid === String(selfId)) return false;
+    // Without a known teacher_id, only treat the sole remote as teacher.
     if (liveRoom && liveRoom.remoteParticipants.size === 1) {
       return pid !== String(selfId);
     }
@@ -887,77 +979,68 @@
     }
   }
 
-  // ===== FIXED: PREVENT RECURSION WITH _attachInProgress =====
   function attachRemoteTrack(track, publication, participant, opts) {
     opts = opts || {};
     var c = lk();
     if (!track || !c) return;
-
     var trackKey = getTrackElementId(track) ||
       (publication && (publication.trackSid || publication.sid)) ||
       (participant && participant.identity ? String(participant.identity) + ":" + track.kind : "");
-
-    if (trackKey && _attachInProgress[trackKey]) {
-      lkLog("ATTACH_SKIP_DUPLICATE", { trackKey: trackKey });
-      return;
-    }
+    if (trackKey && _attachInProgress[trackKey]) return;
     if (trackKey) _attachInProgress[trackKey] = true;
-
     try {
-      if (track.kind === c.Track.Kind.Video || track.kind === "video") {
-        if (isScreenPublication(publication)) {
-          attachRemoteVideoToMainStage(track, publication);
-          return;
+    if (track.kind === c.Track.Kind.Video || track.kind === "video") {
+      if (isScreenPublication(publication)) {
+        attachRemoteVideoToMainStage(track, publication);
+        return;
+      }
+      if (isTeacherRole() && isCameraPublication(publication)) {
+        var studentId = resolveStudentIdFromParticipant(participant);
+        var displayName = (participant && (participant.name || participant.identity)) || "Student";
+        if (studentId && typeof ensureParticipantCardForStudent === "function") {
+          ensureParticipantCardForStudent(studentId, displayName);
         }
-        if (isTeacherRole() && isCameraPublication(publication)) {
-          var studentId = resolveStudentIdFromParticipant(participant);
-          var displayName = (participant && (participant.name || participant.identity)) || "Student";
-          if (studentId && typeof ensureParticipantCardForStudent === "function") {
-            ensureParticipantCardForStudent(studentId, displayName);
+        if (studentId) {
+          participantVideoTracks[studentId] = {
+            track: track,
+            publication: publication,
+            participant: participant,
+          };
+          if (sidebarVideoOrder.indexOf(studentId) < 0) {
+            sidebarVideoOrder.push(studentId);
           }
-          if (studentId) {
-            var existing = participantVideoTracks[studentId];
-            if (existing && existing.track && getTrackElementId(existing.track) === trackKey) {
-              return;
-            }
-            participantVideoTracks[studentId] = {
-              track: track,
-              publication: publication,
-              participant: participant,
-            };
-            if (sidebarVideoOrder.indexOf(studentId) < 0) {
-              sidebarVideoOrder.push(studentId);
-            }
-            scheduleApplyStudentVideoBudget();
-            if (typeof attachParticipantCameraVideo === "function") {
-              attachParticipantCameraVideo(studentId, track);
-            }
-            maybeShowStudentOnMainStage(studentId, track, publication);
-            lkLog("CAMERA_SUBSCRIBED", Object.assign(
-              { studentId: studentId },
-              participantLogInfo(participant),
-              publicationLogInfo(publication)
-            ));
+          scheduleApplyStudentVideoBudget();
+          if (typeof attachParticipantCameraVideo === "function") {
+            attachParticipantCameraVideo(studentId, track);
           }
-          return;
+          maybeShowStudentOnMainStage(studentId, track, publication);
+          lkLog("CAMERA_SUBSCRIBED", Object.assign(
+            { studentId: studentId },
+            participantLogInfo(participant),
+            publicationLogInfo(publication)
+          ));
         }
-        if (!isTeacherRole() && isCameraPublication(publication)) {
-          if (isTeacherParticipant(participant)) {
-            teacherVideoTrack = { track: track, publication: publication, participant: participant };
-            if (teacherScreenBlocksMainStageCamera()) return;
-            if (!window.board || !window.board.open) {
-              attachRemoteVideoToMainStage(track, publication);
-            }
-          }
-          return;
-        }
+        return;
+      }
+      if (!isTeacherRole() && isCameraPublication(publication)) {
         if (isTeacherParticipant(participant)) {
-          attachRemoteVideoToMainStage(track, publication);
+          teacherVideoTrack = { track: track, publication: publication, participant: participant };
+          if (teacherScreenBlocksMainStageCamera()) return;
+          if (!window.board || !window.board.open) {
+            attachRemoteVideoToMainStage(track, publication);
+          }
         }
+        // Ignore peer student cameras on the student main stage (prevents flicker).
+        return;
       }
-      if (track.kind === c.Track.Kind.Audio || track.kind === "audio") {
-        attachRemoteAudio(track, participant);
+      // Unknown role/heuristic — only mount if this is clearly the teacher.
+      if (isTeacherParticipant(participant)) {
+        attachRemoteVideoToMainStage(track, publication);
       }
+    }
+    if (track.kind === c.Track.Kind.Audio || track.kind === "audio") {
+      attachRemoteAudio(track, participant);
+    }
     } finally {
       if (trackKey) delete _attachInProgress[trackKey];
     }
@@ -1024,6 +1107,10 @@
     discoverExistingRemotePublicationsForStudent();
   }
 
+  /**
+   * Late join: enumerate publications that existed before this client connected.
+   * TrackPublished will not replay — subscription + attach must happen here and on TrackSubscribed.
+   */
   function discoverExistingRemotePublicationsForStudent() {
     if (!liveRoom || isTeacherRole()) return false;
     lkLog("LATE_JOIN_START", {
@@ -1081,40 +1168,6 @@
     }
     syncRemoteSubscriptions();
     liveRoom.remoteParticipants.forEach(attachSubscribedTracksForParticipant);
-    ensureRoomAudioPlayback();
-  }
-
-  // ===== FIXED: Prevent duplicate audio attachment =====
-  function reattachAllRemoteAudio() {
-    if (!liveRoom) return;
-    var c = lk();
-    if (!c) return;
-
-    liveRoom.remoteParticipants.forEach(function (participant) {
-      participant.trackPublications.forEach(function (pub) {
-        var isAudio = !!(c && (pub.kind === c.Track.Kind.Audio || pub.kind === "audio"));
-        if (!isAudio || !shouldSubscribePublication(pub, participant)) return;
-
-        if (!pub.isSubscribed) {
-          setPublicationSubscribed(pub, true);
-        }
-
-        if (pub.track && !pub.isMuted && !pub.track.isMuted) {
-          var trackId = getTrackElementId(pub.track);
-          var alreadyAttached = false;
-          for (var i = 0; i < remoteAudioEls.length; i++) {
-            var el = remoteAudioEls[i];
-            if (el && el.getAttribute && el.getAttribute("data-lk-track-id") === trackId) {
-              alreadyAttached = true;
-              break;
-            }
-          }
-          if (!alreadyAttached) {
-            attachRemoteAudio(pub.track, participant);
-          }
-        }
-      });
-    });
     ensureRoomAudioPlayback();
   }
 
@@ -1296,6 +1349,7 @@
     });
     if (!screenPub || !screenPub.track) return;
 
+    // Show on main stage so teacher sees the same feed students get
     var wrap = document.getElementById("video-remote");
     if (wrap) {
       wrap.innerHTML = "";
@@ -1793,6 +1847,7 @@
     return false;
   }
 
+  /** Connect (or reconnect) LiveKit before mic/cam publish — students often sit in chat-only mode. */
   async function ensureLiveVideoReady(maxMs, opts) {
     opts = opts || {};
     if (liveRoom && await waitForRoomConnected(1500)) {
@@ -1958,6 +2013,7 @@
     liveSession = normalizeSession(liveSession || (typeof loadLiveSession === "function" ? loadLiveSession() : null));
     window.liveSession = liveSession;
 
+    // Prefer the token already saved at join — don't block on a slow /token API.
     var token = liveSession.livekit_token || "";
     var url = liveSession.livekit_url || "";
     if (!hasValidLiveKitToken(token, url)) {
@@ -1965,6 +2021,7 @@
       token = liveSession.livekit_token || "";
       url = liveSession.livekit_url || "";
     } else {
+      // Refresh in background for grants; connect with what we have now.
       refreshLiveKitToken().catch(function () {});
     }
     if (!hasValidLiveKitToken(token, url)) {
@@ -2036,9 +2093,11 @@
           if (ov2) ov2.classList.remove("view-only");
         }
         await transitionHostToLiveBroadcast();
+        // Stop leftover preview mic/cam so browser AEC is not fighting a second capture (echo).
         if (typeof clearLocalPreviewStream === "function") {
           clearLocalPreviewStream();
         }
+        // Always publish mic so students can hear the teacher.
         try { await setMic(true); } catch (e) {}
         if (typeof hideVideoPlaceholder === "function") hideVideoPlaceholder();
         if (typeof addChatMessage === "function") {
@@ -2323,6 +2382,7 @@
         addChatMessage("", "You are sharing your screen — students should see it on the main screen.", true);
       }
       if (typeof applySpotlight === "function") applySpotlight("screen", false);
+      // Tell students via chat WS so they force-subscribe / hide board
       try {
         if (typeof liveSocket !== "undefined" && liveSocket && liveSocket.readyState === 1) {
           liveSocket.send(JSON.stringify({ event: "screen_share", active: true }));
@@ -2733,6 +2793,7 @@
       if (!isTeacherRole() && typeof maybeHideJoinOverlay === "function") {
         maybeHideJoinOverlay();
       }
+      // Connect immediately — never wait on /livekit/status (Render cold starts hang it).
       if (isTeacherRole() && typeof startLocalPreviewOnly === "function") {
         startLocalPreviewOnly().catch(function () {});
       }
