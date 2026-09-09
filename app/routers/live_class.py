@@ -317,6 +317,7 @@ async def join_class_by_code(
             if uid not in invited:
                 invited.append(uid)
                 live_class.invited_student_ids = json.dumps(invited)
+                await db.flush()
         except Exception:
             pass
     if not can_access:
