@@ -1537,7 +1537,7 @@ class CBTBankAppendRequest(BaseModel):
     subject: str
     duration_minutes: int = 60
     # new_only = skip duplicates; all = import even if text matches existing
-    import_mode: str = "new_only"
+    import_mode: str = "all"
     questions: list[CBTBankAppendQuestion]
 
 
@@ -1561,7 +1561,7 @@ async def append_bank_questions(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    mode = (payload.import_mode or "new_only").strip().lower()
+    mode = (payload.import_mode or "all").strip().lower()
     if mode not in {"new_only", "all"}:
         raise HTTPException(status_code=400, detail="import_mode must be new_only or all")
 

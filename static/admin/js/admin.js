@@ -2140,7 +2140,7 @@ function renderCbtPreview(preview) {
 
 function cbtPreviewModeValue() {
   var checked = document.querySelector('input[name="cbt-import-mode"]:checked');
-  return checked ? checked.value : "new_only";
+  return checked ? checked.value : "all";
 }
 
 function updateCbtPreviewImportButton() {

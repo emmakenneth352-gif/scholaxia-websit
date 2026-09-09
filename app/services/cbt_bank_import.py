@@ -278,12 +278,14 @@ async def append_questions_to_bank(
     created_by: str | uuid.UUID | None,
     duration_minutes: int,
     questions: list[dict[str, Any]],
-    import_mode: str = "new_only",
+    import_mode: str = "all",
 ) -> dict[str, Any]:
     """
     APPEND questions to the bank for exam+subject.
     Never deletes or replaces existing questions.
     import_mode: new_only | all
+
+    Default is all so repeated uploads append instead of being silently rejected.
     """
     subject = (subject or "").strip()
     if not subject:
@@ -301,7 +303,7 @@ async def append_questions_to_bank(
         duration_minutes=duration_minutes,
     )
 
-    mode = (import_mode or "new_only").strip().lower()
+    mode = (import_mode or "all").strip().lower()
     inserted = 0
     skipped_dup = 0
     skipped_invalid = 0
