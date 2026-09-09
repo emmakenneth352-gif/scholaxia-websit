@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import List, Optional
+from uuid import UUID
 
 from app.core.database import get_db
 from app.core.deps import require_teacher, require_student, get_current_user
@@ -128,10 +129,14 @@ async def update_my_profile_picture(
 @router.get("/profiles/student/{user_id}", response_model=PublicStudentProfile)
 async def get_student_profile(user_id: str, db: AsyncSession = Depends(get_db)):
     """Get a student's public profile by user_id."""
+    try:
+        student_id = UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Student not found") from exc
     result = await db.execute(
         select(User, StudentProfile)
         .join(StudentProfile, StudentProfile.user_id == User.id)
-        .where(User.id == user_id, User.role == UserRole.student, User.is_active == True)  # noqa: E712
+        .where(User.id == student_id, User.role == UserRole.student, User.is_active == True)  # noqa: E712
     )
     row = result.first()
     if not row:
@@ -154,10 +159,14 @@ async def get_student_profile(user_id: str, db: AsyncSession = Depends(get_db)):
 @router.get("/profiles/teacher/{user_id}", response_model=PublicTeacherProfile)
 async def get_teacher_profile(user_id: str, db: AsyncSession = Depends(get_db)):
     """Get a teacher's public profile by user_id."""
+    try:
+        teacher_id = UUID(user_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="Teacher not found") from exc
     result = await db.execute(
         select(User, TeacherProfile)
         .join(TeacherProfile, TeacherProfile.user_id == User.id)
-        .where(User.id == user_id, User.role == UserRole.teacher, User.is_active == True)  # noqa: E712
+        .where(User.id == teacher_id, User.role == UserRole.teacher, User.is_active == True)  # noqa: E712
     )
     row = result.first()
     if not row:
