@@ -3499,7 +3499,8 @@
           showLiveJoinResult(res || {});
         })
         .catch(function (err) {
-          alert("Could not join with that code: " + errMsg(err));
+          revealJoinCodeInput();
+          alert("Could not join with that code. Paste the access code from your teacher invite or access code list, then try again.\n\n" + errMsg(err));
         })
         .then(function () {
           joinCodeBtn.disabled = false;
@@ -3661,7 +3662,8 @@
         showLiveJoinResult(res || {});
       })
       .catch(function (err) {
-        alert("Could not join: " + errMsg(err));
+        revealJoinCodeInput();
+        alert("Could not join that class automatically. Enter the class code below and try again.\n\n" + errMsg(err));
       })
       .then(function () {
         joinBtn.disabled = false;
@@ -3760,6 +3762,17 @@
     enterLiveClassroom(res || {});
   }
 
+  function revealJoinCodeInput() {
+    var form = $("joinCodeForm");
+    if (!form) return;
+    form.scrollIntoView({ behavior: "smooth", block: "center" });
+    var input = $("joinCodeInput");
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
   var joinCodeForm = $("joinCodeForm");
   if (joinCodeForm) {
     joinCodeForm.addEventListener("submit", function (e) {
@@ -3775,7 +3788,8 @@
           $("joinCodeInput").value = "";
         })
         .catch(function (err) {
-          alert("Could not join with that code: " + errMsg(err));
+          revealJoinCodeInput();
+          alert("Could not join with that code. Check the code and try again.\n\n" + errMsg(err));
         })
         .then(function () {
           btn.disabled = false;
