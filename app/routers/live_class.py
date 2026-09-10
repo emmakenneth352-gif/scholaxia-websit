@@ -108,7 +108,11 @@ async def join_preview(
 
     if not live_class.join_code:
         live_class.join_code = f"SX-{secrets.token_hex(4).upper()}"
-        await db.flush()
+        try:
+            await db.flush()
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
     teacher_name = "Teacher"
     try:
@@ -264,6 +268,7 @@ async def join_class_by_code(
     if not live_class:
         raise HTTPException(status_code=404, detail="Invalid or expired class code.")
 
+    # parse_uuid ensures we always compare UUID objects against UUID columns
     sid = parse_uuid(current_user["sub"])
     delivery = await db.execute(
         select(LiveClassAccessCodeDelivery).where(
@@ -277,33 +282,41 @@ async def join_class_by_code(
     status = _session_status(live_class, now)
     if status == "ENDED":
         raise HTTPException(status_code=410, detail="This class has ended.")
-    if status == "SCHEDULED" and not live_class.is_live:
+    # SCHEDULED = start_time is in the future; LOBBY = start_time reached but teacher
+    # hasn't flipped is_live yet — both mean the class hasn't been opened.
+    if status in ("SCHEDULED", "LOBBY") and not live_class.is_live:
         raise HTTPException(
             status_code=404,
             detail="Your teacher has not started this class yet.",
         )
 
-    prof_res = await db.execute(
-        select(StudentProfile).where(StudentProfile.user_id == current_user["sub"])
-    )
-    profile = prof_res.scalar_one_or_none()
-    can_access, detail = await _student_can_access_class(
-        db, current_user["sub"], live_class, profile
-    )
-    # Private class access code IS the invite — student joins free (no subscription).
-    if not can_access and _class_visibility(live_class) == LiveClassVisibility.private.value:
-        can_access, detail = True, ""
+    # A valid code grants access regardless of visibility/subject rules.
+    # The code itself is the credential — no further subject-match check needed.
+    # We still need to add the student to invited_student_ids for private classes
+    # so the downstream join_class() handler allows them through.
+    vis = _class_visibility(live_class)
+    if vis == LiveClassVisibility.private.value:
         try:
             invited = _parse_id_list(live_class.invited_student_ids)
-            uid = str(current_user["sub"])
+            uid = str(sid)
             if uid not in invited:
                 invited.append(uid)
                 live_class.invited_student_ids = json.dumps(invited)
                 await db.flush()
         except Exception:
             pass
-    if not can_access:
-        raise HTTPException(status_code=403, detail=detail)
+    elif vis == LiveClassVisibility.school_group.value:
+        # School-group classes: code-join auto-adds student to invited list so
+        # join_class() passes the membership check.
+        try:
+            invited = _parse_id_list(live_class.invited_student_ids or "[]")
+            uid = str(sid)
+            if uid not in invited:
+                invited.append(uid)
+                live_class.invited_student_ids = json.dumps(invited)
+                await db.flush()
+        except Exception:
+            pass
 
     if not _class_is_active(live_class, now):
         if status == "ENDED":
@@ -316,23 +329,25 @@ async def join_class_by_code(
     if delivery_row:
         delivery_row.is_read = True
         delivery_row.is_used = True
-    elif _class_visibility(live_class) in (
-        LiveClassVisibility.public.value,
-        LiveClassVisibility.private.value,
-    ):
-        db.add(
-            LiveClassAccessCodeDelivery(
-                student_id=sid,
-                live_class_id=live_class.id,
-                join_code=live_class.join_code,
-                title=live_class.title,
-                subject=live_class.subject,
-                teacher_name="Teacher",
-                visibility=_class_visibility(live_class),
-                is_read=True,
-                is_used=True,
+    else:
+        # Create a delivery record for every visibility type so the student's
+        # Access Code tab is always populated after a successful code-join.
+        try:
+            db.add(
+                LiveClassAccessCodeDelivery(
+                    student_id=sid,
+                    live_class_id=live_class.id,
+                    join_code=live_class.join_code or normalized,
+                    title=live_class.title,
+                    subject=live_class.subject,
+                    teacher_name="Teacher",
+                    visibility=_class_visibility(live_class),
+                    is_read=True,
+                    is_used=True,
+                )
             )
-        )
+        except Exception:
+            pass
 
     return await join_class(str(live_class.id), current_user, db)
 
@@ -582,30 +597,23 @@ async def _find_live_class_by_code(db: AsyncSession, code: str | None) -> LiveCl
 
     normalized = token.upper()
     compact = normalized.replace(" ", "").replace("-", "")
-    variants = [normalized, compact]
 
-    if compact.startswith("SX"):
-        variants.append(compact[2:])
+    # Build ordered list of exact-match variants — most specific first.
+    seen: list[str] = []
+    for v in [normalized, compact]:
+        if v and v not in seen:
+            seen.append(v)
+    if compact.startswith("SX") and compact[2:] and compact[2:] not in seen:
+        seen.append(compact[2:])
+    last8 = compact[-8:] if len(compact) >= 8 else ""
+    if last8 and last8 not in seen:
+        seen.append(last8)
 
-    if compact:
-        variants.append(compact[-8:])
-
-    seen = []
-    for variant in variants:
-        if variant and variant not in seen:
-            seen.append(variant)
-
-    live_clauses = []
-    delivery_clauses = []
-    for variant in seen:
-        live_clauses.append(LiveClass.join_code == variant)
-        live_clauses.append(LiveClass.join_code.ilike(f"%{variant}%"))
-        delivery_clauses.append(LiveClassAccessCodeDelivery.join_code == variant)
-        delivery_clauses.append(LiveClassAccessCodeDelivery.join_code.ilike(f"%{variant}%"))
-
-    if live_clauses:
+    # ── 1. Exact-match pass against live_classes (fastest, most accurate) ────
+    exact_clauses = [LiveClass.join_code == v for v in seen]
+    if exact_clauses:
         result = await db.execute(
-            select(LiveClass).where(or_(*live_clauses)).limit(1)
+            select(LiveClass).where(or_(*exact_clauses)).limit(1)
         )
         live_class = result.scalar_one_or_none()
         if live_class:
@@ -617,9 +625,49 @@ async def _find_live_class_by_code(db: AsyncSession, code: str | None) -> LiveCl
                     pass
             return live_class
 
-    if delivery_clauses:
+    # ── 2. Exact-match pass against access-code deliveries ───────────────────
+    delivery_exact = [LiveClassAccessCodeDelivery.join_code == v for v in seen]
+    if delivery_exact:
         delivery_result = await db.execute(
-            select(LiveClassAccessCodeDelivery).where(or_(*delivery_clauses)).limit(1)
+            select(LiveClassAccessCodeDelivery).where(or_(*delivery_exact)).limit(1)
+        )
+        delivery_row = delivery_result.scalar_one_or_none()
+        if delivery_row:
+            class_result = await db.execute(
+                select(LiveClass).where(LiveClass.id == delivery_row.live_class_id)
+            )
+            live_class = class_result.scalar_one_or_none()
+            if live_class:
+                if not live_class.join_code and delivery_row.join_code:
+                    live_class.join_code = delivery_row.join_code
+                    try:
+                        await db.flush()
+                    except Exception:
+                        pass
+                return live_class
+
+    # ── 3. Fuzzy ILIKE fallback — escape user input to avoid wildcard injection
+    def _escape_like(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    live_fuzzy: list = []
+    delivery_fuzzy: list = []
+    for v in seen:
+        safe = _escape_like(v)
+        live_fuzzy.append(LiveClass.join_code.ilike(f"%{safe}%", escape="\\"))
+        delivery_fuzzy.append(LiveClassAccessCodeDelivery.join_code.ilike(f"%{safe}%", escape="\\"))
+
+    if live_fuzzy:
+        result = await db.execute(
+            select(LiveClass).where(or_(*live_fuzzy)).limit(1)
+        )
+        live_class = result.scalar_one_or_none()
+        if live_class:
+            return live_class
+
+    if delivery_fuzzy:
+        delivery_result = await db.execute(
+            select(LiveClassAccessCodeDelivery).where(or_(*delivery_fuzzy)).limit(1)
         )
         delivery_row = delivery_result.scalar_one_or_none()
         if delivery_row:
