@@ -165,11 +165,31 @@ html[dir="rtl"] .lang-dropdown { right: auto; left: 0; }
 .pq-hero-art { position: relative; min-height: 240px; display: grid; place-items: center; }
 .pq-hero-stack { position: relative; width: min(100%, 300px); height: 250px; }
 
+/* ── card float animations ── */
+@keyframes pq-float-a {
+  0%,100% { transform: rotate(-9deg) translateY(0px); }
+  50%      { transform: rotate(-9deg) translateY(-10px); }
+}
+@keyframes pq-float-b {
+  0%,100% { transform: rotate(2deg) translateY(0px); }
+  50%      { transform: rotate(2deg) translateY(-14px); }
+}
+@keyframes pq-float-c {
+  0%,100% { transform: rotate(11deg) translateY(0px); }
+  50%      { transform: rotate(11deg) translateY(-8px); }
+}
+@keyframes pq-float-cap {
+  0%,100% { transform: translateY(0px) scale(1); }
+  50%      { transform: translateY(-6px) scale(1.08); }
+}
+
 .pq-hero-doc {
   position: absolute; width: 150px; height: 190px; border-radius: 18px; padding: 1rem;
   color: #fff; box-shadow: var(--pq-shadow-lg);
   display: flex; flex-direction: column; justify-content: space-between;
+  transition: box-shadow 0.3s;
 }
+.pq-hero-doc:hover { box-shadow: 0 24px 48px rgba(109,40,217,0.35); }
 .pq-doc-badge {
   align-self: flex-start; background: rgba(255,255,255,0.18);
   border-radius: 999px; padding: 0.2rem 0.55rem; font-size: 0.68rem; font-weight: 700;
@@ -180,17 +200,20 @@ html[dir="rtl"] .lang-dropdown { right: auto; left: 0; }
 .pq-hero-doc-a {
   left: 8px; top: 28px;
   background: linear-gradient(160deg, #7c3aed, #4c1d95);
-  transform: rotate(-9deg); z-index: 1;
+  z-index: 1;
+  animation: pq-float-a 4s ease-in-out infinite;
 }
 .pq-hero-doc-b {
   left: 70px; top: 8px;
   background: linear-gradient(160deg, #a78bfa, #6d28d9);
-  transform: rotate(2deg); z-index: 2;
+  z-index: 2;
+  animation: pq-float-b 4s ease-in-out infinite 0.6s;
 }
 .pq-hero-doc-c {
   right: 4px; top: 36px;
   background: linear-gradient(160deg, #5b21b6, #312e81);
-  transform: rotate(11deg); z-index: 3;
+  z-index: 3;
+  animation: pq-float-c 4s ease-in-out infinite 1.2s;
 }
 .pq-hero-cap {
   position: absolute; right: 18px; bottom: 8px; z-index: 4;
