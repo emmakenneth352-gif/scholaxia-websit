@@ -1074,29 +1074,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 ],
               ),
             ),
-            if (!widget.isTeacher) ...[
-              const SizedBox(width: 6),
-              TextButton.icon(
-                onPressed: _toggleSaveClass,
-                icon: Icon(
-                  _saveActive ? Icons.stop_rounded : Icons.save_alt_rounded,
-                  size: 16,
-                ),
-                label: Text(
-                  _saveActive ? 'Stop' : 'Save',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-                style: TextButton.styleFrom(
-                  foregroundColor: _saveActive ? Colors.red : context.accentColor,
-                  backgroundColor: _saveActive
-                      ? Colors.red.withOpacity(0.12)
-                      : context.accentColor.withOpacity(0.12),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
             if (_classDetails?['is_live'] == true || widget.isTeacher)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -1340,14 +1317,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 _toggleScreenShare,
               ),
             ],
-            if (!widget.isTeacher)
-              _btn(
-                context,
-                _saveActive ? Icons.stop_rounded : Icons.save_alt_rounded,
-                _saveActive ? 'Stop' : 'Save',
-                _toggleSaveClass,
-                red: _saveActive,
-              ),
             if (!widget.isTeacher)
               _btn(context, Icons.pan_tool_alt_outlined, 'Hand', _toggleHand),
             _btn(

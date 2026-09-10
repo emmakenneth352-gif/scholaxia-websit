@@ -2295,6 +2295,25 @@ class ApiService {
     return _parseMap(res);
   }
 
+  /// Join a live class by ID and return a full token payload (same shape as join-by-code).
+  /// This is used when the student taps "Join Live" on a card that already shows the class id.
+  Future<Map<String, dynamic>> joinLiveClassById(String classId) async {
+    // POST /{classId}/join returns the same token payload as join-by-code
+    final res = await _onlinePost(
+      _uri(ApiEndpoints.liveClassJoin(classId)),
+      headers: await _authHeaders(),
+    );
+    final data = _parseMap(res);
+    // Also fetch a fresh token so we always have livekit_token + livekit_url
+    if ((data['livekit_token'] ?? '').toString().isEmpty) {
+      try {
+        final tok = await getLiveClassToken(classId);
+        data.addAll(tok);
+      } catch (_) {}
+    }
+    return data;
+  }
+
   Future<Map<String, dynamic>> getLiveClassToken(String classId) async {
     // Always fresh — stale JWTs break publish grants / A/V between teacher & student.
     final res = await _onlineGet(
@@ -3169,3 +3188,41 @@ class CbtResult {
         : const [],
   );
 }
+
+  // ── Past Questions Shop ─────────────────────────────────────────────────────
+
+  /// Public catalog — no login required. Returns {items: [...], total: N}.
+  Future<Map<String, dynamic>> getPastQuestionsCatalog({
+    String? examType,
+    String? subject,
+  }) async {
+    final params = <String, String>{};
+    if (examType != null && examType.isNotEmpty && examType != 'ALL') {
+      params['exam_type'] = examType;
+    }
+    if (subject != null && subject.isNotEmpty) {
+      params['subject'] = subject;
+    }
+    final uri = Uri.parse('${ApiEndpoints.baseUrl}/api/v1/past-questions/catalog')
+        .replace(queryParameters: params.isEmpty ? null : params);
+    final res = await _cachedGet(uri, trackConnectivity: false);
+    return _parseMap(res);
+  }
+
+  /// Start a guest Paystack payment for a past questions PDF (no account needed).
+  Future<Map<String, dynamic>> initPastQuestionGuestPayment({
+    required String bookId,
+    required String email,
+    String? fullName,
+  }) async {
+    final body = <String, dynamic>{
+      'book_id': bookId,
+      'email': email,
+    };
+    if (fullName != null && fullName.isNotEmpty) body['full_name'] = fullName;
+    final res = await _onlinePost(
+      Uri.parse('${ApiEndpoints.baseUrl}/api/v1/payments/paystack/guest/past-question/initialize'),
+      body: jsonEncode(body),
+    );
+    return _parseMap(res);
+  }

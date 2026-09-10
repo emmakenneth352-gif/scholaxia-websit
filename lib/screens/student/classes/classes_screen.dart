@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../../api/api_service.dart';
+import '../../../services/live_class_ring_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/student_ui.dart';
 import '../../../utils/live_join_helper.dart';
 import '../../kind/kind_booking_screen.dart';
 import 'class_packages_screen.dart';
+import 'live_class_screen.dart';
 
 class ClassesScreen extends StatefulWidget {
   const ClassesScreen({super.key});
@@ -117,7 +119,76 @@ class _ClassesScreenState extends State<ClassesScreen> {
     final classId = _field(session, ['id', 'class_id', 'uuid']);
     setState(() => _joiningId = classId.isNotEmpty ? classId : 'join');
     try {
-      await joinLiveWithAccessCode(context, _api);
+      // If we already have a class ID, join it directly — no code entry needed.
+      if (classId.isNotEmpty) {
+        LiveClassRingService.instance.stop();
+        final userId = await _api.getUserId() ?? 'student';
+        // join-by-id: join the class and get a LiveKit token
+        final data = await _api.joinLiveClassById(classId);
+        if (!mounted) return;
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LiveClassScreen(
+              classId: classId,
+              subject: data['subject']?.toString() ??
+                  session['subject']?.toString() ?? 'General',
+              topic: data['title']?.toString() ??
+                  session['title']?.toString() ?? 'Live Class',
+              userId: userId,
+              roomId: data['room_id']?.toString() ??
+                  data['channel_id']?.toString(),
+              livekitToken: data['livekit_token']?.toString() ??
+                  data['token']?.toString(),
+              livekitUrl: data['livekit_url']?.toString(),
+            ),
+          ),
+        );
+      } else {
+        // No id — fall back to code entry dialog
+        await joinLiveWithAccessCode(context, _api);
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      final msg = e.message.toLowerCase();
+      final needsSub = e.statusCode == 402 ||
+          msg.contains('plan') || msg.contains('subscription');
+      if (needsSub) {
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Subscription required'),
+            content: Text(e.message.isNotEmpty
+                ? e.message
+                : 'Choose a live class plan before joining.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Open Subscription'),
+              ),
+            ],
+          ),
+        );
+        if (go == true && mounted) {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ClassPackagesScreen()),
+          );
+        }
+        return;
+      }
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not join class: $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _joiningId = null);
     }

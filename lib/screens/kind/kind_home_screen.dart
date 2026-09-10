@@ -7,6 +7,7 @@ import 'kind_games_screen.dart';
 import 'kind_learn_screen.dart';
 import 'kind_cbt_screen.dart';
 import 'kind_shared.dart';
+import '../student/video_tutorials_screen.dart';
 
 class KindHomeScreen extends StatefulWidget {
   final void Function(int tabIndex)? onNavigate;
@@ -182,6 +183,16 @@ class _KindHomeScreenState extends State<KindHomeScreen> {
         'Join your teacher\'s lesson.',
         const [Color(0xFFA855F7), Color(0xFFD946EF)],
         () => widget.onNavigate?.call(2),
+      ),
+      (
+        Icons.play_circle_fill_rounded,
+        'Video Tutorials',
+        'Watch video lessons from admin.',
+        const [Color(0xFFDC2626), Color(0xFFF87171)],
+        () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const VideoTutorialsScreen()),
+        ),
       ),
       (
         Icons.video_library_rounded,

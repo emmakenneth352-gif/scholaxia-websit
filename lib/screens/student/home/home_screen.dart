@@ -15,6 +15,7 @@ import '../games/games_screen.dart';
 import '../library/library_screen.dart';
 import '../video_tutorials_screen.dart';
 import '../cbt/cbt_screen.dart';
+import '../classes/past_questions_screen.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../assignments/assignment_screen.dart';
 
@@ -743,13 +744,6 @@ class _HomeScreenState extends State<HomeScreen> {
         const ClassesScreen(),
       ),
       (
-        Icons.video_library_rounded,
-        'Saved Classes',
-        'Replay your saved lessons.',
-        const [Color(0xFF8B5CF6), Color(0xFFA78BFA)],
-        const SavedClassesScreen(),
-      ),
-      (
         Icons.menu_book_rounded,
         'Library',
         'Read study books & materials.',
@@ -758,17 +752,17 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       (
         Icons.play_circle_fill_rounded,
-        'Lesson Notes',
-        'Watch lessons posted by admin.',
+        'Video Tutorials',
+        'Watch video lessons posted by admin.',
         const [Color(0xFFDC2626), Color(0xFFF87171)],
         const VideoTutorialsScreen(),
       ),
       (
         Icons.quiz_rounded,
         'Past Questions',
-        'Take JAMB, WAEC & NECO as timed CBT.',
+        'Browse & buy JAMB, WAEC, NECO past papers.',
         const [Color(0xFF7C3AED), Color(0xFFA78BFA)],
-        const CbtScreen(asPastQuestions: true),
+        const PastQuestionsScreen(),
       ),
       (
         Icons.sports_esports_rounded,
