@@ -10,10 +10,76 @@
     return document.getElementById(id);
   }
 
-  function money(n) {
-    var v = Math.round(Number(n) || 0);
-    return "₦" + v.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  // ── Currency helpers ──────────────────────────────────────────────────────
+  var MKT_CURRENCIES = {
+    USD: { symbol: "$",    rate: 1 / 1650 },
+    GBP: { symbol: "£",    rate: 0.79 / 1650 },
+    NGN: { symbol: "₦",   rate: 1 },
+    KES: { symbol: "KES ", rate: 130 / 1650 },
+    GHS: { symbol: "GHS ", rate: 13.5 / 1650 },
+  };
+
+  function getCurrency() {
+    var code = localStorage.getItem("sx_currency") || "NGN";
+    return MKT_CURRENCIES[code] ? code : "NGN";
   }
+
+  function money(ngnAmount) {
+    var code = getCurrency();
+    var cur = MKT_CURRENCIES[code];
+    var converted = (Number(ngnAmount) || 0) * cur.rate;
+    var formatted = code === "NGN"
+      ? Math.round(converted).toLocaleString("en-NG")
+      : converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return cur.symbol + formatted;
+  }
+
+  // Hook currency picker so re-renders marketplace prices when changed
+  var _mktCurrHooked = false;
+  function hookMktCurrency() {
+    if (_mktCurrHooked || !window.SxCurr) return;
+    var _orig = window.SxCurr.apply;
+    window.SxCurr.apply = function(code) {
+      _orig(code);
+      renderGrid(); // re-render all product cards with new currency
+      renderCart(); // re-render cart totals
+    };
+    _mktCurrHooked = true;
+    // Also wire the inline dropdown on this page
+    var wrap = document.getElementById("currWrap");
+    var btn  = document.getElementById("currBtn");
+    var dd   = document.getElementById("currDropdown");
+    if (btn && wrap && dd) {
+      // Show/hide
+      btn.addEventListener("click", function(e) {
+        e.stopPropagation();
+        var open = dd.style.display === "block";
+        dd.style.display = open ? "none" : "block";
+        btn.setAttribute("aria-expanded", String(!open));
+      });
+      dd.addEventListener("click", function(e) {
+        var opt = e.target.closest(".lang-option");
+        if (!opt || !opt.dataset.currency) return;
+        var code = opt.dataset.currency;
+        dd.querySelectorAll(".lang-option").forEach(function(o) { o.style.fontWeight = ""; });
+        opt.style.fontWeight = "700";
+        // Update button label
+        var sym = { USD:"$", GBP:"£", NGN:"₦", KES:"KES ", GHS:"GHS " }[code] || "";
+        var symEl = document.getElementById("currSymbol");
+        var lblEl = document.getElementById("currLabel");
+        if (symEl) symEl.textContent = sym.trim();
+        if (lblEl) lblEl.textContent = code;
+        localStorage.setItem("sx_currency", code);
+        dd.style.display = "none";
+        renderGrid();
+        renderCart();
+      });
+      document.addEventListener("click", function() { dd.style.display = "none"; });
+    }
+  }
+  hookMktCurrency();
+  document.addEventListener("DOMContentLoaded", hookMktCurrency);
+  setTimeout(hookMktCurrency, 500);
 
   function toast(msg) {
     var el = $("mktToast");

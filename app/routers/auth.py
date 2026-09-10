@@ -833,3 +833,45 @@ async def _login_user(payload: LoginRequest, db: AsyncSession):
 @router.post("/oauth", response_model=TokenResponse)
 async def oauth_login(payload: OAuthRequest, db: AsyncSession = Depends(get_db)):
     raise HTTPException(status_code=501, detail="OAuth not yet implemented")
+
+
+# ── Account deletion request (Play Store requirement) ────────────────────────
+class DeletionRequestPayload(BaseModel):
+    email: str
+    reason: str = ""
+    note: str = ""
+
+
+@router.post("/request-deletion")
+async def request_account_deletion(
+    payload: DeletionRequestPayload,
+    db: AsyncSession = Depends(get_db),
+):
+    """Log an account deletion request. Returns 200 always so the form UX is clean.
+    Admins can review pending deletions and manually process them.
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    try:
+        email = (payload.email or "").strip().lower()
+        reason = (payload.reason or "")[:120]
+        note = (payload.note or "")[:500]
+        log.warning(
+            "ACCOUNT_DELETION_REQUEST email=%s reason=%s note=%s",
+            email, reason, note,
+        )
+        # Optionally send an admin notification — best-effort, never blocks response
+        try:
+            from app.services.notification_service import send_admins_notification
+            await send_admins_notification(
+                db=db,
+                title="Account deletion request",
+                body=f"{email} requested account deletion. Reason: {reason or 'none'}",
+                notification_type="admin_alert",
+                data={"email": email, "reason": reason, "note": note},
+            )
+        except Exception:
+            pass
+    except Exception as exc:
+        log.exception("deletion request failed: %s", exc)
+    return {"message": "Deletion request received. We will process it within 30 days."}

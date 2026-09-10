@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Delete Account — Scholaxia</title>
+  <meta name="description" content="Request deletion of your Scholaxia account and personal data." />
+  <link rel="icon" type="image/png" href="media/logo-main.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Outfit',system-ui,sans-serif;background:#f8f7ff;color:#1a0533;line-height:1.7;font-size:1rem;min-height:100vh;display:flex;flex-direction:column}
+    .policy-nav{background:#fff;border-bottom:1px solid #ede9fe;padding:.9rem 1.5rem;display:flex;align-items:center;gap:.75rem}
+    .policy-nav img{height:32px;width:auto}
+    .policy-nav a{font-weight:700;font-size:1.05rem;color:#6d28d9;text-decoration:none}
+    .policy-nav span{color:#888;font-size:.85rem;margin-left:auto}
+    .wrap{max-width:640px;margin:0 auto;padding:3rem 1.5rem 4rem;flex:1}
+    h1{font-size:clamp(1.5rem,4vw,2rem);font-weight:800;color:#4c1d95;margin-bottom:.5rem}
+    .subtitle{color:#888;font-size:.95rem;margin-bottom:2rem}
+    .card{background:#fff;border-radius:16px;padding:2rem;box-shadow:0 4px 24px rgba(109,40,217,.08);margin-bottom:1.5rem}
+    h2{font-size:1.1rem;font-weight:700;color:#6d28d9;margin-bottom:.8rem}
+    p,li{color:#3b2060;margin-bottom:.7rem;font-size:.97rem}
+    ul{margin:.4rem 0 .8rem 1.4rem}
+    label{display:block;font-weight:600;margin-bottom:.4rem;font-size:.92rem;color:#4c1d95}
+    input,textarea,select{width:100%;padding:.7rem .9rem;border:1.5px solid #ddd6fe;border-radius:10px;font-family:inherit;font-size:.95rem;color:#1a0533;background:#faf9ff;margin-bottom:1rem;outline:none;transition:border .2s}
+    input:focus,textarea:focus{border-color:#7c3aed}
+    textarea{min-height:100px;resize:vertical}
+    .btn-delete{display:block;width:100%;padding:.85rem;background:linear-gradient(135deg,#dc2626,#991b1b);color:#fff;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;text-align:center;transition:opacity .2s}
+    .btn-delete:hover{opacity:.88}
+    .notice{background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:1rem 1.2rem;margin-bottom:1.2rem;font-size:.9rem;color:#991b1b}
+    .success{background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:1.2rem;text-align:center;font-weight:600;color:#15803d;display:none}
+    a{color:#6d28d9}
+    .policy-footer{text-align:center;padding:1.5rem;color:#888;font-size:.85rem;border-top:1px solid #ede9fe}
+  </style>
+</head>
+<body>
+  <nav class="policy-nav">
+    <a href="index.html"><img src="media/logo-main.png" alt="Scholaxia" /> Scholaxia</a>
+    <span>Delete Account</span>
+  </nav>
+
+  <div class="wrap">
+    <h1>Delete Your Account</h1>
+    <p class="subtitle">We're sorry to see you go. Your request will be processed within 30 days.</p>
+
+    <div class="card">
+      <h2>What gets deleted</h2>
+      <ul>
+        <li>Your profile, name, email and login credentials</li>
+        <li>Your CBT scores, class attendance history, and library activity</li>
+        <li>Your saved content, community posts, and AI tutor conversations</li>
+        <li>Any active subscriptions will be cancelled (no refund for unused time)</li>
+      </ul>
+      <div class="notice">
+        ⚠️ <strong>Payment records</strong> are retained for 7 years as required by Nigerian financial law, even after account deletion. All other data is permanently erased.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Request account deletion</h2>
+      <form id="deleteForm">
+        <label for="delEmail">Your account email address *</label>
+        <input type="email" id="delEmail" name="email" required placeholder="you@email.com" />
+
+        <label for="delReason">Reason for leaving (optional)</label>
+        <select id="delReason" name="reason">
+          <option value="">Select a reason…</option>
+          <option value="not_using">I no longer use the platform</option>
+          <option value="privacy">Privacy concerns</option>
+          <option value="alternative">Found an alternative</option>
+          <option value="temporary">Taking a break</option>
+          <option value="other">Other</option>
+        </select>
+
+        <label for="delNote">Additional notes (optional)</label>
+        <textarea id="delNote" name="note" placeholder="Tell us anything else…"></textarea>
+
+        <div class="notice">
+          By submitting this form you confirm you want to permanently delete your Scholaxia account. This action <strong>cannot be undone</strong>.
+        </div>
+
+        <button type="submit" class="btn-delete" id="delBtn">Request Account Deletion</button>
+      </form>
+
+      <div class="success" id="deleteSuccess">
+        ✅ Request received. We will process your deletion within 30 days and send a confirmation to your email.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Need help instead?</h2>
+      <p>If you're having trouble with your account, we'd love to help before you leave.</p>
+      <p>📧 <a href="mailto:scholaxia23@gmail.com">scholaxia23@gmail.com</a></p>
+      <p>📞 <a href="tel:+2349021661674">0902 166 1674</a></p>
+      <p>💬 <a href="https://wa.me/2349021661674" target="_blank" rel="noopener">WhatsApp us</a></p>
+    </div>
+  </div>
+
+  <footer class="policy-footer">
+    © 2026 Scholaxia · <a href="index.html">Home</a> · <a href="privacy.html">Privacy Policy</a> · <a href="mailto:scholaxia23@gmail.com">Contact</a>
+  </footer>
+
+  <script>
+    document.getElementById("deleteForm").addEventListener("submit", async function(e) {
+      e.preventDefault();
+      var btn = document.getElementById("delBtn");
+      var email = document.getElementById("delEmail").value.trim();
+      var reason = document.getElementById("delReason").value;
+      var note = document.getElementById("delNote").value.trim();
+      btn.disabled = true;
+      btn.textContent = "Sending request…";
+      try {
+        // Send deletion request to the backend
+        var api = (window.SCHOLAXIA_API_BASE || "https://scholaxia1.onrender.com").replace(/\/$/, "");
+        await fetch(api + "/api/v1/auth/request-deletion", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email, reason: reason, note: note })
+        });
+      } catch(err) { /* best-effort */ }
+      // Always show success (the request is logged regardless)
+      document.getElementById("deleteForm").style.display = "none";
+      document.getElementById("deleteSuccess").style.display = "block";
+    });
+  </script>
+</body>
+</html>
