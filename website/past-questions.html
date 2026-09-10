@@ -43,6 +43,21 @@
             <div class="lang-option" data-lang="ar" role="option" tabindex="0">العربية</div>
           </div>
         </div>
+        <!-- Currency picker -->
+        <div class="lang-wrap" id="currWrap">
+          <button class="lang-btn" id="currBtn" aria-haspopup="listbox" aria-expanded="false" aria-label="Select currency">
+            <span id="currSymbol">₦</span>
+            <span id="currLabel">NGN</span>
+            <span class="lang-arrow" aria-hidden="true">▾</span>
+          </button>
+          <div class="lang-dropdown" id="currDropdown" role="listbox">
+            <div class="lang-option" data-currency="USD" role="option" tabindex="0">$ USD — US Dollar</div>
+            <div class="lang-option" data-currency="GBP" role="option" tabindex="0">£ GBP — British Pound</div>
+            <div class="lang-option active" data-currency="NGN" role="option" tabindex="0">₦ NGN — Nigerian Naira</div>
+            <div class="lang-option" data-currency="KES" role="option" tabindex="0">KES — Kenyan Shilling</div>
+            <div class="lang-option" data-currency="GHS" role="option" tabindex="0">GHS — Ghanaian Cedi</div>
+          </div>
+        </div>
         <a class="pq-nav-cta" href="portal.html">Sign in</a>
       </nav>
     </header>

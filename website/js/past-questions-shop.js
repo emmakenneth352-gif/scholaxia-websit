@@ -1,5 +1,48 @@
 (function () {
   var API = (window.SCHOLAXIA_API_BASE || "").replace(/\/$/, "");
+
+  // ── Currency helpers ──────────────────────────────────────────────────────
+  var CURRENCIES = {
+    USD: { symbol: "$",    rate: 1 / 1650 },
+    GBP: { symbol: "£",    rate: 0.79 / 1650 },
+    NGN: { symbol: "₦",   rate: 1 },
+    KES: { symbol: "KES ", rate: 130 / 1650 },
+    GHS: { symbol: "GHS ", rate: 13.5 / 1650 },
+  };
+
+  function getCurrency() {
+    var code = localStorage.getItem("sx_currency") || "NGN";
+    return CURRENCIES[code] ? code : "NGN";
+  }
+
+  function money(ngnAmount) {
+    var code = getCurrency();
+    var cur = CURRENCIES[code];
+    var converted = ngnAmount * cur.rate;
+    // For non-NGN show 2 decimal places, NGN no decimals
+    var formatted = code === "NGN"
+      ? Math.round(converted).toLocaleString("en-NG")
+      : converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return cur.symbol + formatted;
+  }
+
+  // Re-render when currency changes (picks up SxCurr from i18n.js)
+  var _origApply = null;
+  function hookCurrencyChange() {
+    if (window.SxCurr && window.SxCurr._pqHooked) return;
+    if (!window.SxCurr) return;
+    _origApply = window.SxCurr.apply;
+    window.SxCurr.apply = function(code) {
+      _origApply(code);
+      render(); // re-render all prices
+    };
+    window.SxCurr._pqHooked = true;
+  }
+  // Try immediately + after DOM load (i18n.js may load after this)
+  hookCurrencyChange();
+  document.addEventListener("DOMContentLoaded", hookCurrencyChange);
+  setTimeout(hookCurrencyChange, 500);
+
   var state = {
     products: [],
     exam: "ALL",
@@ -10,10 +53,6 @@
     selected: null,
     loadError: null,
   };
-
-  function money(n) {
-    return "₦" + Number(n || 0).toLocaleString("en-NG");
-  }
 
   function qs(id) {
     return document.getElementById(id);

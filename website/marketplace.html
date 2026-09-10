@@ -28,6 +28,21 @@
         <a href="index.html">Learning home</a>
       </nav>
       <div class="mkt-actions">
+        <!-- Currency picker -->
+        <div class="lang-wrap" id="currWrap" style="position:relative">
+          <button class="lang-btn" id="currBtn" aria-haspopup="listbox" aria-expanded="false" aria-label="Select currency" style="border:1px solid #e2e0e8;border-radius:8px;padding:4px 8px;background:#fff;cursor:pointer;font-size:.85rem;display:inline-flex;align-items:center;gap:4px">
+            <span id="currSymbol">₦</span>
+            <span id="currLabel">NGN</span>
+            <span aria-hidden="true">▾</span>
+          </button>
+          <div class="lang-dropdown" id="currDropdown" role="listbox" style="display:none;position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid #e2e0e8;border-radius:10px;min-width:190px;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:4px 0">
+            <div class="lang-option" data-currency="USD" role="option" tabindex="0" style="padding:9px 14px;cursor:pointer;font-size:.88rem">$ USD — US Dollar</div>
+            <div class="lang-option" data-currency="GBP" role="option" tabindex="0" style="padding:9px 14px;cursor:pointer;font-size:.88rem">£ GBP — British Pound</div>
+            <div class="lang-option active" data-currency="NGN" role="option" tabindex="0" style="padding:9px 14px;cursor:pointer;font-size:.88rem;font-weight:700">₦ NGN — Nigerian Naira</div>
+            <div class="lang-option" data-currency="KES" role="option" tabindex="0" style="padding:9px 14px;cursor:pointer;font-size:.88rem">KES — Kenyan Shilling</div>
+            <div class="lang-option" data-currency="GHS" role="option" tabindex="0" style="padding:9px 14px;cursor:pointer;font-size:.88rem">GHS — Ghanaian Cedi</div>
+          </div>
+        </div>
         <button type="button" class="mkt-ghost" id="btnOrders" hidden>My orders</button>
         <button type="button" class="mkt-cart-btn" id="btnCart" aria-label="Open cart">
           <span>Cart</span>
