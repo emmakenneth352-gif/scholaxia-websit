@@ -2,7 +2,8 @@
 import hashlib
 import json
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, Query
+import asyncio
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_
 from pydantic import BaseModel
@@ -890,6 +891,7 @@ class ClassResponse(BaseModel):
 @router.post("/", response_model=ClassResponse)
 async def create_class(
     payload: CreateClassRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(require_teacher_or_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -944,12 +946,31 @@ async def create_class(
     db.add(live_class)
     await db.flush()
 
-    try:
-        await _notify_for_class(db, live_class, live_now=is_live, start=start, end=end)
-        if is_live:
-            await _notify_assigned_students_for_class(db, current_user["sub"], live_class)
-    except Exception:
-        pass
+    # Snapshot values needed by background tasks before session closes
+    _class_id   = str(live_class.id)
+    _teacher_id = str(live_class.teacher_id)
+    _is_live    = is_live
+
+    # Run notifications + access-code delivery AFTER the transaction commits
+    # (as a background task) so they never poison the class-creation transaction.
+    async def _post_create_tasks():
+        from app.core.database import AsyncSessionLocal
+        try:
+            async with AsyncSessionLocal() as bg_db:
+                result = await bg_db.execute(
+                    select(LiveClass).where(LiveClass.id == live_class.id)
+                )
+                cls = result.scalar_one_or_none()
+                if not cls:
+                    return
+                await _notify_for_class(bg_db, cls, live_now=_is_live, start=start, end=end)
+                if _is_live:
+                    await _notify_assigned_students_for_class(bg_db, _teacher_id, cls)
+                await bg_db.commit()
+        except Exception:
+            pass
+
+    background_tasks.add_task(asyncio.ensure_future, _post_create_tasks())
 
     return ClassResponse(
         id=str(live_class.id),
@@ -1003,8 +1024,21 @@ async def start_class(
         pass
 
     if not was_live:
-        await _notify_for_class(db, live_class, live_now=True)
-        await _notify_assigned_students_for_class(db, str(live_class.teacher_id), live_class)
+        _tid = str(live_class.teacher_id)
+        _cid = live_class.id
+        async def _start_notify():
+            from app.core.database import AsyncSessionLocal
+            try:
+                async with AsyncSessionLocal() as bg_db:
+                    res2 = await bg_db.execute(select(LiveClass).where(LiveClass.id == _cid))
+                    cls2 = res2.scalar_one_or_none()
+                    if cls2:
+                        await _notify_for_class(bg_db, cls2, live_now=True)
+                        await _notify_assigned_students_for_class(bg_db, _tid, cls2)
+                        await bg_db.commit()
+            except Exception:
+                pass
+        asyncio.ensure_future(_start_notify())
         try:
             from app.websockets.live_class_ws import broadcast as ws_broadcast
             from app.services.live_class_room import new_event_id
