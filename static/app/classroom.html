@@ -244,14 +244,14 @@
       <button type="button" class="sheet-close-btn" onclick="toggleReactionSheet(false)">Close</button>
     </div>
     <div class="reaction-sheet-grid">
-      <button type="button" onclick="sendReaction('👍'); toggleReactionSheet(false)">👍<span>Got it</span></button>
-      <button type="button" onclick="sendReaction('❓'); toggleReactionSheet(false)">❓<span>Question</span></button>
-      <button type="button" onclick="sendReaction('🙋'); toggleReactionSheet(false)">🙋<span>Speak</span></button>
-      <button type="button" onclick="sendReaction('😕'); toggleReactionSheet(false)">😕<span>Confused</span></button>
-      <button type="button" onclick="sendReaction('👏'); toggleReactionSheet(false)">👏<span>Great</span></button>
-      <button type="button" onclick="sendReaction('💡'); toggleReactionSheet(false)">💡<span>Idea</span></button>
-      <button type="button" onclick="sendReaction('❤️'); toggleReactionSheet(false)">❤️<span>Love</span></button>
-      <button type="button" onclick="sendReaction('😂'); toggleReactionSheet(false)">😂<span>Funny</span></button>
+      <button type="button" onclick="sendReaction('👍')">👍<span>Got it</span></button>
+      <button type="button" onclick="sendReaction('❓')">❓<span>Question</span></button>
+      <button type="button" onclick="sendReaction('🙋')">🙋<span>Speak</span></button>
+      <button type="button" onclick="sendReaction('😕')">😕<span>Confused</span></button>
+      <button type="button" onclick="sendReaction('👏')">👏<span>Great</span></button>
+      <button type="button" onclick="sendReaction('💡')">💡<span>Idea</span></button>
+      <button type="button" onclick="sendReaction('❤️')">❤️<span>Love</span></button>
+      <button type="button" onclick="sendReaction('😂')">😂<span>Funny</span></button>
     </div>
   </div>
 
@@ -262,11 +262,10 @@
       <button type="button" class="sheet-close-btn" onclick="toggleMoreMenu(false)">Close</button>
     </div>
     <div class="more-menu-list">
-      <button type="button" onclick="toggleParticipantStrip(false); toggleMoreMenu(false)">Participants strip</button>
+      <button type="button" onclick="toggleParticipantStrip(); toggleMoreMenu(false)">Participants strip</button>
       <button type="button" onclick="toggleMeetChatPanel(); toggleMoreMenu(false)">Chat</button>
-      <button type="button" class="host-only hidden" onclick="toggleHostSidebar(true); toggleMoreMenu(false)">Host sidebar</button>
+      <button type="button" class="host-only hidden" onclick="toggleHostSidebar(); toggleMoreMenu(false)">Host sidebar</button>
       <button type="button" class="host-only hidden" onclick="toggleScreenShare(); toggleMoreMenu(false)">Share screen</button>
-      <button type="button" class="host-only hidden" onclick="toggleBoard(); toggleMoreMenu(false)">Whiteboard</button>
       <button type="button" onclick="leaveClassroom()">Leave class</button>
     </div>
   </div>
