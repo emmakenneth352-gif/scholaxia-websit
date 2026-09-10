@@ -1272,6 +1272,31 @@ async def join_class(
         mic_ok = _mic_allowed_for(room_id, sid, att)
         cam_ok = _camera_allowed_for(room_id, sid, att)
 
+        # Determine if caller is the teacher or admin
+        is_teacher_caller = (
+            teacher_id == sid
+            or str(current_user.get("role", "")).lower() in ("teacher", "admin")
+        )
+        actual_role = "teacher" if is_teacher_caller else "student"
+        can_publish_final = True if is_teacher_caller else can_publish_student
+        mic_ok = True if is_teacher_caller else mic_ok
+        cam_ok = True if is_teacher_caller else cam_ok
+
+        try:
+            set_room_meta(
+                room_id,
+                classId=str(class_uuid),
+                sessionStatus="LIVE" if is_live else "LOBBY",
+            )
+            upsert_participant(
+                room_id,
+                sid,
+                role=actual_role,
+                name=student_display,
+            )
+        except Exception:
+            pass
+
         if not room_id:
             raise HTTPException(
                 status_code=500,
@@ -1282,8 +1307,8 @@ async def join_class(
             room_id,
             sid,
             current_user.get("full_name") or current_user.get("email") or "Student",
-            can_publish=can_publish_student,
-            role="student",
+            can_publish=can_publish_final,
+            role=actual_role,
         )
         return {
             "class_id": str(class_uuid),
@@ -1297,7 +1322,7 @@ async def join_class(
             "end_time": end_time_iso,
             "mic_allowed": mic_ok,
             "camera_allowed": cam_ok,
-            "can_publish": can_publish_student,
+            "can_publish": can_publish_final,
         }
     except HTTPException:
         raise
@@ -2264,19 +2289,23 @@ async def leave_class(
     db: AsyncSession = Depends(get_db),
 ):
     """Student leaves a live class â€” records left_at time."""
+    try:
+        cid2 = parse_uuid(class_id)
+        uid2 = parse_uuid(current_user["sub"])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid id")
     result = await db.execute(
         select(ClassAttendance).where(
-            ClassAttendance.live_class_id == class_id,
-            ClassAttendance.student_id == current_user["sub"],
+            ClassAttendance.live_class_id == cid2,
+            ClassAttendance.student_id == uid2,
             ClassAttendance.left_at.is_(None),
         )
     )
     att = result.scalar_one_or_none()
-    if not att:
-        raise HTTPException(status_code=404, detail="Attendance record not found")
-
-    att.left_at = naive_utc_now()
-    return {"message": "Left class", "left_at": att.left_at}
+    now_ts = naive_utc_now()
+    if att:
+        att.left_at = now_ts
+    return {"message": "Left class", "left_at": now_ts.isoformat()}
 
 
 @router.get("/history/mine")
