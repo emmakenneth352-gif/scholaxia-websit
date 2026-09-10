@@ -1,4 +1,4 @@
-import uuid
+﻿import uuid
 import hashlib
 import json
 import secrets
@@ -972,7 +972,11 @@ async def start_class(
     db: AsyncSession = Depends(get_db),
 ):
     """Start a class and notify ONLY students subscribed to that subject."""
-    result = await db.execute(select(LiveClass).where(LiveClass.id == class_id))
+    try:
+        cid = parse_uuid(class_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid class id")
+    result = await db.execute(select(LiveClass).where(LiveClass.id == cid))
     live_class = result.scalar_one_or_none()
     if not live_class:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -1280,7 +1284,11 @@ async def get_livekit_token(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a fresh LiveKit token for a live class room."""
-    result = await db.execute(select(LiveClass).where(LiveClass.id == class_id))
+    try:
+        cid = parse_uuid(class_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid class id")
+    result = await db.execute(select(LiveClass).where(LiveClass.id == cid))
     live_class = result.scalar_one_or_none()
     if not live_class:
         raise HTTPException(status_code=404, detail="Class not found")
@@ -2023,14 +2031,18 @@ async def get_class_detail(
     GET /api/v1/live-classes/{class_id}
     Full details for a single class including attendance count.
     """
-    result = await db.execute(select(LiveClass).where(LiveClass.id == class_id))
+    try:
+        cid = parse_uuid(class_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid class id")
+    result = await db.execute(select(LiveClass).where(LiveClass.id == cid))
     live_class = result.scalar_one_or_none()
     if not live_class:
         raise HTTPException(status_code=404, detail="Class not found")
 
     # Attendance count
     att_result = await db.execute(
-        select(ClassAttendance).where(ClassAttendance.live_class_id == class_id)
+        select(ClassAttendance).where(ClassAttendance.live_class_id == cid)
     )
     attendances = att_result.scalars().all()
     active_count = sum(1 for a in attendances if not a.is_removed and a.left_at is None)
