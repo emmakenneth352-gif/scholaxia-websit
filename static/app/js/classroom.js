@@ -2788,8 +2788,6 @@ window.raiseHand = raiseHand;
 
 function sendReaction(emoji) {
   if (!emoji) return;
-  // Always close the sheet first — do it once here so callers don't double-toggle
-  toggleReactionSheet(false);
   if (!classPermissions.studentsCanReact && !isTeacherRole()) {
     showClassroomToast("Reactions are disabled by the teacher", true);
     return;
@@ -2806,7 +2804,7 @@ function sendReaction(emoji) {
   liveSocket.send(JSON.stringify(payload));
   var myId = typeof getMyClassroomUserId === "function" ? getMyClassroomUserId() : "";
   showReactionBurst(emoji, payload.name, myId);
-  // sheet already closed at top of sendReaction — no second toggle needed
+  toggleReactionSheet(false);
 }
 
 function showReactionBurst(emoji, name, userId) {
