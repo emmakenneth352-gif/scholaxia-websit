@@ -54,6 +54,9 @@
             <div class="lang-option" data-lang="pt" role="option" tabindex="0">
               <span class="lang-flag">🇧🇷</span> Português
             </div>
+            <div class="lang-option" data-lang="ar" role="option" tabindex="0">
+              <span class="lang-flag">🇸🇦</span> العربية
+            </div>
           </div>
         </div>
 
@@ -396,7 +399,13 @@
         </div>
         <div class="ending-cta-actions">
           <a class="btn btn-ending-solid" href="portal.html" data-i18n="cta_btn1">Explore Courses</a>
-          <a class="btn btn-ending-ghost" href="downloads/Scholaxia-Student-Setup.exe" download data-i18n="cta_btn2">Download Desktop</a>
+          <button class="btn btn-ending-ghost" type="button" onclick="document.getElementById('desktopModal').showModal()">Download Desktop</button>
+          <button class="btn btn-google-play" type="button" onclick="document.getElementById('playStoreModal').showModal()" aria-label="Get it on Google Play">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+              <path d="M3.18 23.76a2 2 0 0 0 2.07-.21l12.1-7.01-2.9-2.9-11.27 10.12zm-1.1-21.13C1.74 2.97 2 3.41 2 3.92v16.16c0 .5.26.95.62 1.29l.1.09 9.06-9.06v-.21L2.08 2.63zm14.5 12.08-2.98-2.97-2.98 2.97 2.98 2.97 2.98-2.97zm2.08-1.2-3.12 1.8-.9-.9 3.12-1.8c.65-.38 1-.97.87-1.52-.13-.55-.68-.94-1.4-1.02l-13.1 7.57 2.9 2.9 11.63-6.73c.78-.45 1.18-1.15 1-1.83-.19-.68-.83-1.16-1.6-1.38l.6.99z"/>
+            </svg>
+            <span>Get it on Google Play</span>
+          </button>
         </div>
       </div>
     </section>
@@ -410,12 +419,44 @@
           <p data-i18n="dl_p">Install the Scholaxia Student app on your PC for live classes, CBT practice, and study tools — same account as the website.</p>
         </div>
         <div class="download-actions">
-          <a class="btn btn-red btn-cta" href="downloads/Scholaxia-Student-Setup.exe" download data-i18n="dl_btn">Download for Windows</a>
-          <p class="download-note">Windows 10/11 · Setup installer · ~60 MB</p>
-          <p class="download-note">SmartScreen may warn on first run — choose <strong>More info → Run anyway</strong>. The file is safe and served over HTTPS from the official Scholaxia page.</p>
+          <!-- Desktop: coming soon -->
+          <button class="btn btn-red btn-cta" type="button" onclick="document.getElementById('desktopModal').showModal()">
+            Download for Windows
+          </button>
+          <p class="download-note">Windows 10/11 · Update coming soon</p>
+          <!-- Google Play button -->
+          <button class="btn btn-google-play" type="button" onclick="document.getElementById('playStoreModal').showModal()" aria-label="Get it on Google Play">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+              <path d="M3.18 23.76a2 2 0 0 0 2.07-.21l12.1-7.01-2.9-2.9-11.27 10.12zm-1.1-21.13C1.74 2.97 2 3.41 2 3.92v16.16c0 .5.26.95.62 1.29l.1.09 9.06-9.06v-.21L2.08 2.63zm14.5 12.08-2.98-2.97-2.98 2.97 2.98 2.97 2.98-2.97zm2.08-1.2-3.12 1.8-.9-.9 3.12-1.8c.65-.38 1-.97.87-1.52-.13-.55-.68-.94-1.4-1.02l-13.1 7.57 2.9 2.9 11.63-6.73c.78-.45 1.18-1.15 1-1.83-.19-.68-.83-1.16-1.6-1.38l.6.99z"/>
+            </svg>
+            <span>Get it on Google Play</span>
+          </button>
         </div>
       </div>
     </section>
+
+    <!-- ══ PLAY STORE MODAL ══ -->
+    <dialog class="scholaxia-modal" id="playStoreModal">
+      <div class="modal-inner">
+        <div class="modal-icon" aria-hidden="true">📱</div>
+        <h3>Not on Play Store yet</h3>
+        <p>The Scholaxia app is coming to Google Play soon. Check back later or use the web app in the meantime — it works great on mobile browsers!</p>
+        <a class="btn btn-red" href="portal.html">Open web app</a>
+        <button class="modal-close" type="button" onclick="document.getElementById('playStoreModal').close()" aria-label="Close">✕</button>
+      </div>
+    </dialog>
+
+    <!-- ══ DESKTOP COMING SOON MODAL ══ -->
+    <dialog class="scholaxia-modal" id="desktopModal">
+      <div class="modal-inner">
+        <div class="modal-icon" aria-hidden="true">🖥️</div>
+        <h3>Update coming soon</h3>
+        <p>We're working on an update to the desktop app. Check back later — it'll be worth the wait!</p>
+        <p style="font-size:0.9rem;opacity:0.7;margin-top:0.5rem;">In the meantime, the web app works perfectly in your browser.</p>
+        <a class="btn btn-red" href="portal.html">Use web app</a>
+        <button class="modal-close" type="button" onclick="document.getElementById('desktopModal').close()" aria-label="Close">✕</button>
+      </div>
+    </dialog>
 
     <!-- ══ FOOTER ══ -->
     <footer class="site-footer" id="contact">
