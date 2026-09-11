@@ -32,11 +32,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _load();
+    _startWatchdog();
+  }
+
+  /// Safety net: if still loading after 30s, force an error state so the
+  /// spinner never hangs forever.
+  void _startWatchdog() {
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!mounted) return;
+      if (_loading) {
+        setState(() {
+          _loading = false;
+          _error = 'Request timed out. Please check your connection and retry.';
+        });
+      }
+    });
+  }
+
+  Future<File?> _safeExistingAvatar() async {
+    try {
+      return await ProfileAvatarCache.instance
+          .existingFile()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _safeCachedProfilePicture() async {
+    try {
+      return await _api
+          .cachedProfilePicture()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _load() async {
+    debugPrint('_load: start');
     try {
-      final role = await _api.getRole();
+      debugPrint('_load: getting role');
+      final role = await _api.getRole().timeout(const Duration(seconds: 10));
+      debugPrint('_load: role = $role');
+
       if (role == 'kind') {
         if (!mounted) return;
         Navigator.pushAndRemoveUntil(
@@ -46,46 +85,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
         return;
       }
-      final p = await _api.getStudentProfile();
-      final local = await ProfileAvatarCache.instance.existingFile();
-      if (mounted) {
-        setState(() {
-          _profile = p;
-          _localAvatar = local;
-          _loading = false;
-          _error = null;
-        });
-      }
+
+      debugPrint('_load: getting student profile');
+      final p = await _api
+          .getStudentProfile()
+          .timeout(const Duration(seconds: 20));
+      debugPrint('_load: profile = ${p.fullName}');
+      debugPrint('_load: email = ${p.email}');
+
+      final local = await _safeExistingAvatar();
+
+      if (!mounted) return;
+      setState(() {
+        _profile = p;
+        _localAvatar = local;
+        _loading = false;
+        _error = null;
+      });
     } catch (e) {
-      if (mounted) {
-        final msg = e is ApiException ? e.message : e.toString();
-        if (msg.toLowerCase().contains('students only') ||
-            msg.toLowerCase().contains('kind')) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => const KindShell()),
-            (_) => false,
-          );
-          return;
-        }
-        // Still show cached avatar if profile fetch failed.
-        final local = await ProfileAvatarCache.instance.existingFile();
-        final cachedUrl = await _api.cachedProfilePicture();
-        setState(() {
-          _localAvatar = local;
-          if (cachedUrl != null && _profile == null) {
-            _profile = StudentProfile(
-              fullName: '',
-              email: '',
-              profilePicture: cachedUrl,
-            );
-          } else if (cachedUrl != null && _profile != null) {
-            _profile = _profile!.copyWith(profilePicture: cachedUrl);
-          }
-          _error = msg;
-          _loading = false;
-        });
+      debugPrint('_load: error = $e');
+      if (!mounted) return;
+
+      final msg = e is ApiException ? e.message : e.toString();
+
+      if (msg.toLowerCase().contains('students only') ||
+          msg.toLowerCase().contains('kind')) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const KindShell()),
+          (_) => false,
+        );
+        return;
       }
+
+      // Fetch cached data safely — each wrapped so failures never hang.
+      final local = await _safeExistingAvatar();
+      if (!mounted) return;
+      final cachedUrl = await _safeCachedProfilePicture();
+      if (!mounted) return;
+
+      setState(() {
+        _localAvatar = local;
+        if (cachedUrl != null && _profile == null) {
+          _profile = StudentProfile(
+            fullName: '',
+            email: '',
+            profilePicture: cachedUrl,
+          );
+        } else if (cachedUrl != null && _profile != null) {
+          _profile = _profile!.copyWith(profilePicture: cachedUrl);
+        }
+        _error = msg;
+        _loading = false; // GUARANTEED to run now.
+      });
     }
   }
 
@@ -107,7 +159,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (picked == null) return;
       setState(() => _uploadingPhoto = true);
       final url = await _api.updateProfilePicture(picked.bytes, picked.name);
-      final local = await ProfileAvatarCache.instance.existingFile();
+      final local = await _safeExistingAvatar();
       if (!mounted) return;
       setState(() {
         _profile = _profile?.copyWith(profilePicture: url);
@@ -137,6 +189,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Opens a dialog to edit the user's full name and saves it via the API.
+  Future<void> _editName() async {
+    final current = _profile?.fullName ?? '';
+    final controller = TextEditingController(text: current);
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.cardColor,
+        title: Text(
+          'Edit name',
+          style: TextStyle(
+            color: context.textColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          style: TextStyle(color: context.textColor),
+          decoration: InputDecoration(
+            hintText: 'Enter your full name',
+            hintStyle: TextStyle(color: context.greyColor),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: context.greyColor),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.accentColor,
+              foregroundColor: context.isDark
+                  ? AppColors.background
+                  : Colors.white,
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName == null) return;
+    if (newName.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name cannot be empty.')),
+      );
+      return;
+    }
+    if (newName == current) return;
+
+    try {
+      final updated = await _api
+          .updateStudentName(newName)
+          .timeout(const Duration(seconds: 15));
+      if (!mounted) return;
+      setState(() {
+        _profile = _profile?.copyWith(fullName: updated);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name updated!')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not update name: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   ImageProvider? _avatarProvider(StudentProfile p) {
     if (_localAvatar != null) return FileImage(_localAvatar!);
     final raw = p.profilePicture;
@@ -144,6 +282,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final url = _api.resolveMediaUrl(raw);
     if (url.isEmpty) return null;
     return NetworkImage(url);
+  }
+
+  /// Uses the API service's displayName property for consistent name display.
+  String _displayName(StudentProfile p) {
+    return p.displayName;
+  }
+
+  String _initialsFor(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '?';
+    return trimmed
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0])
+        .take(2)
+        .join()
+        .toUpperCase();
   }
 
   @override
@@ -203,6 +358,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _error = null;
                 });
                 _load();
+                _startWatchdog();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: context.accentColor,
@@ -243,15 +399,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildContent(BuildContext context) {
     final p = _profile!;
-    final initials = p.fullName.isNotEmpty
-        ? p.fullName
-              .trim()
-              .split(' ')
-              .map((w) => w[0])
-              .take(2)
-              .join()
-              .toUpperCase()
-        : '?';
+    final displayName = _displayName(p);
+    final initials = _initialsFor(displayName);
     final examSet = p.examType != null && p.examType!.isNotEmpty;
     final levelSet = p.educationLevel != null && p.educationLevel!.isNotEmpty;
     final profileIncomplete = !examSet || !levelSet || p.subjects.isEmpty;
@@ -259,7 +408,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        SliverToBoxAdapter(child: _heroHeader(context, p, initials)),
+        SliverToBoxAdapter(
+          child: _heroHeader(context, p, initials, displayName),
+        ),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -344,6 +495,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       .toList(),
                 ),
               ],
+              const SizedBox(height: 24),
+              _sectionTitle(context, 'Account'),
+              const SizedBox(height: 10),
+              _settingsGroup(context, [
+                _settingsRow(
+                  context,
+                  Icons.person_outline_rounded,
+                  'Edit name',
+                  onTap: _editName,
+                ),
+              ]),
               const SizedBox(height: 24),
               _sectionTitle(context, 'Preferences'),
               const SizedBox(height: 10),
@@ -451,7 +613,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _heroHeader(BuildContext context, StudentProfile p, String initials) {
+  Widget _heroHeader(
+    BuildContext context,
+    StudentProfile p,
+    String initials,
+    String displayName,
+  ) {
     return Container(
       width: double.infinity,
       color: context.headerColor,
@@ -590,15 +757,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Text(
-                p.fullName,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: context.textColor,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      displayName,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _editName,
+                    child: Icon(
+                      Icons.edit_rounded,
+                      color: context.accentColor,
+                      size: 18,
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               Text(

@@ -21,7 +21,7 @@ class _SiaScreenState extends State<SiaScreen> {
   String _subject = 'Physics';
   List<String> _subjects = ['Physics', 'Mathematics', 'Biology', 'Chemistry', 'English'];
   String? _educationLevel;
-  String _studentName = 'Student';
+  String _studentName = 'there';
   bool _loading = false;
   bool _voiceOn = true;
   List<_Msg> _messages = [];
@@ -140,9 +140,9 @@ class _SiaScreenState extends State<SiaScreen> {
       if (!mounted) return;
       final subjects = p.subjects.isNotEmpty ? p.subjects : _subjects;
       final level = p.educationLevel;
-      final name = p.fullName.split(' ').first;
+      final name = p.greetingName;
       setState(() {
-        _studentName = p.fullName.isNotEmpty ? p.fullName : 'Student';
+        _studentName = name;
         _subjects = subjects;
         if (!subjects.contains(_subject)) {
           _subject = subjects.first;

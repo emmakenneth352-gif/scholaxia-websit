@@ -243,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final name = _profile?.fullName.split(' ').first ?? 'Student';
+    final name = _profile?.greetingName ?? 'there';
     return Scaffold(
       backgroundColor: context.bgColor,
       body: SafeArea(
