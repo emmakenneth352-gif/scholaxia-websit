@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     # DeepSeek (smart + cheap)
     DEEPSEEK_API_KEY: str = ""
     DEEPSEEK_MODEL: str = "deepseek-chat"
+    # Reasoning model for hard math/science/exam questions (auto-routed).
+    # Set DEEPSEEK_REASONER_ENABLED=false to disable and always use DEEPSEEK_MODEL.
+    DEEPSEEK_REASONER_MODEL: str = "deepseek-reasoner"
+    DEEPSEEK_REASONER_ENABLED: bool = True
 
     # Hosted inference server
     AI_HOSTED_BASE_URL: str = "http://localhost:11434"

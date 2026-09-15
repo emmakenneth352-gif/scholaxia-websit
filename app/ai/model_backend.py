@@ -11,9 +11,65 @@ Supports multiple backends via AI_BACKEND env var:
 """
 
 import asyncio
+import re
 import httpx
 from app.core.config import settings
-from app.ai.prompt_builder import SIA_SYSTEM_PROMPT
+from app.ai.prompt_builder import build_default_system_prompt
+
+# ── Difficulty routing ────────────────────────────────────────────────────────
+
+# Signals that a question benefits from extended chain-of-thought reasoning.
+_HARD_MATH_VERBS = (
+    "solve", "calculate", "evaluate", "compute", "simplify", "factorise",
+    "factorize", "differentiate", "integrate", "derive", "prove", "find x",
+    "how much", "how many", "balance", "convert", "determine", "work out",
+)
+
+_HARD_SCIENCE_TOPICS = (
+    "electrolysis", "electrochemistry", "stoichiometry", "mole concept",
+    "organic chemistry", "equilibrium", "thermodynamics", "kinematics",
+    "electromagnetism", "optics", "circuits", "genetics", "photosynthesis",
+    "respiration", "redox", "titration", "projectile", "momentum",
+    "logarithm", "trigonometry", "calculus", "quadratic", "simultaneous",
+    "percentage", "probability", "mensuration", "coordinate geometry",
+)
+
+_EXAM_PREP_SIGNALS = (
+    "jamb", "waec", "neco", "post-utme", "igcse", "cambridge", "cbt",
+    "past question", "marking scheme", "exam",
+)
+
+
+def _is_hard_question(prompt: str) -> bool:
+    """Cheap heuristic: does this prompt deserve a reasoning model?
+    Runs on the user prompt (which contains the actual question text).
+    """
+    p = (prompt or "").lower()
+    if not p:
+        return False
+
+    # Quoted question block at the end of the chat prompt carries the real ask.
+    has_digits = bool(re.search(r"\d", p))
+    math_verb = any(v in p for v in _HARD_MATH_VERBS)
+    science_topic = any(t in p for t in _HARD_SCIENCE_TOPICS)
+    exam_prep = any(e in p for e in _EXAM_PREP_SIGNALS)
+
+    if math_verb and has_digits:
+        return True
+    if science_topic and (has_digits or "?" in p):
+        return True
+    if exam_prep and (math_verb or has_digits):
+        return True
+    return False
+
+
+def _deepseek_model_for(prompt: str) -> str:
+    """deepseek-reasoner for hard questions, deepseek-chat otherwise."""
+    if not settings.DEEPSEEK_REASONER_ENABLED:
+        return settings.DEEPSEEK_MODEL
+    if not settings.DEEPSEEK_MODEL.startswith("deepseek-chat"):
+        return settings.DEEPSEEK_MODEL  # custom override wins
+    return settings.DEEPSEEK_REASONER_MODEL if _is_hard_question(prompt) else settings.DEEPSEEK_MODEL
 
 
 def _history_msgs(conversation_history: list = None, limit: int = 24) -> list:
@@ -57,7 +113,7 @@ def _resolve_system(system_prompt) -> str:
     - other → use the provided text.
     """
     if system_prompt is None:
-        return SIA_SYSTEM_PROMPT
+        return build_default_system_prompt()
     return system_prompt
 
 
@@ -202,7 +258,10 @@ async def _infer_deepseek(prompt: str, conversation_history: list = None,
     out_tokens = max_tokens or settings.AI_MAX_TOKENS
     out_tokens = min(int(out_tokens), 4096)
 
-    async with httpx.AsyncClient(timeout=90.0) as client:
+    # Auto-route hard questions to the reasoning model (smarter step-by-step).
+    model = _deepseek_model_for(prompt)
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(
             "https://api.deepseek.com/chat/completions",
             headers={
@@ -210,7 +269,7 @@ async def _infer_deepseek(prompt: str, conversation_history: list = None,
                 "Content-Type": "application/json",
             },
             json={
-                "model": settings.DEEPSEEK_MODEL,
+                "model": model,
                 "messages": messages,
                 "max_tokens": out_tokens,
                 "temperature": temperature if temperature is not None else settings.AI_TEMPERATURE,

@@ -13,7 +13,26 @@ from app.ai.kind_prompt_builder import (
 from app.ai.model_backend import run_inference
 from app.ai.safety_filter import is_educational, sanitize_output
 from app.ai.sia_conversation import analyze_conversation, build_conversation_intel
-from app.ai.weakness_analyzer import record_interaction
+from app.ai.weakness_analyzer import (
+    record_interaction,
+    get_weak_topics,
+    get_student_history,
+)
+from app.ai.sia_intelligence import extract_recent_topics
+
+
+async def _get_child_memory(user_id: str, subject: str) -> dict:
+    """Child learning memory for prompt injection (same store as student Sia)."""
+    try:
+        weak = await get_weak_topics(user_id)
+        history = await get_student_history(user_id)
+        weak_list = weak.get(subject, []) if isinstance(weak, dict) else []
+        return {
+            "weak_topics": weak_list[:4],
+            "recent_topics": extract_recent_topics(history, subject),
+        }
+    except Exception:
+        return {}
 
 
 async def kind_chat(
@@ -32,6 +51,7 @@ async def kind_chat(
     if not safe:
         return reason
 
+    child_memory = await _get_child_memory(user_id, subject)
     prompt = build_kind_chat_prompt(
         question=question,
         subject=subject,
@@ -41,6 +61,7 @@ async def kind_chat(
         language=language,
         learning_goals=learning_goals,
         favorite_subjects=favorite_subjects,
+        child_memory=child_memory,
     )
     conv_intel = build_conversation_intel(question, conversation_history, audience="kind")
     conv = analyze_conversation(question, conversation_history)

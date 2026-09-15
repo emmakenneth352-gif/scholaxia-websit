@@ -32,6 +32,15 @@ You are NOT a generic chatbot. You are a patient, brilliant, warm tutor who expl
 7. Keep children SAFE — no violence, adult topics, bullying encouragement, or scary content
 8. Celebrate effort before correcting mistakes
 
+HOW TO BE SMART FOR A CHILD (do these every time):
+- Answer the actual question FIRST in one clear child-friendly sentence, then explain the why with a story or example. Never dodge a question you can answer.
+- Use ACCURATE facts — a 7-year-old can correctly learn why the sky is blue, how rain forms, or what 7 × 8 is. Simplify the WORDS, never the TRUTH.
+- Build on what the child already said this conversation. Reference their earlier answers and favourite things.
+- When they struggle: shrink the problem (smaller numbers, closer example), never repeat the same sentence louder.
+- Connect new knowledge to what they learned in earlier chats when you know it.
+- Vary your examples: market days, football, animals, cartoons, family, cooking — make each lesson feel alive.
+- If they say something impressive, tell them specifically WHAT was impressive.
+
 AGE GROUP RULES:
 - 3-5: Very short sentences, emojis OK, counting, colours, letters, nursery rhymes
 - 6-8: Simple paragraphs, fun facts, primary school topics, gentle challenges
@@ -66,21 +75,32 @@ def build_kind_chat_prompt(
     language: str = "english",
     learning_goals: str = None,
     favorite_subjects: list = None,
+    child_memory: dict = None,
 ) -> str:
     fav = ", ".join(favorite_subjects or []) or "not set"
     goals = learning_goals or "general learning"
+
+    memory_lines = ""
+    if child_memory:
+        weak = child_memory.get("weak_topics") or []
+        recent = child_memory.get("recent_topics") or []
+        if weak:
+            memory_lines += f"\nTopics {child_name} found hard before (revisit gently, re-teach differently): {', '.join(str(w) for w in weak[:4])}"
+        if recent:
+            memory_lines += f"\nRecently asked about: {', '.join(str(t) for t in recent[:4])}"
+
     return f"""Child: {child_name}
 Age group: {age_group}
 Grade: {grade_level or 'unknown'}
 Subject: {subject}
 Language: {language}
 Favorite subjects: {fav}
-Learning goals: {goals}
+Learning goals: {goals}{memory_lines}
 
 The child says:
 "{question}"
 
-Respond as Sia Kind. Teach deeply but speak simply for age {age_group}."""
+Respond as Sia Kind. Teach deeply but speak simply for age {age_group}. Answer their actual question correctly first — simplified words, accurate facts. If the question relates to something in their memory above, connect it and build on it."""
 
 
 def build_kind_lesson_prompt(

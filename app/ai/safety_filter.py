@@ -16,9 +16,13 @@ BLOCKED_INPUT_PATTERNS = [
 
 BLOCKED_OUTPUT_PATTERNS = [
     r"https?://(?!scholaxia\.com)\S+",
-    r"\b\d{10,11}\b",
+    # Phone numbers only — NOT any 10-11 digit number (that deleted legit math
+    # answers like 31415926535). Match Nigerian/intl phone shapes: 0803..., +234...,
+    # 234..., optionally space/dash separated. A bare 10-11 digit number without
+    # a phone prefix is a legitimate numeric answer and must survive.
+    r"(?<![\d.])(?:\+?234|0)[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{3,4}(?![\d.])",
     r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b",
-    r"(whatsapp|telegram|instagram|facebook|twitter|tiktok)",
+    r"(?i)\b(whatsapp|telegram|instagram|facebook|twitter|tiktok)\b",
 ]
 
 OFF_TOPIC_KEYWORDS = [
