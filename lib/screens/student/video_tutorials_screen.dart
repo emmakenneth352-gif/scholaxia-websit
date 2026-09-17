@@ -89,23 +89,39 @@ class _VideoTutorialsScreenState extends State<VideoTutorialsScreen> {
   }
 
   /// Convert a YouTube watch URL to an embed URL so it loads in the WebView.
+  /// Params keep playback inside the app: no YouTube branding, no share menu,
+  /// no "Watch on YouTube" escape hatch, inline (non-fullscreen) playback.
   String _embedUrl(String url) {
-    // Already an embed URL
-    if (url.contains('youtube.com/embed/') ||
-        url.contains('youtu.be/embed/')) {
+    final lock = 'controls=1&modestbranding=1&rel=0&playsinline=1&iv_load_policy=3&disablekb=1&fs=0';
+    Uri parsed;
+    try {
+      parsed = Uri.parse(url);
+    } catch (_) {
       return url;
     }
+    String videoId = '';
+    // Already an embed URL — strip it down to the video id and re-lock params
+    if (url.contains('youtube.com/embed/') ||
+        url.contains('youtu.be/embed/') ||
+        url.contains('youtube-nocookie.com/embed/')) {
+      videoId = parsed.pathSegments.isNotEmpty
+          ? parsed.pathSegments.last
+          : '';
+    }
     // youtu.be/VIDEO_ID
-    final shortRe = RegExp(r'youtu\.be/([A-Za-z0-9_\-]+)');
-    final shortMatch = shortRe.firstMatch(url);
-    if (shortMatch != null) {
-      return 'https://www.youtube.com/embed/${shortMatch.group(1)}?autoplay=1&rel=0';
+    final shortMatch = RegExp(r'youtu\.be/([A-Za-z0-9_\-]+)').firstMatch(url);
+    if (videoId.isEmpty && shortMatch != null) {
+      videoId = shortMatch.group(1)!;
     }
     // youtube.com/watch?v=VIDEO_ID
-    final longRe = RegExp(r'[?&]v=([A-Za-z0-9_\-]+)');
-    final longMatch = longRe.firstMatch(url);
-    if (longMatch != null) {
-      return 'https://www.youtube.com/embed/${longMatch.group(1)}?autoplay=1&rel=0';
+    final longMatch = RegExp(r'[?&]v=([A-Za-z0-9_\-]+)').firstMatch(url);
+    if (videoId.isEmpty && longMatch != null) {
+      videoId = longMatch.group(1)!;
+    }
+    if (videoId.isNotEmpty) {
+      // youtube-nocookie avoids YouTube's cross-site redirects that push
+      // viewers out to the YouTube app/site.
+      return 'https://www.youtube-nocookie.com/embed/$videoId?$lock';
     }
     // Any other URL — use as-is inside WebView
     return url;
@@ -427,8 +443,16 @@ class _VideoPlayerScreenState extends State<_VideoPlayerScreen> {
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (NavigationRequest request) {
-            // Prevent YouTube redirects by blocking navigation to youtube.com/watch
-            if (request.url.contains('youtube.com/watch') || request.url.contains('youtu.be/')) {
+            final url = request.url.toLowerCase();
+            final bool isEmbedHost =
+                url.contains('youtube-nocookie.com/embed/') ||
+                    url.contains('youtube.com/embed/') ||
+                    url.contains('youtube.com/apiplayer') ||
+                    url.contains('youtubei.googleapis.com') ||
+                    url.contains('googlevideo.com');
+            // Block every attempt to escape to the YouTube app/site —
+            // videos must play inside the app, never outside.
+            if (!isEmbedHost) {
               return NavigationDecision.prevent;
             }
             return NavigationDecision.navigate;
