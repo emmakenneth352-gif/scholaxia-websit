@@ -148,6 +148,28 @@ async def practice_home(
         except Exception:
             pass
 
+    ssce_started = False
+    try:
+        from app.models.cbt_settings import CbtPracticeAttempt
+
+        row = (
+            await db.execute(
+                select(CbtPracticeAttempt.id)
+                .where(
+                    CbtPracticeAttempt.student_id == sid,
+                    CbtPracticeAttempt.exam_type.in_(["WAEC", "NECO"]),
+                )
+                .limit(1)
+            )
+        ).first()
+        ssce_started = row is not None
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        ssce_started = False
+
     async def board_block(board: str) -> dict:
         has = False
         try:
@@ -183,6 +205,7 @@ async def practice_home(
             "jamb_subjects": jamb_subjects,
             "ssce_subjects": ssce_subjects,
             "ssce_exam_type": ssce_exam,
+            "ssce_started": ssce_started,
         },
     }
 

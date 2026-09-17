@@ -632,6 +632,28 @@ async def start_practice_attempt(
             or (profile.selected_subjects if profile else None)
             or []
         )
+        # If the student NEVER started WAEC/NECO before, ignore any pre-filled
+        # 4-subject list (copied from JAMB at signup) so they can pick their own
+        # subjects. Once a WAEC/NECO attempt exists, subjects are locked.
+        if profile is not None:
+            try:
+                any_ssce = (
+                    await db.execute(
+                        select(CbtPracticeAttempt.id)
+                        .where(
+                            CbtPracticeAttempt.student_id == sid,
+                            CbtPracticeAttempt.exam_type.in_(["WAEC", "NECO"]),
+                        )
+                        .limit(1)
+                    )
+                ).first()
+                if any_ssce is None:
+                    profile_ssce = []
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
         if not subjects_clean and len(profile_ssce) == 1:
             subjects_clean = [str(profile_ssce[0]).strip()]
         if not subjects_clean:
@@ -726,3 +748,55 @@ def attempt_client_dict(
         "answers": attempt.answers or {},
         "questions_deferred": not include_questions,
     }
+
+
+import re as _re
+
+_MISLABELED_TITLE_RE = _re.compile(
+    r"\b(WAEC|WASSCE|NECO|JAMB|UTME)\b", _re.IGNORECASE
+)
+
+
+async def relabel_mislabeled_bank_exams(db: AsyncSession) -> int:
+    """Fix question-bank exams whose title names a different board than their
+    exam_type column (that mismatch is what made WAEC/NECO serve JAMB questions
+    even though every query filters strictly by board). One-time self-heal —
+    runs at startup and is idempotent."""
+    try:
+        exams = (
+            await db.execute(
+                select(CBTExam).where(
+                    CBTExam.is_school_exam.is_(False),
+                    CBTExam.paper_kind == "cbt_practice",
+                )
+            )
+        ).scalars().all()
+    except Exception:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return 0
+
+    fixed = 0
+    for ex in exams:
+        m = _MISLABELED_TITLE_RE.search(ex.title or "")
+        if not m:
+            continue
+        title_board = normalize_board(m.group(1).upper())
+        if title_board == normalize_board(ex.exam_type):
+            continue
+        if title_board not in {"JAMB", "WAEC", "NECO"}:
+            continue
+        ex.exam_type = title_board
+        fixed += 1
+    if fixed:
+        try:
+            await db.commit()
+        except Exception:
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            return 0
+    return fixed

@@ -32,12 +32,6 @@ class _CbtScreenState extends State<CbtScreen> {
   final Set<String> _picked = {};
   bool _starting = false;
 
-  static const _boardColors = {
-    'JAMB': Color(0xFF0B7A3B),
-    'WAEC': Color(0xFF12355F),
-    'NECO': Color(0xFF1D4E89),
-  };
-
   @override
   void initState() {
     super.initState();
@@ -132,6 +126,18 @@ class _CbtScreenState extends State<CbtScreen> {
     if (ok) await _load();
   }
 
+  bool _ssceStarted() {
+    final p = (_home?['profile'] as Map<String, dynamic>?) ?? const {};
+    return p['ssce_started'] == true;
+  }
+
+  bool _ssceIsRegistered() {
+    final registered = _profileSsce();
+    return registered.isNotEmpty &&
+        (_profileSsceBoard() ?? '') == _tab &&
+        _ssceStarted();
+  }
+
   Future<void> _startPractice({String? singleSubject}) async {
     final board = _tab;
     if (_starting) return;
@@ -156,7 +162,7 @@ class _CbtScreenState extends State<CbtScreen> {
       } else {
         final registered = _profileSsce();
         final boardMatches = (_profileSsceBoard() ?? '') == board;
-        if (registered.isNotEmpty && boardMatches) {
+        if (registered.isNotEmpty && boardMatches && _ssceStarted()) {
           if (singleSubject == null ||
               !registered.any((s) => s.toLowerCase() == singleSubject.toLowerCase())) {
             _snack('Pick one of your registered subjects.');
@@ -166,7 +172,7 @@ class _CbtScreenState extends State<CbtScreen> {
         } else {
           // First registration: send picked subjects; server persists + locks.
           if (_picked.isEmpty) {
-            _snack('Select your subject(s) first.');
+            _snack('Select your subjects first (up to 9).');
             return;
           }
           subjects.addAll(_picked);
@@ -265,7 +271,7 @@ class _CbtScreenState extends State<CbtScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: _tab == board ? (_boardColors[board] ?? context.accentColor) : Colors.transparent,
+                  color: _tab == board ? context.accentColor : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -291,7 +297,7 @@ class _CbtScreenState extends State<CbtScreen> {
   }
 
   Widget _boardLogo(String board, {double size = 44, bool plain = false}) {
-    final color = _boardColors[board] ?? context.accentColor;
+    final color = context.accentColor;
     return Container(
       width: size,
       height: size,
@@ -308,7 +314,7 @@ class _CbtScreenState extends State<CbtScreen> {
 
   Widget _boardHeader() {
     final locked = !_hasAccess(_tab);
-    final color = _boardColors[_tab] ?? context.accentColor;
+    final color = context.accentColor;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -372,6 +378,21 @@ class _CbtScreenState extends State<CbtScreen> {
     return _ssceSubjects();
   }
 
+  /// Board seal: small vector logo (kept monochrome in the app accent colour).
+  Widget _boardSeal(String board, {double size = 44, Color? color}) {
+    final c = color ?? context.accentColor;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: CustomPaint(painter: _BoardSealPainter(board, color: c)),
+    );
+  }
+
   Widget _lockedInfo(String board) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -381,7 +402,7 @@ class _CbtScreenState extends State<CbtScreen> {
         border: Border.all(color: context.borderColor),
       ),
       child: Column(children: [
-        Icon(Icons.lock_outline_rounded, color: _boardColors[board], size: 40),
+        Icon(Icons.lock_outline_rounded, color: context.accentColor, size: 40),
         const SizedBox(height: 10),
         const Text('This exam board is locked',
             style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
@@ -437,8 +458,8 @@ class _CbtScreenState extends State<CbtScreen> {
                     });
                   },
             label: Text(s),
-            selectedColor: (_boardColors['JAMB'] ?? context.accentColor).withOpacity(0.25),
-            checkmarkColor: _boardColors['JAMB'],
+            selectedColor: context.accentColor.withOpacity(0.25),
+            checkmarkColor: context.accentColor,
           );
         }).toList(),
       ),
@@ -460,8 +481,7 @@ class _CbtScreenState extends State<CbtScreen> {
 
   Widget _ssceSubjects() {
     final registered = _profileSsce();
-    final boardMatches = (_profileSsceBoard() ?? '') == _tab;
-    final isRegistered = registered.isNotEmpty && boardMatches;
+    final isRegistered = _ssceIsRegistered();
     final allSubjects = const [
       'English Language', 'Mathematics', 'Biology', 'Chemistry', 'Physics',
       'Economics', 'Government', 'Literature-in-English', 'CRS', 'IRS',
@@ -484,10 +504,10 @@ class _CbtScreenState extends State<CbtScreen> {
           children: registered.map((s) {
             return ActionChip(
               label: Text(s),
-              backgroundColor: (_boardColors[_tab] ?? context.accentColor).withOpacity(0.12),
+              backgroundColor: context.accentColor.withOpacity(0.12),
               onPressed: _starting ? null : () => _startPractice(singleSubject: s),
               avatar: Icon(Icons.play_arrow_rounded,
-                  size: 18, color: _boardColors[_tab]),
+                  size: 18, color: context.accentColor),
             );
           }).toList(),
         )
@@ -511,8 +531,8 @@ class _CbtScreenState extends State<CbtScreen> {
                 });
               },
               label: Text(s),
-              selectedColor: (_boardColors[_tab] ?? context.accentColor).withOpacity(0.25),
-              checkmarkColor: _boardColors[_tab],
+              selectedColor: context.accentColor.withOpacity(0.25),
+              checkmarkColor: context.accentColor,
             );
           }).toList(),
         ),

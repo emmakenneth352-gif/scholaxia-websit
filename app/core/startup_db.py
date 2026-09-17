@@ -552,6 +552,16 @@ async def initialize_database() -> bool:
         await ensure_cbt_settings_schema()
     except Exception as exc:
         logger.warning("ensure_cbt_settings_schema: %s", exc)
+    # One-time self-heal: re-label question-bank exams whose title names a
+    # different board than their exam_type (made WAEC/NECO serve JAMB questions).
+    try:
+        async with AsyncSessionLocal() as _db:
+            from app.services.cbt_engine import relabel_mislabeled_bank_exams
+            fixed = await relabel_mislabeled_bank_exams(_db)
+            if fixed:
+                logger.info("relabel_mislabeled_bank_exams: fixed %s exams", fixed)
+    except Exception as exc:
+        logger.warning("relabel_mislabeled_bank_exams: %s", exc)
     # Self-healing: guarantee every model column exists (last line of defence).
     try:
         await ensure_model_columns()

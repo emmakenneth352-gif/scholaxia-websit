@@ -216,6 +216,59 @@ function renderCbtBoard(grid) {
     profile.ssce_subjects && profile.ssce_subjects.length
       ? profile.ssce_subjects
       : DEFAULT_SSCE_SUBJECTS;
+  var ssceStarted = !!profile.ssce_started;
+  var isRegistered = ssceStarted && profile.ssce_subjects && profile.ssce_subjects.length;
+
+  if (!isRegistered) {
+    // First-time WAEC/NECO: pick your own subjects (up to 9). Locks on first start.
+    var picked = (cbtHubState.sscePicked = cbtHubState.sscePicked || []).slice();
+    var allChoices = registered.concat(DEFAULT_SSCE_SUBJECTS).filter(function (s, i, a) {
+      return a.indexOf(s) === i;
+    });
+    html +=
+      '<p class="cbt-hub-note">Select your subjects (up to 9), then START CBT. They lock after your first exam — changes then need admin approval.</p>';
+    html += '<div class="cbt-subject-grid">';
+    html += allChoices
+      .map(function (s) {
+        var on = picked.indexOf(s) >= 0;
+        return (
+          '<button type="button" class="cbt-subject-chip' + (on ? " is-on" : "") +
+          '" data-ssce-pick="' + cbtEsc(s).replace(/'/g, "\\'") + "'><span class='cbt-chip-check'>" + (on ? "&#10003;" : "") + "</span>" +
+          cbtEsc(s) +
+          "</button>"
+        );
+      })
+      .join("");
+    html += "</div>";
+    html +=
+      '<div class="cbt-start-bar"><span class="cbt-start-count">' +
+      picked.length + " / up to 9 selected</span>" +
+      '<button type="button" class="btn-join" id="cbt-hub-ssce-start">START CBT &#8594;</button></div>';
+    html += "</div>";
+    grid.innerHTML = html;
+    grid.querySelectorAll("[data-ssce-pick]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var s = btn.getAttribute("data-ssce-pick");
+        var i = cbtHubState.sscePicked.indexOf(s);
+        if (i >= 0) cbtHubState.sscePicked.splice(i, 1);
+        else if (cbtHubState.sscePicked.length < 9) cbtHubState.sscePicked.push(s);
+        else alert("Maximum 9 subjects.");
+        renderCbtHub();
+      });
+    });
+    var startBtn = document.getElementById("cbt-hub-ssce-start");
+    if (startBtn) {
+      startBtn.addEventListener("click", function () {
+        if (!cbtHubState.sscePicked.length) {
+          alert("Select at least one subject.");
+          return;
+        }
+        cbtHubStartPractice(board, cbtHubState.sscePicked.slice());
+      });
+    }
+    return;
+  }
+
   html +=
     '<p class="cbt-hub-note">Choose one subject to practice. Only your registered subjects are listed.</p>';
   html += '<div class="cbt-subject-grid">';

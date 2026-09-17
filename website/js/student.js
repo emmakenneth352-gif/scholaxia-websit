@@ -2597,6 +2597,7 @@
   function openCbtBoard(board, opts) {
     opts = opts || {};
     cbtSelectedBoard = board;
+    var pickedSsce = (typeof cbtSscePicked !== "undefined" && cbtSscePicked) || [];
     if (!cbtHomeCache) cbtHomeCache = defaultCbtHome();
 
     // Never show pay/coupon until the student taps START
@@ -2731,16 +2732,20 @@
       return;
     }
 
-    // WAEC / NECO — show saved subjects first; gate on START
+    // WAEC / NECO — before first start the student picks their own subjects
+    // (up to 9). After the first start the subjects are locked and each
+    // registered subject becomes a one-tap card.
     var registered = (profile.ssce_subjects || []).filter(Boolean);
+    var ssceStarted = !!profile.ssce_started;
+    var isRegistered = registered.length > 0 && ssceStarted;
     if (!registered.length) {
       var localSsce = readLocalJson("sia_ssce_subjects", null) || readLocalJson("sia_subjects", []);
       if (Array.isArray(localSsce) && localSsce.length) registered = localSsce.slice();
     }
     if (hint) {
       hint.textContent = unlocked
-        ? "Pick a subject and start."
-        : "Preview your saved subjects first. Pay or coupon only when you tap START.";
+        ? (isRegistered ? "Pick a subject and start." : "Select your subjects (up to 9), then start. They lock after your first exam.")
+        : "Preview first. Pay or coupon only when you tap START.";
     }
     if (!registered.length) {
       body.innerHTML =
@@ -2753,37 +2758,93 @@
     }
     var packDur =
       board === "WAEC" ? settings.waec_duration_minutes || 60 : settings.neco_duration_minutes || 60;
-    body.innerHTML =
+    var html =
       (unlocked
         ? ""
         : '<p style="margin:0 0 0.85rem;padding:0.75rem 0.9rem;border-radius:10px;background:#ecfdf5;color:#065f46;font-size:0.92rem">Review your subjects first. Unlock with coupon or pay when you start.</p>') +
-      '<p class="muted" style="margin:0 0 0.85rem">Pick one subject to practice · ' +
-      esc(String(packDur)) +
-      " min</p>" +
-      '<div class="card-grid" id="cbtSubjectCards">' +
-      registered
-        .map(function (s) {
-          return (
-            '<div class="card"><span class="card-tag">' +
-            esc(board) +
-            "</span><h4>" +
-            esc(s) +
-            "</h4>" +
-            '<div class="card-foot"><button type="button" class="btn btn-primary btn-mini" data-cbt-start-subject="' +
-            esc(s) +
-            '">' +
-            (unlocked ? "START CBT" : "START") +
-            "</button></div></div>"
-          );
-        })
-        .join("") +
-      "</div>" +
-      '<p style="margin:1rem 0 0"><button type="button" class="btn btn-ghost btn-mini" data-cbt-subject-change="' +
-      esc(board) +
-      '">Request subject change (admin approves)</button></p>';
+      '<p class="muted" style="margin:0 0 0.85rem">' +
+      (isRegistered
+        ? "Pick one subject to practice · " + esc(String(packDur)) + " min"
+        : "Select your subjects (up to 9) · " + esc(String(packDur)) + " min · locked after first exam") +
+      "</p>";
+    if (isRegistered) {
+      html +=
+        '<div class="card-grid" id="cbtSubjectCards">' +
+        registered
+          .map(function (s) {
+            return (
+              '<div class="card"><span class="card-tag">' +
+              esc(board) +
+              "</span><h4>" +
+              esc(s) +
+              "</h4>" +
+              '<div class="card-foot"><button type="button" class="btn btn-primary btn-mini" data-cbt-start-subject="' +
+              esc(s) +
+              '">' +
+              (unlocked ? "START CBT" : "START") +
+              "</button></div></div>"
+            );
+          })
+          .join("") +
+        "</div>";
+    } else {
+      var allChoices = SUBJECT_CHANGE_CHOICES.concat(registered).filter(function (s, i, a) {
+        return a.indexOf(s) === i;
+      });
+      html +=
+        '<div id="cbtSscePick" style="display:flex;flex-wrap:wrap;gap:0.45rem">' +
+        allChoices
+          .map(function (s) {
+            var on = pickedSsce.indexOf(s) >= 0;
+            return (
+              '<button type="button" data-ssce-pick="' + esc(s) +
+              '" style="padding:0.4rem 0.85rem;border-radius:999px;border:1px solid " + (on ? "#7c3aed" : "#e2e8f0") + ";background:" + (on ? "#f3e8ff" : "#fff") + ";font-size:0.86rem;cursor:pointer">' +
+              esc(s) +
+              "</button>"
+            );
+          })
+          .join("") +
+        "</div>" +
+        '<p style="margin:0.8rem 0 0" class="muted"><span id="cbtSsceCount">' +
+        pickedSsce.length +
+        "</span> selected · you can change these until your first exam starts.</p>";
+    }
+    html +=
+      '<p style="margin:1rem 0 0">' +
+      (isRegistered
+        ? '<button type="button" class="btn btn-ghost btn-mini" data-cbt-subject-change="' + esc(board) + '">Request subject change (admin approves)</button>'
+        : '<button type="button" class="btn btn-primary" id="cbtSsceStart" ' + (pickedSsce.length ? "" : "disabled") + '>START CBT</button>') +
+      "</p>";
+    body.innerHTML = html;
+    if (!isRegistered) {
+      body.addEventListener("click", function (e) {
+        var chipBtn = e.target.closest("[data-ssce-pick]");
+        if (chipBtn) {
+          var s = chipBtn.getAttribute("data-ssce-pick");
+          var i = pickedSsce.indexOf(s);
+          if (i >= 0) pickedSsce.splice(i, 1);
+          else if (pickedSsce.length < 9) pickedSsce.push(s);
+          else alert("Maximum 9 subjects.");
+          var count = document.getElementById("cbtSsceCount");
+          if (count) count.textContent = String(pickedSsce.length);
+          chipBtn.style.border = "1px solid " + (pickedSsce.indexOf(s) >= 0 ? "#7c3aed" : "#e2e8f0");
+          chipBtn.style.background = pickedSsce.indexOf(s) >= 0 ? "#f3e8ff" : "#fff";
+          var startBtn = document.getElementById("cbtSsceStart");
+          if (startBtn) startBtn.disabled = !pickedSsce.length;
+          return;
+        }
+        if (e.target.id === "cbtSsceStart") {
+          if (!pickedSsce.length) return;
+          ensureBoardUnlockedThen(board, function () {
+            startPracticeAttempt(board, pickedSsce.slice(), e.target);
+          });
+        }
+      });
+    }
   }
 
   /* Subject-change request modal (admin approves before subjects change) */
+  var cbtSscePicked = [];
   var SUBJECT_CHANGE_CHOICES = [
     "English Language", "Mathematics", "Biology", "Chemistry", "Physics",
     "Economics", "Government", "Literature-in-English", "CRS", "IRS",
