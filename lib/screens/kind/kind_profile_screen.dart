@@ -22,6 +22,7 @@ class _KindProfileScreenState extends State<KindProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
   bool _uploadingPhoto = false;
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -45,6 +46,8 @@ class _KindProfileScreenState extends State<KindProfileScreen> {
   }
 
   Future<void> _logout() async {
+    if (_loggingOut) return;
+    if (mounted) setState(() => _loggingOut = true);
     await _api.clearTokens();
     await ProfileAvatarCache.instance.clear();
     if (!mounted) return;
@@ -303,11 +306,20 @@ class _KindProfileScreenState extends State<KindProfileScreen> {
                           width: double.infinity,
                           height: 50,
                           child: OutlinedButton.icon(
-                            onPressed: _logout,
-                            icon: const Icon(
-                              Icons.logout_rounded,
-                              color: Color(0xFFEF4444),
-                            ),
+                            onPressed: _loggingOut ? null : _logout,
+                            icon: _loggingOut
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Color(0xFFEF4444),
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.logout_rounded,
+                                    color: Color(0xFFEF4444),
+                                  ),
                             label: const Text(
                               'Log out',
                               style: TextStyle(

@@ -108,6 +108,44 @@
     $("gotoSignup").disabled = false;
   }
 
+  var COUNTRIES = [
+    "Nigeria", "Ghana", "Kenya", "South Africa", "Egypt", "Morocco",
+    "United States", "United Kingdom", "Canada", "Ireland", "France",
+    "Germany", "Spain", "Portugal", "Italy", "Netherlands", "Belgium",
+    "Brazil", "Cameroon", "Côte d'Ivoire",
+    "Senegal", "Mali", "Burkina Faso", "Benin", "Togo", "Niger",
+    "Chad", "Sudan", "Ethiopia", "Tanzania", "Uganda", "Rwanda",
+    "Zambia", "Zimbabwe", "Botswana", "Namibia", "Mozambique", "Angola",
+    "Liberia", "Sierra Leone", "Gambia", "Guinea", "Other"
+  ];
+
+  var COUNTRY_LANG = {
+    Nigeria: "en", Ghana: "en", Kenya: "en", "South Africa": "en",
+    Cameroon: "en", Liberia: "en", "Sierra Leone": "en", Gambia: "en",
+    Egypt: "ar", Sudan: "ar", Morocco: "ar",
+    France: "fr", Senegal: "fr", Mali: "fr", "Burkina Faso": "fr",
+    Benin: "fr", Togo: "fr", Niger: "fr", Chad: "fr",
+    "Côte d'Ivoire": "fr", Belgium: "fr",
+    Brazil: "pt", Portugal: "pt", Angola: "pt", Mozambique: "pt"
+  };
+
+  function populateCountries() {
+    var sel = $("signupCountry");
+    if (!sel || sel.options.length > 1) return;
+    COUNTRIES.forEach(function (c) {
+      var o = document.createElement("option");
+      o.value = c;
+      o.textContent = c;
+      sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () {
+      var langSel = $("signupLanguage");
+      if (langSel && COUNTRY_LANG[sel.value]) langSel.value = COUNTRY_LANG[sel.value];
+      var hint = $("langHint");
+      if (hint) hint.hidden = !sel.value;
+    });
+  }
+
   function applyMarketMode() {
     if (!marketMode) return;
     document.body.classList.add("auth-market");
@@ -339,6 +377,10 @@
         full_name: fullName,
         role: role,
       };
+      var cSel = $("signupCountry");
+      var lSel = $("signupLanguage");
+      if (cSel && cSel.value) body.country = cSel.value;
+      if (lSel && lSel.value) body.language = lSel.value;
       if (role === "kind") {
         body.age_group = $("signupAge").value;
         var parent = $("signupParent").value.trim();
@@ -401,6 +443,11 @@
         noAuth: true,
         body: { email: pendingEmail || $("signupEmail").value.trim(), otp: otp },
       });
+      // Switch the whole site to the language chosen at signup
+      var chosenLang = ($("signupLanguage") && $("signupLanguage").value) || "";
+      if (chosenLang && window.SxLang) {
+        try { window.SxLang.apply(chosenLang); } catch (e) {}
+      }
       await afterAuth(
         data,
         pendingEmail || $("signupEmail").value.trim(),
@@ -427,6 +474,7 @@
       (nextUrl && nextUrl.indexOf("marketplace") >= 0);
 
     applyMarketMode();
+    populateCountries();
 
     if (api.getToken() && !params.get("force")) {
       var existingRole = (localStorage.getItem("sia_role") || "student")

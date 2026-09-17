@@ -203,7 +203,7 @@ async def grant_or_update_skill_enrollment(
 
     # Skill students may also join live classes for the enrollment window.
     try:
-        await activate_live_plan(db, student_id, "secondary_standard")
+        await activate_live_plan(db, student_id, "private_lesson")
     except Exception:
         pass
 

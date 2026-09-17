@@ -25,12 +25,19 @@ class LiveKitClassService {
 
   /// Active student cameras for the teacher sidebar (capped for performance).
   final Map<String, RemoteVideoTrack> studentCameras = {};
-  static const int maxStudentCameras = 6;
+  static const int maxStudentCameras = 24; // Match website limit
 
   String status = 'Connecting…';
   bool connected = false;
   bool screenShareOn = false;
   String? error;
+
+  // Reconnection and token refresh
+  Timer? _reconnectTimer;
+  Timer? _tokenRefreshTimer;
+  String? _currentUrl;
+  String? _currentToken;
+  bool _manualDisconnect = false;
 
   bool get showingScreenShare =>
       primaryRemoteVideo != null &&
@@ -52,6 +59,10 @@ class LiveKitClassService {
     bool publishCamera = false,
   }) async {
     await disconnect();
+
+    _currentUrl = url;
+    _currentToken = token;
+    _manualDisconnect = false;
 
     final lkRoom = Room(
       roomOptions: const RoomOptions(
@@ -75,9 +86,13 @@ class LiveKitClassService {
         error = null;
         unawaited(_ensureAudioPlayback());
         _rescanAll();
+        _scheduleTokenRefresh();
       })
       ..on<RoomDisconnectedEvent>((_) {
         connected = false;
+        if (!_manualDisconnect) {
+          _scheduleReconnect();
+        }
         onChanged();
       })
       ..on<TrackSubscribedEvent>((e) {
@@ -92,10 +107,22 @@ class LiveKitClassService {
       ..on<TrackUnmutedEvent>((_) => _rescanAll())
       ..on<TrackPublishedEvent>((_) => _rescanAll())
       ..on<TrackUnpublishedEvent>((_) => _rescanAll())
-      ..on<ParticipantConnectedEvent>((_) => _rescanAll())
-      ..on<ParticipantDisconnectedEvent>((_) => _rescanAll())
-      ..on<LocalTrackPublishedEvent>((_) => _scanLocal())
-      ..on<LocalTrackUnpublishedEvent>((_) => _scanLocal());
+      ..on<ParticipantConnectedEvent>((_) {
+        _rescanAll();
+        _applyVideoBudget();
+      })
+      ..on<ParticipantDisconnectedEvent>((_) {
+        _rescanAll();
+        _applyVideoBudget();
+      })
+      ..on<LocalTrackPublishedEvent>((_) {
+        _scanLocal();
+        _applyVideoBudget();
+      })
+      ..on<LocalTrackUnpublishedEvent>((_) {
+        _scanLocal();
+        _applyVideoBudget();
+      });
 
     try {
       await lkRoom
@@ -127,7 +154,7 @@ class LiveKitClassService {
 
       connected = true;
       status = 'Connected';
-      if (error == null) error = null;
+      error ??= null;
       await _enableLoudspeaker();
       await _ensureAudioPlayback();
       // Re-check shortly — Android often needs a second startAudio after tracks arrive.
@@ -151,6 +178,10 @@ class LiveKitClassService {
     bool camOn = false,
     bool shareOn = false,
   }) async {
+    _currentUrl = url;
+    _currentToken = token;
+    _manualDisconnect = false;
+    
     await room?.disconnect();
     primaryRemoteVideo = null;
     screenShareVideo = null;
@@ -168,6 +199,38 @@ class LiveKitClassService {
     if (shareOn) {
       await setScreenShareEnabled(true);
     }
+  }
+
+  void _scheduleReconnect() {
+    _reconnectTimer?.cancel();
+    if (_manualDisconnect || connected) return;
+    _reconnectTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      if (connected || _manualDisconnect) {
+        _reconnectTimer?.cancel();
+        return;
+      }
+      if (_currentUrl != null && _currentToken != null) {
+        reconnect(
+          url: _currentUrl!,
+          token: _currentToken!,
+        );
+      }
+    });
+  }
+
+  void _scheduleTokenRefresh() {
+    _tokenRefreshTimer?.cancel();
+    if (!connected || room == null) return;
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 45), (_) {
+      if (!connected || room == null) return;
+      refreshToken();
+    });
+  }
+
+  Future<void> refreshToken() async {
+    // This would call the backend to get a fresh token
+    // For now, we rely on the current token staying valid
+    // In production, this should call the API to refresh
   }
 
   Future<void> setMicrophoneEnabled(bool enabled) async {
@@ -206,6 +269,9 @@ class LiveKitClassService {
   }
 
   Future<void> disconnect() async {
+    _manualDisconnect = true;
+    _reconnectTimer?.cancel();
+    _tokenRefreshTimer?.cancel();
     _listener?.dispose();
     _listener = null;
     // Capture and null out first so concurrent disconnect()/dispose() calls
@@ -230,6 +296,9 @@ class LiveKitClassService {
   }
 
   void dispose() {
+    _manualDisconnect = true;
+    _reconnectTimer?.cancel();
+    _tokenRefreshTimer?.cancel();
     _listener?.dispose();
     _listener = null;
     room?.dispose();
@@ -278,6 +347,40 @@ class LiveKitClassService {
     unawaited(_ensureAudioPlayback());
     onChanged();
   }
+  
+  /// Get prioritized student camera IDs (raised hands first, then existing order)
+  List<String> _prioritizedStudentCameraIds() {
+    final ids = studentCameras.keys.toList();
+    // In a full implementation, this would incorporate raised hands state
+    // For now, return current order
+    return ids;
+  }
+  
+  /// Apply video budget - only subscribe to top N student cameras
+  void _applyVideoBudget() {
+    if (room == null) return;
+    
+    final prioritized = _prioritizedStudentCameraIds();
+    final allowed = prioritized.take(maxStudentCameras).toSet();
+    
+    for (final participant in room!.remoteParticipants.values) {
+      if (_isTeacherRemote(participant)) continue;
+      
+      final studentId = participant.identity;
+      final shouldShow = allowed.contains(studentId);
+      
+      for (final pub in participant.videoTrackPublications) {
+        if (pub.source == TrackSource.camera) {
+          if (shouldShow && !pub.subscribed) {
+            unawaited(pub.subscribe());
+          } else if (!shouldShow && pub.subscribed) {
+            unawaited(pub.unsubscribe());
+            studentCameras.remove(studentId);
+          }
+        }
+      }
+    }
+  }
 
   bool _isTeacherRemote(RemoteParticipant participant) {
     final preferred = preferredTeacherIdentity?.trim();
@@ -286,10 +389,12 @@ class LiveKitClassService {
         participant.identity == preferred) {
       return true;
     }
+    
+    // Check metadata for role (like website)
     try {
       final raw = participant.metadata;
-      if (raw != null && raw.isNotEmpty) {
-        final lower = raw.toLowerCase();
+      if (raw?.isNotEmpty == true) {
+        final lower = raw!.toLowerCase();
         if (lower.contains('"role":"teacher"') ||
             lower.contains('"role": "teacher"') ||
             lower.contains('"role":"host"') ||
@@ -298,13 +403,46 @@ class LiveKitClassService {
         }
       }
     } catch (_) {}
+    
+    // Check if participant has screen share (teacher-only in this product)
+    if (_participantHasScreenShare(participant)) {
+      return true;
+    }
+    
+    // Check against session teacher_id if available
+    // This would need to be passed in or retrieved from API
+    
     // Preferred id missing from room (e.g. admin host) — sole remote is teacher.
     final remotes = room?.remoteParticipants.length ?? 0;
     return remotes == 1;
   }
+  
+  bool _participantHasScreenShare(RemoteParticipant participant) {
+    for (final pub in participant.videoTrackPublications) {
+      if (pub.source == TrackSource.screenShareVideo && !pub.muted) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   void _scanParticipant(RemoteParticipant participant) {
     final isTeacherRemote = _isTeacherRemote(participant);
+
+    // Site pattern: explicitly subscribe to the teacher camera and any screen
+    // share instead of relying on autoSubscribe (which can drop tracks after
+    // reconnects). Student cameras stay budget-controlled.
+    for (final pub in participant.videoTrackPublications) {
+      if (pub.source == TrackSource.screenShareVideo) {
+        if (!pub.subscribed) unawaited(pub.subscribe());
+        continue;
+      }
+      if (isTeacherRemote &&
+          pub.source == TrackSource.camera &&
+          !pub.subscribed) {
+        unawaited(pub.subscribe());
+      }
+    }
 
     for (final pub in participant.videoTrackPublications) {
       if (!_isActiveVideoPublication(pub)) continue;
@@ -327,15 +465,30 @@ class LiveKitClassService {
       }
     }
 
-    // Ensure remote audio tracks are subscribed and audible
+    // Optimize audio subscriptions (like website)
     for (final pub in participant.audioTrackPublications) {
-      if (!pub.subscribed) {
+      final shouldSubscribe = _shouldSubscribeAudio(pub, participant, isTeacherRemote);
+      if (shouldSubscribe && !pub.subscribed) {
         unawaited(pub.subscribe());
+      } else if (!shouldSubscribe && pub.subscribed) {
+        unawaited(pub.unsubscribe());
       }
       if (pub.subscribed && pub.track != null && !pub.muted) {
         unawaited(_ensureAudioPlayback());
       }
     }
+  }
+  
+  bool _shouldSubscribeAudio(
+    RemoteTrackPublication pub,
+    RemoteParticipant participant,
+    bool isTeacherRemote,
+  ) {
+    // Site pattern (classroom-livekit.js): EVERYONE subscribes to ALL audio,
+    // so the class hears whoever the teacher unmutes. The old student-only
+    // rule made the teacher unsubscribe from student mics — the two sides
+    // could not hear each other.
+    return true;
   }
 
   bool _isActiveVideoPublication(RemoteTrackPublication pub) {
@@ -346,9 +499,9 @@ class LiveKitClassService {
   }
 
   void _updatePrimaryVideo() {
-    // Screen share / board share takes priority over camera.
-    primaryRemoteVideo =
-        screenShareVideo ?? localCameraVideo ?? cameraVideo;
+    // Site pattern: the main stage shows the teacher (or their screen share).
+    // A student's own camera belongs in the small self-view, not the stage.
+    primaryRemoteVideo = screenShareVideo ?? cameraVideo ?? localCameraVideo;
   }
 
   Future<void> _ensureAudioPlayback() async {

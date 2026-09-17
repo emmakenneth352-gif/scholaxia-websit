@@ -163,7 +163,16 @@ html[dir="rtl"] .lang-dropdown { right: auto; left: 0; }
 }
 
 .pq-hero-art { position: relative; min-height: 240px; display: grid; place-items: center; }
-.pq-hero-stack { position: relative; width: min(100%, 300px); height: 250px; }
+
+/* ═══ Approved banner artwork (student + exam chips) ═══ */
+.pq-hero-banner {
+  width: 100%;
+  max-width: 640px;
+  border-radius: 22px;
+  display: block;
+  object-fit: cover;
+  box-shadow: 0 24px 48px rgba(76, 29, 149, 0.22);
+}
 
 /* ── card float animations ── */
 @keyframes pq-float-a {
@@ -186,7 +195,7 @@ html[dir="rtl"] .lang-dropdown { right: auto; left: 0; }
 .pq-hero-doc {
   position: absolute; width: 150px; height: 190px; border-radius: 18px; padding: 1rem;
   color: #fff; box-shadow: var(--pq-shadow-lg);
-  display: flex; flex-direction: column; justify-content: space-between;
+  display: none; flex-direction: column; justify-content: space-between;
   transition: box-shadow 0.3s;
 }
 .pq-hero-doc:hover { box-shadow: 0 24px 48px rgba(109,40,217,0.35); }
@@ -437,7 +446,6 @@ html[dir="rtl"] .lang-dropdown { right: auto; left: 0; }
   .pq-hero-search-btn { min-height: 48px; }
   .pq-why-grid { grid-template-columns: 1fr; }
   .pq-foot-grid { grid-template-columns: 1fr; }
-  .pq-hero-doc { width: 125px; height: 160px; }
 }
 
 @media (max-width: 380px) {

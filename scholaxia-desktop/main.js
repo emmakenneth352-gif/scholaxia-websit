@@ -4,6 +4,15 @@ const { startDesktopServer, stopDesktopServer } = require("./desktop-server");
 let mainWindow;
 let appBaseUrl = "";
 
+// Desktop keeps its own design/UI (local renderer). Site features are ported
+// into this UI — we do NOT load the website inside the window.
+const REMOTE_APP_ORIGIN = "https://scholaxia1.onrender.com";
+const LOCAL_START_URL = "app.html";
+
+function isLocalServerUrl(u) {
+  return /^https?:\/\/127\.0\.0\.1:17890/i.test(u) || /^https?:\/\/localhost:17890/i.test(u);
+}
+
 function getWindowSize() {
   const display = screen.getPrimaryDisplay();
   const { width: sw, height: sh } = display.workAreaSize;
@@ -77,16 +86,31 @@ function createWindow() {
     fullscreenable: true,
   });
 
-  const startUrl = appBaseUrl ? `${appBaseUrl}/app.html` : path.join(__dirname, "renderer", "app.html");
+  const startUrl = appBaseUrl ? `${appBaseUrl}/app.html` : LOCAL_START_URL;
   if (appBaseUrl) mainWindow.loadURL(startUrl);
-  else mainWindow.loadFile(startUrl);
+  else mainWindow.loadFile(LOCAL_START_URL);
   if (size.width >= screen.getPrimaryDisplay().workAreaSize.width * 0.95) {
     mainWindow.maximize();
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isLocalServerUrl(url)) {
+      mainWindow.loadURL(url);
+      return { action: "deny" };
+    }
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  // Keep in-app navigation inside the window (live site or local server).
+  mainWindow.webContents.on("will-navigate", (e, url) => {
+    const ok = /^https?:\/\/127\.0\.0\.1:17890/i.test(url) ||
+      /^https?:\/\/localhost:17890/i.test(url) ||
+      /^file:/i.test(url) || url.indexOf("about:") === 0;
+    if (!ok) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
   });
 }
 

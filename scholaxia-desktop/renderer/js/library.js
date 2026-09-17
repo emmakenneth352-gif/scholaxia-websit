@@ -132,6 +132,11 @@ function closeLibraryReader() {
   if (modal) modal.classList.add("hidden");
 }
 
+function libTitle(t) {
+  if (typeof stripYearLabel === "function") return stripYearLabel(t);
+  return String(t || "").replace(/\b(19|20)\d{2}\b/g, "").replace(/\s{2,}/g, " ").trim();
+}
+
 function renderLibraryList() {
   var el = document.getElementById("library-list");
   var stats = document.getElementById("library-stats");
@@ -191,7 +196,7 @@ function renderLibraryList() {
           : '<div class="material-icon">&#128218;</div>') +
         '<div class="material-body">' +
         "<h4>" +
-        escHtml(b.title) +
+        escHtml(libTitle(b.title)) +
         "</h4>" +
         '<p class="material-meta">' +
         escHtml(b.subject || "General") +
@@ -199,7 +204,7 @@ function renderLibraryList() {
         escHtml((b.category || libraryCategory(b)).toString()) +
         "</p>" +
         '<p class="material-desc">' +
-        escHtml(b.description || "By " + (b.author || "Scholaxia")) +
+        escHtml(libTitle(b.description || "By " + (b.author || "Scholaxia"))) +
         "</p>" +
         '<div class="material-actions">' +
         libraryPriceTag(b) +
@@ -248,7 +253,17 @@ async function loadLibrary() {
   } catch (e) {
     books = [];
   }
-  _libraryBooksCache = Array.isArray(books) ? books : [];
+  books = Array.isArray(books) ? books : [];
+  // Past Questions live on their own page — keep them out of the Library.
+  books = books.filter(function (b) {
+    var cat = String(b.category || b.type || "").toLowerCase();
+    var title = String(b.title || "").toLowerCase();
+    if (cat.indexOf("past") >= 0 && cat.indexOf("question") >= 0) return false;
+    if (cat === "past_questions" || cat === "past question" || cat === "pastquestions") return false;
+    if (title.indexOf("past question") >= 0 && (cat === "" || cat === "library")) return false;
+    return true;
+  });
+  _libraryBooksCache = books;
   renderLibraryChrome();
   renderLibraryList();
 }

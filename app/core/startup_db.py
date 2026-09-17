@@ -67,6 +67,12 @@ async def _run_schema_migrations(conn) -> None:
     await conn.execute(text(
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(40) NULL"
     ))
+    await conn.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(80) NULL"
+    ))
+    await conn.execute(text(
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) NULL"
+    ))
     try:
         await conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users (phone)"

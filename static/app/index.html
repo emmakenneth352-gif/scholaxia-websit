@@ -16,7 +16,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="css/site.css?v=32" />
+    <link rel="stylesheet" href="css/site.css?v=33" />
   </head>
   <body>
 
@@ -148,6 +148,11 @@
               <span data-i18n="hero_h1_a">Study online.</span>
               <span class="accent" data-i18n="hero_h1_b">Pass with confidence.</span>
             </h1>
+
+            <!-- Phone mockup — desktop only, animated float -->
+            <div class="hero-phone" aria-hidden="true">
+              <img src="media/hero-phone.png" alt="" draggable="false" />
+            </div>
 
             <!-- Exam types row -->
             <div class="hero-exams" aria-label="Supported exams">
@@ -419,11 +424,10 @@
           <p data-i18n="dl_p">Install the Scholaxia Student app on your PC for live classes, CBT practice, and study tools — same account as the website.</p>
         </div>
         <div class="download-actions">
-          <!-- Desktop: coming soon -->
-          <button class="btn btn-red btn-cta" type="button" onclick="document.getElementById('desktopModal').showModal()">
+          <a class="btn btn-red btn-cta" href="downloads/Scholaxia-Student-Setup-1.0.1.exe" download>
             Download for Windows
-          </button>
-          <p class="download-note">Windows 10/11 · Update coming soon</p>
+          </a>
+          <p class="download-note">Windows 10/11 · v1.0.1 · Free installer</p>
           <!-- Google Play button -->
           <button class="btn btn-google-play" type="button" onclick="document.getElementById('playStoreModal').showModal()" aria-label="Get it on Google Play">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
@@ -446,14 +450,14 @@
       </div>
     </dialog>
 
-    <!-- ══ DESKTOP COMING SOON MODAL ══ -->
+    <!-- ══ DESKTOP DOWNLOAD READY ══ -->
     <dialog class="scholaxia-modal" id="desktopModal">
       <div class="modal-inner">
         <div class="modal-icon" aria-hidden="true">🖥️</div>
-        <h3>Update coming soon</h3>
-        <p>We're working on an update to the desktop app. Check back later — it'll be worth the wait!</p>
-        <p style="font-size:0.9rem;opacity:0.7;margin-top:0.5rem;">In the meantime, the web app works perfectly in your browser.</p>
-        <a class="btn btn-red" href="portal.html">Use web app</a>
+        <h3>Scholaxia Desktop for Windows</h3>
+        <p>Live classes, CBT practice, Sia AI tutor and more — installed on your PC. Same account as the website.</p>
+        <a class="btn btn-red" href="downloads/Scholaxia-Student-Setup-1.0.1.exe" download>Download for Windows</a>
+        <p style="font-size:0.85rem;opacity:0.7;margin-top:0.5rem;">Windows 10/11 · v1.0.1 · ~80 MB</p>
         <button class="modal-close" type="button" onclick="document.getElementById('desktopModal').close()" aria-label="Close">✕</button>
       </div>
     </dialog>
@@ -534,7 +538,7 @@
       </div>
     </footer>
 
-    <script src="js/i18n.js?v=31"></script>
+    <script src="js/i18n.js?v=32"></script>
     <script src="js/site.js?v=32"></script>
   </body>
 </html>

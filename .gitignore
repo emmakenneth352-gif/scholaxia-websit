@@ -49,3 +49,11 @@ discord-community/.env.local
 *.apk
 *.ipa
 *.aab
+
+# Desktop installer binaries are distributed via cPanel zip, not git
+static/app/downloads/*.exe
+website/downloads/*.exe
+scholaxia-desktop/dist/
+scholaxia-desktop/renderer/downloads/
+scholaxia-desktop/build/
+Scholaxia-Website-cPanel.zip

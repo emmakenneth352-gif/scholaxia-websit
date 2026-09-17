@@ -4,6 +4,13 @@ const { startDesktopServer, stopDesktopServer } = require("./desktop-server");
 let mainWindow;
 let appBaseUrl = "";
 
+// Admin console keeps its own design (local renderer admin.html).
+const LOCAL_START_URL = "admin.html";
+
+function isLocalServerUrl(u) {
+  return /^https?:\/\/127\.0\.0\.1:17890/i.test(u) || /^https?:\/\/localhost:17890/i.test(u);
+}
+
 function getWindowSize() {
   const display = screen.getPrimaryDisplay();
   const { width: sw, height: sh } = display.workAreaSize;
@@ -34,18 +41,30 @@ function createWindow() {
     fullscreenable: true,
   });
 
-  const startUrl = appBaseUrl
-    ? `${appBaseUrl}/admin.html`
-    : path.join(__dirname, "renderer", "admin.html");
+  const startUrl = appBaseUrl ? `${appBaseUrl}/admin.html` : LOCAL_START_URL;
   if (appBaseUrl) mainWindow.loadURL(startUrl);
-  else mainWindow.loadFile(startUrl);
+  else mainWindow.loadFile(LOCAL_START_URL);
   if (size.width >= screen.getPrimaryDisplay().workAreaSize.width * 0.95) {
     mainWindow.maximize();
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isLocalServerUrl(url)) {
+      mainWindow.loadURL(url);
+      return { action: "deny" };
+    }
     shell.openExternal(url);
     return { action: "deny" };
+  });
+
+  mainWindow.webContents.on("will-navigate", (e, url) => {
+    const ok = /^https?:\/\/127\.0\.0\.1:17890/i.test(url) ||
+      /^https?:\/\/localhost:17890/i.test(url) ||
+      /^file:/i.test(url) || url.indexOf("about:") === 0;
+    if (!ok) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
   });
 }
 

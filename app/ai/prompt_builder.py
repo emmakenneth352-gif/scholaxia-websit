@@ -160,13 +160,14 @@ def build_default_system_prompt() -> str:
     """Compact default for calls that pass no explicit system prompt
     (evaluate, quiz, lesson, debug endpoints). Replaces the old
     gamification mega-prompt that drowned every response."""
+    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING
     core = (
         SIA_IDENTITY_CORE
         .replace("{student_name}", "the student")
         .replace("{subject}", "General")
         .replace("{level}", "unknown")
     )
-    return f"{SIA_ACCURACY_FIRST}\n\n{SIA_CONVERSATION_INTEL}\n\n{core}"
+    return f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_CONVERSATION_INTEL}\n\n{core}"
 
 # ── Advanced reasoning layer (makes Sia smarter than generic chatbots) ────────
 
@@ -415,8 +416,9 @@ def _build_context(student_name: str, subject: str, education_level: str,
 def build_sia_system_prompt(student_name: str, subject: str, education_level: str,
                             language: str, student_memory: dict = None,
                             raw_input: str = "", intelligence_context: str = "") -> str:
-    """Full system prompt for main Sia — identity + teaching rules + reasoning boost."""
+    """Full system prompt for main Sia — identity + teaching rules + deep reasoning."""
     from app.ai.sia_accuracy import SIA_EXPERT_CAPABILITY
+    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_EXAM_RIGOR
     context = _build_context(student_name, subject, education_level, language,
                              student_memory, raw_input=raw_input)
     memory_block = ""
@@ -432,11 +434,11 @@ def build_sia_system_prompt(student_name: str, subject: str, education_level: st
                 f"- Recently studied: {', '.join(recent[:4]) if recent else 'just starting'}"
             )
     intel = f"\n{intelligence_context}" if intelligence_context else ""
-    # Compact high-signal stack: accuracy → conversation → expertise → identity.
-    # (SIA_TUTOR_CORE and SIA_REASONING_BOOST were removed — they duplicated
-    # SIA_IDENTITY_CORE and diluted the model's attention on long chats.)
+    # Deep-reasoning stack: accuracy → think-first protocol → exam rigor →
+    # conversation → expertise → per-question intelligence context.
     return (
-        f"{SIA_ACCURACY_FIRST}\n\n{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
+        f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_EXAM_RIGOR}\n\n"
+        f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
         f"{context}{memory_block}{intel}"
     )
 
@@ -1119,9 +1121,11 @@ def build_teacher_system_prompt(task: str, subject: str, education_level: str) -
         SIA_CONVERSATION_INTEL,
         SIA_EXPERT_CAPABILITY,
     )
+    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_TEACHER_REASONING
     instruction = TEACHER_TASK_PROFILES.get(task, TEACHER_TASK_PROFILES["general"])
     return (
-        f"{SIA_ACCURACY_FIRST}\n\n{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
+        f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_TEACHER_REASONING}\n\n"
+        f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
         f"{TEACHER_AI_CORE}\n\n"
         f"Subject: {subject}\nLevel: {education_level}\nTask focus: {instruction}"
     )

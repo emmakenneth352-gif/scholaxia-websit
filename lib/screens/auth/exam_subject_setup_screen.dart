@@ -18,7 +18,7 @@ class ExamSubjectSetupScreen extends StatefulWidget {
 class _ExamSubjectSetupScreenState extends State<ExamSubjectSetupScreen> {
   final _api = ApiService();
 
-  String _educationLevel = 'SS3';
+  String _educationLevel = 'Common Entrance';
   bool _enableJamb = true;
   bool _enableSsce = true;
   String _ssceBoard = 'WAEC'; // WAEC | NECO
@@ -353,12 +353,8 @@ class _ExamSubjectSetupScreenState extends State<ExamSubjectSetupScreen> {
   Widget build(BuildContext context) {
     final btnFg = context.isDark ? AppColors.background : Colors.white;
     final levels = const [
-      'Primary 6',
       'Common Entrance',
       'JSS3',
-      'SS1',
-      'SS2',
-      'SS3',
       'JAMB',
     ];
 

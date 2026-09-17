@@ -1043,3 +1043,28 @@ img {
     gap: 0.55rem;
   }
 }
+
+/* ═══════════ VENDOR RICH HERO CARD (image panel) ═══════════ */
+.mkt-hero-vendor.mkt-hero-vendor-rich {
+  padding: 0;
+  overflow: hidden;
+  min-height: 260px;
+}
+.mkt-vendor-hero-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: left center;
+}
+.mkt-hero-vendor.mkt-hero-vendor-rich .mkt-vendor-fallback {
+  position: relative; z-index: 2;
+  display: none; /* image carries the message; shown if image fails */
+  height: 100%;
+  flex-direction: column; justify-content: center; gap: 0.45rem;
+  padding: clamp(1rem, 2.5vw, 1.75rem);
+  background: rgba(255,255,255,.92);
+}
+.mkt-hero-vendor.mkt-hero-vendor-rich.img-failed .mkt-vendor-fallback { display: flex; }
+.mkt-hero-vendor.mkt-hero-vendor-rich.img-failed .mkt-vendor-hero-img { display: none; }
+@media (max-width: 900px) {
+  .mkt-hero-vendor.mkt-hero-vendor-rich { min-height: 200px; }
+}

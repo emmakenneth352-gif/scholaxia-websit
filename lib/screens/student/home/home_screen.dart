@@ -18,6 +18,7 @@ import '../cbt/cbt_screen.dart';
 import '../classes/past_questions_screen.dart';
 import '../marketplace/marketplace_screen.dart';
 import '../assignments/assignment_screen.dart';
+import '../subscription/subscription_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -777,6 +778,13 @@ class _HomeScreenState extends State<HomeScreen> {
         'Gadgets, laptops, phones & more.',
         const [Color(0xFFF59E0B), Color(0xFFFBBF24)],
         const MarketplaceScreen(),
+      ),
+      (
+        Icons.subscriptions_rounded,
+        'Plans',
+        'Upgrade your subscription plan.',
+        const [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+        const SubscriptionScreen(),
       ),
     ];
     return Column(

@@ -55,15 +55,21 @@
       }
       list.innerHTML = codes.map(function (c) {
         var unread = !c.is_read ? " access-code-card-new" : "";
+        var status = "";
+        if (c.session_status === "ENDED") status = '<span class="access-code-pill access-code-pill-ended">Ended</span>';
+        else if (c.session_status === "LIVE" || c.is_live) status = '<span class="access-code-pill access-code-pill-live">Live now</span>';
         return (
           '<article class="access-code-card' + unread + '" data-code="' + escHtml(c.join_code) + '">' +
           '<div class="access-code-card-head">' +
           "<strong>" + escHtml(c.title) + "</strong>" +
           '<span class="access-code-pill">' + escHtml(visibilityLabel(c.visibility)) + "</span>" +
+          status +
           "</div>" +
           '<p class="access-code-meta">' + escHtml(c.subject || "") + " · " + escHtml(c.teacher_name || "Teacher") + "</p>" +
           '<div class="access-code-value"><code>' + escHtml(c.join_code) + "</code>" +
           '<button type="button" class="btn-sm" onclick="copyAccessCode(\'' + escHtml(c.join_code) + '\')">Copy</button></div>' +
+          '<button type="button" class="btn-action access-code-join-btn" data-join-code="' + escHtml(c.join_code) + '">' +
+          (c.session_status === "ENDED" ? "Class ended" : "Join class") + "</button>" +
           (c.is_used ? '<p class="access-code-used">Already used to join</p>' : "") +
           "</article>"
         );
@@ -82,7 +88,7 @@
     if (!text) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(function () {
-        alert("Code copied: " + text + "\n\nTap Join Live and paste when asked.");
+        toastAccessCode("Code copied");
       }).catch(function () {
         prompt("Copy this code:", text);
       });
@@ -90,6 +96,35 @@
       prompt("Copy this code:", text);
     }
   };
+
+  function toastAccessCode(msg) {
+    var el = document.getElementById("mp-toast");
+    if (el && typeof mpToast === "function") { mpToast(msg); return; }
+    try { console.log(msg); } catch (e) {}
+  }
+
+  // Site-style join: every code card has a Join button — no copy/paste needed.
+  document.addEventListener("click", function (e) {
+    var joinBtn = e.target.closest("[data-join-code]");
+    if (!joinBtn) return;
+    var code = (joinBtn.getAttribute("data-join-code") || "").trim();
+    if (!code) return;
+    joinBtn.disabled = true;
+    var prev = joinBtn.textContent;
+    joinBtn.textContent = "Joining…";
+    var p;
+    if (typeof joinClassWithAccessCode === "function") {
+      p = joinClassWithAccessCode(code);
+    } else {
+      p = Promise.reject(new Error("Join is unavailable. Restart the app."));
+    }
+    p.catch(function (err) {
+      alert("Could not join with this code.\n\n" + ((err && err.message) || err));
+    }).finally(function () {
+      joinBtn.disabled = false;
+      joinBtn.textContent = prev;
+    });
+  });
 
   function startAccessCodePoll() {
     if (accessCodePollTimer) clearInterval(accessCodePollTimer);

@@ -1132,7 +1132,8 @@ async def _exams_for_student_impl(
         practice.append(item)
 
     active_boards = []
-    if wants_jamb or jamb_practice:
+    prefer_ssce = ssce_board in {"WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"}
+    if wants_jamb and not prefer_ssce and (jamb_practice or jamb_subjects):
         active_boards.append("JAMB")
     if wants_ssce or ssce_practice:
         if is_common_entrance:
@@ -1673,7 +1674,7 @@ async def teacher_create_school_exam(
         await send_subject_notification(
             db=db,
             subject=payload.subject,
-            title="New Scholaxia exam",
+            title="New Scholaxia Test",
             body=f"{payload.title} ({payload.subject}) — open Exams to take it.",
             notification_type="cbt_reminder",
             data={

@@ -1,0 +1,1574 @@
+import 'dart:math';
+import 'package:flutter/material.dart';
+import '../../../api/api_service.dart';
+import '../../../services/cbt_offline_store.dart';
+import '../../../theme/app_theme.dart';
+import '../../../utils/subject_match.dart';
+import '../../../widgets/student_ui.dart';
+import 'cbt_exam_screen.dart';
+import 'cbt_packages_screen.dart';
+import 'cbt_sessions_screen.dart';
+
+/// CBT hub: JAMB = available profile subjects combined into one exam.
+class CbtScreen extends StatefulWidget {
+  const CbtScreen({super.key, this.asPastQuestions = false});
+
+  /// Home → Past Questions opens the same CBT engine with past-paper wording.
+  final bool asPastQuestions;
+
+  @override
+  State<CbtScreen> createState() => _CbtScreenState();
+}
+
+class _CbtScreenState extends State<CbtScreen> {
+  final _api = ApiService();
+  final _store = CbtOfflineStore.instance;
+
+  String _examBoard = '';
+  List<dynamic> _allExams = [];
+  List<dynamic> _jambExams = [];
+  List<dynamic> _ssceExams = [];
+  List<String> _boards = [];
+  String _activeTab =
+      'practice'; // practice | school (matching website tabs)
+  List<dynamic> _practiceExams = [];
+  List<dynamic> _schoolExams = [];
+  Set<String> _downloaded = {};
+  bool _loadingExams = true;
+  String? _busyExamId;
+  bool _isOffline = false;
+
+  static const _jambBundleId = '__jamb_bundle__';
+  static final _yearRe = RegExp(r'(20\d{2}|19\d{2})');
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExams();
+  }
+
+  Future<void> _loadExams() async {
+    setState(() {
+      _loadingExams = true;
+      _paidBoards = {};
+    });
+    try {
+      // Always load profile subjects for the WAEC/NECO slider.
+      List<String> profileJamb = [];
+      List<String> profileSsce = [];
+      try {
+        final profile = await _api.getStudentProfile();
+        profileJamb = profile.jambSubjects;
+        profileSsce = profile.ssceSubjects.isNotEmpty
+            ? profile.ssceSubjects
+            : profile.subjects;
+      } catch (_) {}
+
+      final data = await _api.cbtExamsForMe(
+        paperKind: widget.asPastQuestions ? 'past_questions' : 'cbt_practice',
+      );
+      
+      Map<String, dynamic> access = const {};
+      try {
+        access = await _api.cbtPackageAccess();
+      } catch (_) {
+        // Stay locked when access cannot be verified; pull-to-refresh retries.
+      }
+      
+      // Check for active coupon
+      bool hasCoupon = false;
+      try {
+        final couponStatus = await _api.cbtCouponAccess();
+        hasCoupon = couponStatus['has_active_coupon'] == true;
+      } catch (_) {
+        // If coupon check fails, assume no coupon
+      }
+      final practice = (data['practice_exams'] as List?) ?? [];
+      final jamb = (data['jamb_exams'] as List?) ?? [];
+      final ssce = (data['ssce_exams'] as List?) ?? [];
+      final normalizedBoards = ((data['boards'] as List?) ?? [])
+          .map((e) => e.toString().trim())
+          .map((e) {
+            final v = e.toUpperCase();
+            if (v == 'WAEC' || v == 'NECO') return 'WAEC_NECO';
+            if (v == 'BECE') return 'JUNIOR_WAEC';
+            return v;
+          })
+          .toSet()
+          .toList();
+      final boards = normalizedBoards;
+
+      // Get downloaded IDs - handle platform-specific errors gracefully
+      Set<String> ids = {};
+      try {
+        ids = await _store.downloadedIds();
+      } catch (_) {
+        // Continue without offline IDs - this is fine for web
+      }
+
+      final apiJamb = ((data['jamb_subjects'] as List?) ?? [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
+      final apiSsce = ((data['ssce_subjects'] as List?) ?? [])
+          .map((e) => e.toString())
+          .where((e) => e.trim().isNotEmpty)
+          .toList();
+
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _allExams = practice;
+              _jambExams = jamb;
+              _ssceExams = ssce;
+              _boards = boards;
+              
+              // Ensure boards include profile subjects even if API doesn't return them
+              if (profileJamb.isNotEmpty && !_boards.contains('JAMB')) {
+                _boards.add('JAMB');
+              }
+              if (profileSsce.isNotEmpty && !_boards.contains('WAEC_NECO')) {
+                _boards.add('WAEC_NECO');
+              }
+              
+              if (boards.contains('WAEC_NECO')) {
+                _activeTab = 'WAEC_NECO';
+              } else if (boards.contains('JAMB')) {
+                _activeTab = 'JAMB';
+              } else if (boards.contains('JUNIOR_WAEC')) {
+                _activeTab = 'JUNIOR_WAEC';
+              } else if (boards.contains('COMMON_ENTRANCE')) {
+                _activeTab = 'COMMON_ENTRANCE';
+              } else if (boards.isNotEmpty) {
+                _activeTab = boards.first;
+              }
+              _examBoard = data['exam_type']?.toString() ?? '';
+              _jambSubjects = apiJamb.isNotEmpty ? apiJamb : profileJamb;
+              _ssceSubjects = apiSsce.isNotEmpty ? apiSsce : profileSsce;
+              _downloaded = ids;
+              _paidBoards = ((access['boards'] as List?) ?? const [])
+                  .map((e) => e.toString().trim().toUpperCase())
+                  .map((e) {
+                    if (e == 'WAEC' || e == 'NECO') return 'WAEC_NECO';
+                    if (e == 'BECE') return 'JUNIOR_WAEC';
+                    return e;
+                  })
+                  .toSet();
+              _subjectChangeRequiresPayment =
+                  access['subject_change_requires_payment'] == true;
+              _hasActiveCoupon = hasCoupon;
+              _paymentExpirationDate = access['expiration_date']?.toString();
+              _daysRemaining = (access['days_remaining'] as num?)?.toInt();
+              _loadingExams = false;
+              _selectedSubject = null;
+              _ensureDefaultSubject();
+            });
+          }
+        });
+      }
+    } on ApiException catch (e) {
+      // Even if CBT exams fail, still try to show profile subjects.
+      try {
+        final profile = await _api.getStudentProfile();
+        if (mounted) {
+          setState(() {
+            _jambSubjects = profile.jambSubjects;
+            _ssceSubjects = profile.ssceSubjects.isNotEmpty
+                ? profile.ssceSubjects
+                : profile.subjects;
+            _boards = [
+              if (_jambSubjects.isNotEmpty) 'JAMB',
+              if (_ssceSubjects.isNotEmpty) 'WAEC_NECO',
+            ];
+            if (_boards.contains('WAEC_NECO')) {
+              _activeTab = 'WAEC_NECO';
+            } else if (_boards.isNotEmpty) {
+              _activeTab = _boards.first;
+            }
+            _loadingExams = false;
+            _ensureDefaultSubject();
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _allExams = [];
+            _loadingExams = false;
+          });
+        }
+      }
+      if (mounted && e.message.toLowerCase().contains('setup')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Complete exam setup in your profile first.'),
+          ),
+        );
+      }
+    } catch (_) {
+      // Don't reset the entire state - just stop loading
+      // This preserves the profile subjects and API data
+      if (mounted) {
+        setState(() => _loadingExams = false);
+      }
+    }
+  }
+
+  String _examSubject(Map e) =>
+      (e['subject']?.toString() ?? e['title']?.toString() ?? '').trim();
+
+  String? _examYear(Map e) {
+    final explicit = e['year']?.toString() ?? e['exam_year']?.toString();
+    if (explicit != null && explicit.trim().isNotEmpty) return explicit.trim();
+    final blob = '${e['title'] ?? ''} ${e['description'] ?? ''}';
+    return _yearRe.firstMatch(blob)?.group(1);
+  }
+
+  List<dynamic> get _tabExams {
+    if (_activeTab == 'JAMB') {
+      return _jambExams.isNotEmpty ? _jambExams : _allExams;
+    }
+    if (_activeTab == 'JUNIOR_WAEC' ||
+        _activeTab == 'WAEC_NECO' ||
+        _activeTab == 'COMMON_ENTRANCE') {
+      return _ssceExams.isNotEmpty ? _ssceExams : _allExams;
+    }
+    return _allExams;
+  }
+
+  String get _tabLabel {
+    if (_activeTab == 'JAMB') return 'JAMB';
+    if (_activeTab == 'JUNIOR_WAEC') return 'Junior WAEC';
+    if (_activeTab == 'COMMON_ENTRANCE') return 'Common Entrance';
+    return 'WAEC / NECO';
+  }
+
+  bool get _isJambTab => _activeTab == 'JAMB';
+
+  bool get _hasActiveTabAccess {
+    // If has active coupon, grant access to all boards
+    if (_hasActiveCoupon) return true;
+    
+    // Check if payment has expired
+    if (_daysRemaining != null && _daysRemaining! <= 0) {
+      return false;
+    }
+    
+    if (_activeTab == 'JAMB') return _paidBoards.contains('JAMB');
+    if (_activeTab == 'JUNIOR_WAEC') {
+      return _paidBoards.contains('JUNIOR_WAEC');
+    }
+    if (_activeTab == 'COMMON_ENTRANCE') {
+      return _paidBoards.contains('COMMON_ENTRANCE');
+    }
+    if (_activeTab == 'WAEC_NECO') {
+      return _paidBoards.contains('WAEC') || _paidBoards.contains('NECO');
+    }
+    return false;
+  }
+  
+  bool get _showPaymentOnAction {
+    // Show payment popup on download/start if not paid and no coupon
+    return !_hasActiveTabAccess && !_hasActiveCoupon;
+  }
+
+  Future<void> _openPackages() async {
+    final paid = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const CbtPackagesScreen()),
+    );
+    if (paid == true && mounted) await _loadExams();
+  }
+
+  Widget _paymentRequiredCard(BuildContext context) {
+    // Show exam previews first, then payment options at bottom
+    return Column(
+      children: [
+        // Show available exams as preview
+        if (_tabExams.isNotEmpty) ...[
+          _examCardsForList(context, _tabExams),
+          const SizedBox(height: 20),
+        ],
+        
+        // Payment options at bottom
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: context.borderColor),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                Icons.workspace_premium_rounded,
+                color: context.accentColor,
+                size: 42,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _subjectChangeRequiresPayment
+                    ? 'Subjects changed — activate them'
+                    : widget.asPastQuestions
+                        ? 'Past papers require payment to start as timed CBT'
+                        : 'Download or start exams below — payment required',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: context.textColor,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _subjectChangeRequiresPayment
+                    ? 'Your paid package covered the subjects previously registered. Pay for a package to activate the new subject selection.'
+                    : widget.asPastQuestions
+                        ? 'These are past-question papers admin uploaded separately. You sit them as timed CBT — they are not the CBT Practice set.'
+                        : 'You can see all CBT exams above. When you tap Download or Start, payment will be required.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.greyColor, height: 1.45),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _openPackages,
+                  icon: const Icon(Icons.lock_open_rounded),
+                  label: const Text('Pay with Paystack'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _showCouponDialog,
+                icon: const Icon(Icons.card_giftcard_rounded),
+                label: const Text('I have a coupon code'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showCouponDialog() async {
+    final controller = TextEditingController();
+    final couponCode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.cardColor,
+        title: Text(
+          'Enter Coupon Code',
+          style: TextStyle(
+            color: context.textColor,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          style: TextStyle(color: context.textColor),
+          decoration: InputDecoration(
+            hintText: 'SX-XXXX',
+            hintStyle: TextStyle(color: context.greyColor),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: context.greyColor),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: context.accentColor,
+              foregroundColor: context.isDark
+                  ? AppColors.background
+                  : Colors.white,
+            ),
+            child: const Text('Redeem'),
+          ),
+        ],
+      ),
+    );
+
+    if (couponCode == null || couponCode.isEmpty) return;
+
+    try {
+      setState(() => _loadingExams = true);
+      final result = await _api.redeemCbtCoupon(couponCode);
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Coupon redeemed successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      
+      // Reload exams to get updated access
+      await _loadExams();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not redeem coupon: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loadingExams = false);
+    }
+  }
+
+  /// One exam per profile subject that admin has uploaded (1–4).
+  /// These are always taken together as a single JAMB session.
+  List<Map<String, dynamic>> _jambAvailableMembers() {
+    if (_jambSubjects.isEmpty) return [];
+    final exams = _jambExams
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+
+    final picks = <Map<String, dynamic>>[];
+    for (final subj in _jambSubjects) {
+      Map<String, dynamic>? best;
+      String? bestYear;
+      for (final e in exams) {
+        if (!subjectMatches(_examSubject(e), [subj])) continue;
+        final y = _examYear(e);
+        if (best == null) {
+          best = e;
+          bestYear = y;
+          continue;
+        }
+        if (y != null && (bestYear == null || y.compareTo(bestYear) > 0)) {
+          best = e;
+          bestYear = y;
+        }
+      }
+      if (best != null) picks.add(best);
+    }
+    return picks;
+  }
+
+  String _stripYearLabel(String text) {
+    return text
+        .replaceAll(_yearRe, '')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .replaceAll(RegExp(r'\s+·\s+$'), '')
+        .replaceAll(RegExp(r'^[\s\-·]+|[\s\-·]+$'), '')
+        .trim();
+  }
+
+  bool _jambBundleDownloadedForMembers(List<Map<String, dynamic>> members) {
+    if (members.isEmpty) return false;
+    return members.every(
+      (e) => _downloaded.contains(e['id']?.toString() ?? ''),
+    );
+  }
+
+  List<String> get _subjects {
+    // Prefer the student's selected subjects for the active board.
+    if (_isJambTab && _jambSubjects.isNotEmpty) {
+      return List<String>.from(_jambSubjects);
+    }
+    if (_activeTab == 'WAEC_NECO' ||
+        _activeTab == 'JUNIOR_WAEC' ||
+        _activeTab == 'COMMON_ENTRANCE') {
+      if (_ssceSubjects.isNotEmpty) return List<String>.from(_ssceSubjects);
+    }
+    // Fallback: subjects found in uploaded exams.
+    final set = <String>{};
+    for (final raw in _tabExams) {
+      if (raw is! Map) continue;
+      final s = _examSubject(Map<String, dynamic>.from(raw));
+      if (s.isNotEmpty) set.add(s);
+    }
+    final list = set.toList()..sort();
+    return list;
+  }
+
+  void _ensureDefaultSubject() {
+    final subjects = _subjects;
+    if (subjects.isEmpty) return;
+    if (_selectedSubject == null ||
+        !subjects.any(
+          (s) => s.toLowerCase() == _selectedSubject!.toLowerCase(),
+        )) {
+      _selectedSubject = subjects.first;
+    }
+  }
+
+  Widget _examCardsForList(
+    BuildContext context,
+    List<dynamic> exams,
+  ) {
+    if (exams.isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: exams.map((exam) {
+        final id = exam['id']?.toString() ?? '';
+        final title = _stripYearLabel(exam['title']?.toString() ?? 'Exam');
+        final desc = exam['description']?.toString() ?? '';
+        final type = exam['exam_type']?.toString() ?? _tabLabel;
+        final dur = (exam['duration_minutes'] as num?)?.toInt();
+        final totalQ = (exam['total_questions'] as num?)?.toInt();
+        final downloaded = _downloaded.contains(id);
+        final isPreview = _showPaymentOnAction;
+        
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 14),
+          child: _ExamCard(
+            title: title,
+            description: desc,
+            examType: type,
+            durationMins: dur,
+            totalQuestions: totalQ,
+            isBusy: _busyExamId == id,
+            isDownloaded: downloaded,
+            isPreview: isPreview,
+            onDownload: () => _downloadExam(id),
+            onStart: () => _startExam(
+              context,
+              id,
+              title,
+              totalQ: totalQ,
+              durMins: dur,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  List<Map<String, dynamic>> get _filteredExams {
+    final subject = (_selectedSubject ?? '').trim();
+    final list = _tabExams
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .where((e) {
+          if (subject.isEmpty) return true;
+          return subjectMatches(_examSubject(e), [subject]);
+        })
+        .toList();
+    list.sort((a, b) {
+      final sa = _examSubject(a).toLowerCase();
+      final sb = _examSubject(b).toLowerCase();
+      return sa.compareTo(sb);
+    });
+    return list;
+  }
+
+  static const _jambBundleBusyKey = 'jamb_bundle_available';
+
+  Future<void> _downloadJambBundleMembers(
+    List<Map<String, dynamic>> members,
+  ) async {
+    if (!_hasActiveTabAccess) {
+      final unlocked = await showCbtUnlockChoice(context);
+      if (!mounted) return;
+      if (unlocked) await _loadExams();
+      if (!_hasActiveTabAccess) return;
+    }
+    if (members.isEmpty) return;
+    if (_busyExamId != null) return;
+    setState(() => _busyExamId = _jambBundleBusyKey);
+    try {
+      for (final exam in members) {
+        final id = exam['id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        final pack = await _api.cbtDownloadExamRaw(id);
+        await _store.savePack(id, pack);
+      }
+      
+      // Get downloaded IDs - handle platform-specific errors gracefully
+      Set<String> ids = {};
+      try {
+        ids = await _store.downloadedIds();
+      } catch (_) {
+        // Manually add all the downloaded exam IDs
+        for (final exam in members) {
+          final id = exam['id']?.toString() ?? '';
+          if (id.isNotEmpty) ids.add(id);
+        }
+      }
+      
+      if (!mounted) return;
+      setState(() => _downloaded = ids);
+      final n = members.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            n == 1
+                ? 'Downloaded — ready offline.'
+                : 'Downloaded $n subjects — take them together offline.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busyExamId = null);
+    }
+  }
+
+  Future<void> _startJambBundleMembers(
+    BuildContext ctx,
+    List<Map<String, dynamic>> members,
+  ) async {
+    print('✓ Starting JAMB bundle - access check');
+    if (!_hasActiveTabAccess) {
+      final unlocked = await showCbtUnlockChoice(context);
+      if (!mounted) return;
+      if (unlocked) {
+        await _loadExams();
+      }
+      if (!_hasActiveTabAccess) {
+        return;
+      }
+    }
+    if (members.isEmpty) return;
+    
+    // Auto-download if not already downloaded
+    for (final exam in members) {
+      final id = exam['id']?.toString() ?? '';
+      if (id.isEmpty) continue;
+      if (!_downloaded.contains(id)) {
+        print('✓ Auto-downloading JAMB bundle before start');
+        await _downloadJambBundleMembers(members);
+        break; // Download all at once
+      }
+    }
+    
+    // Check if all are downloaded after auto-download attempt
+    for (final exam in members) {
+      final id = exam['id']?.toString() ?? '';
+      if (id.isEmpty || !_downloaded.contains(id)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Download failed. Please try again.'),
+          ),
+        );
+        return;
+      }
+    }
+    
+    if (_busyExamId != null) return;
+    setState(() => _busyExamId = _jambBundleBusyKey);
+    try {
+      final allQuestions = <CbtQuestion>[];
+      final sectionStarts = <String, int>{};
+      var totalDuration = 0;
+      final subjectNames = <String>[];
+      for (final exam in members) {
+        final id = exam['id']?.toString() ?? '';
+        final rawSubject = _examSubject(exam);
+        final rawTitle = exam['title']?.toString().trim() ?? '';
+        var subjectLabel = _stripYearLabel(
+          rawSubject.isNotEmpty
+              ? rawSubject
+              : (rawTitle.isNotEmpty ? rawTitle : 'Subject'),
+        );
+        if (sectionStarts.containsKey(subjectLabel)) {
+          var suffix = 2;
+          while (sectionStarts.containsKey('$subjectLabel $suffix')) {
+            suffix++;
+          }
+          subjectLabel = '$subjectLabel $suffix';
+        }
+        subjectNames.add(subjectLabel);
+        sectionStarts[subjectLabel] = allQuestions.length + 1;
+        final pack = await _store.loadPack(id);
+        if (pack == null) {
+          if (!ctx.mounted) return;
+          ScaffoldMessenger.of(ctx).showSnackBar(
+            const SnackBar(
+              content: Text('Download this exam first, then tap Start.'),
+            ),
+          );
+          return;
+        }
+        totalDuration = max(
+          totalDuration,
+          (pack['duration_minutes'] as num?)?.toInt() ?? 0,
+        );
+        final rawQs = (pack['questions'] as List?) ?? [];
+        for (final q in rawQs.whereType<Map>()) {
+          final map = Map<String, dynamic>.from(q);
+          final img =
+              map['image_url']?.toString() ??
+              map['diagram_url']?.toString() ??
+              map['image']?.toString();
+          if (img != null && img.isNotEmpty) {
+            map['image_url'] = _api.resolveMediaUrl(img);
+          }
+          allQuestions.add(CbtQuestion.fromJson(map));
+        }
+      }
+      if (allQuestions.isEmpty) {
+        if (!ctx.mounted) return;
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(
+            content: Text('This JAMB bundle has no questions yet.'),
+          ),
+        );
+        return;
+      }
+      if (!ctx.mounted) return;
+      final title = members.length >= 4
+          ? 'JAMB Full Exam · ${subjectNames.join(' · ')}'
+          : 'JAMB Exam · ${subjectNames.join(' · ')}';
+      final seed = members.map((e) => e['id']?.toString() ?? '').join('-');
+      final orderedQuestions = _randomizeQuestionsForUser(seed, allQuestions);
+      Navigator.push(
+        ctx,
+        MaterialPageRoute(
+          builder: (_) => CbtExamScreen(
+            subject: title,
+            totalQuestions: orderedQuestions.length,
+            durationSeconds: (totalDuration > 0 ? totalDuration : 120) * 60,
+            questions: orderedQuestions,
+            sectionStarts: sectionStarts,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busyExamId = null);
+    }
+  }
+
+  Future<void> _downloadExam(String examId) async {
+    // Only show payment dialog if explicitly clicked on download button
+    // (not when auto-downloading from start)
+    if (_showPaymentOnAction) {
+      final unlocked = await showCbtUnlockChoice(context);
+      if (!mounted) return;
+      if (unlocked) await _loadExams();
+      if (_showPaymentOnAction) return;
+    }
+    if (_busyExamId != null) return;
+    setState(() => _busyExamId = examId);
+    try {
+      final pack = await _api.cbtDownloadExamRaw(examId);
+      await _store.savePack(examId, pack);
+      
+      // Get downloaded IDs - handle platform-specific errors gracefully
+      Set<String> ids = {};
+      try {
+        ids = await _store.downloadedIds();
+      } catch (_) {
+        ids.add(examId); // Manually add the current exam
+      }
+      
+      if (!mounted) return;
+      setState(() => _downloaded = ids);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Downloaded — you can start offline now.'),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 402) {
+        await _openPackages();
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busyExamId = null);
+    }
+  }
+
+  List<CbtQuestion> _randomizeQuestionsForUser(
+    String seed,
+    List<CbtQuestion> questions,
+  ) {
+    if (questions.length < 2) return List<CbtQuestion>.from(questions);
+    final rng = Random(
+      seed.hashCode ^ DateTime.now().microsecondsSinceEpoch,
+    );
+    final copy = List<CbtQuestion>.from(questions);
+    copy.shuffle(rng);
+    return copy;
+  }
+
+  Future<void> _startExam(
+    BuildContext ctx,
+    String examId,
+    String title, {
+    int? totalQ,
+    int? durMins,
+  }) async {
+    // Always show payment/coupon dialog first if not paid.
+    if (!_hasActiveTabAccess) {
+      final unlocked = await showCbtUnlockChoice(context);
+      if (!mounted) return;
+      if (unlocked) {
+        await _loadExams();
+      }
+      if (!_hasActiveTabAccess) {
+        return;
+      }
+    }
+
+    // Auto-download if not already downloaded.
+    if (!_downloaded.contains(examId)) {
+      await _downloadExam(examId);
+      if (!_downloaded.contains(examId)) {
+        return;
+      }
+    }
+
+    if (_busyExamId != null) return;
+    setState(() => _busyExamId = examId);
+    try {
+      var pack = await _store.loadPack(examId);
+      if (pack == null) {
+        if (!ctx.mounted) return;
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to load exam. Please try downloading again.'),
+          ),
+        );
+        return;
+      }
+
+      final rawQs = (pack['questions'] as List?) ?? [];
+      final questions = rawQs.whereType<Map>().map((q) {
+        final map = Map<String, dynamic>.from(q);
+        final img =
+            map['image_url']?.toString() ??
+            map['diagram_url']?.toString() ??
+            map['image']?.toString();
+        if (img != null && img.isNotEmpty) {
+          map['image_url'] = _api.resolveMediaUrl(img);
+        }
+        return CbtQuestion.fromJson(map);
+      }).toList();
+
+      if (questions.isEmpty) {
+        if (!ctx.mounted) return;
+        ScaffoldMessenger.of(ctx).showSnackBar(
+          const SnackBar(
+            content: Text('This exam has no questions yet. Please try again later.'),
+          ),
+        );
+        return;
+      }
+
+      // Rewrite absolute diagram URLs into the cached pack for true offline use.
+      final resolvedQs = rawQs.whereType<Map>().map((q) {
+        final map = Map<String, dynamic>.from(q);
+        final img =
+            map['image_url']?.toString() ??
+            map['diagram_url']?.toString() ??
+            map['image']?.toString();
+        if (img != null && img.isNotEmpty) {
+          map['image_url'] = _api.resolveMediaUrl(img);
+        }
+        return map;
+      }).toList();
+      pack = Map<String, dynamic>.from(pack)..['questions'] = resolvedQs;
+      await _store.savePack(examId, pack);
+
+      // Start online session when possible so scores still sync; offline pack still drives UI.
+      CbtSession? session;
+      try {
+        session = await _api.cbtStartSession(examId);
+      } catch (_) {
+        session = null;
+      }
+
+      if (!ctx.mounted) return;
+      final seed = (session?.sessionId ?? examId).trim();
+      final orderedQuestions = _randomizeQuestionsForUser(seed, questions);
+      final duration =
+          session?.durationMinutes ??
+          (pack['duration_minutes'] as num?)?.toInt() ??
+          durMins ??
+          60;
+      Navigator.push(
+        ctx,
+        MaterialPageRoute(
+          builder: (_) => CbtExamScreen(
+            subject: title,
+            totalQuestions: orderedQuestions.length,
+            durationSeconds: duration * 60,
+            sessionId: session?.sessionId,
+            questions: orderedQuestions,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!ctx.mounted) return;
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _busyExamId = null);
+    }
+  }
+
+  String get _boardLabel => _tabLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final exams = _filteredExams;
+    final subjects = _subjects;
+
+    return Scaffold(
+      backgroundColor: context.bgColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: RefreshIndicator(
+                color: context.accentColor,
+                onRefresh: _loadExams,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_boards.length > 1 ||
+                          (_boards.contains('JAMB') &&
+                              _boards.any(
+                                (b) =>
+                                    b == 'WAEC_NECO' ||
+                                    b == 'JUNIOR_WAEC' ||
+                                    b == 'COMMON_ENTRANCE',
+                              ))) ...[
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
+                            if (_boards.contains('JAMB'))
+                              _boardTab(context, 'JAMB', 'JAMB'),
+                            if (_boards.contains('WAEC_NECO'))
+                              _boardTab(context, 'WAEC / NECO', 'WAEC_NECO'),
+                            if (_boards.contains('JUNIOR_WAEC'))
+                              _boardTab(context, 'Junior WAEC', 'JUNIOR_WAEC'),
+                            if (_boards.contains('COMMON_ENTRANCE'))
+                              _boardTab(
+                                context,
+                                'Common Entrance',
+                                'COMMON_ENTRANCE',
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+                      if (_loadingExams)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40),
+                            child: CircularProgressIndicator(
+                              color: context.accentColor,
+                            ),
+                          ),
+                        )
+                      else ...[
+                        // Always show exam list; payment/coupon only on download/start
+                        if (_isJambTab) ...[
+                        Builder(
+                          builder: (ctx) {
+                            final members = _jambAvailableMembers();
+                            if (members.isEmpty) {
+                              return _emptyBox(
+                                context,
+                                message: _jambSubjects.isEmpty
+                                    ? 'Add your JAMB subjects in Profile, then refresh.'
+                                    : 'No JAMB exams yet for your subjects (${_jambSubjects.join(', ')}). Ask admin to upload them.',
+                              );
+                            }
+
+                            final subjectNames = members
+                                .map((e) => _stripYearLabel(_examSubject(e)))
+                                .where((s) => s.isNotEmpty)
+                                .toList();
+                            final n = members.length;
+                            final isDownloaded =
+                                _jambBundleDownloadedForMembers(members);
+                            final totalQ = members.fold<int>(
+                              0,
+                              (sum, e) =>
+                                  sum +
+                                  ((e['total_questions'] as num?)?.toInt() ??
+                                      0),
+                            );
+                            final durationMins = members.fold<int>(
+                              0,
+                              (maxDur, e) => max(
+                                maxDur,
+                                (e['duration_minutes'] as num?)?.toInt() ?? 0,
+                              ),
+                            );
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  n >= 4
+                                      ? 'JAMB — full UTME exam'
+                                      : 'JAMB — take together',
+                                  style: TextStyle(
+                                    color: context.textColor,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  n == 1
+                                      ? 'Download and start this subject as one exam.'
+                                      : 'Download once and take these $n subjects together as one exam.',
+                                  style: TextStyle(
+                                    color: context.greyColor,
+                                    fontSize: 12,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                _ExamCard(
+                                  title: n >= 4
+                                      ? 'JAMB Full Exam'
+                                      : 'JAMB Exam',
+                                  description:
+                                      'Subjects: ${subjectNames.join(' · ')}',
+                                  examType: n == 1
+                                      ? '1 subject'
+                                      : '$n subjects · combined',
+                                  durationMins:
+                                      durationMins > 0 ? durationMins : 120,
+                                  totalQuestions: totalQ,
+                                  isBusy: _busyExamId == _jambBundleBusyKey,
+                                  isDownloaded: isDownloaded,
+                                  onDownload: () =>
+                                      _downloadJambBundleMembers(members),
+                                  onStart: () => _startJambBundleMembers(
+                                    ctx,
+                                    members,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ] else if (subjects.isEmpty)
+                        _emptyBox(context)
+                      else ...[
+                        Text(
+                          'Choose subject',
+                          style: TextStyle(
+                            color: context.textColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          height: 42,
+                          child: ListView.separated(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: subjects.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 8),
+                            itemBuilder: (_, i) {
+                              final s = subjects[i];
+                              return _subjectChip(context, s, s);
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        if (exams.isEmpty)
+                          const SizedBox.shrink()
+                        else
+                          _examCardsForList(context, exams),
+                      ],
+                      ],
+                      const SizedBox(height: 60),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _boardTab(BuildContext context, String label, String value) {
+    final sel = _activeTab == value;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _activeTab = value;
+        _selectedSubject = null;
+        _ensureDefaultSubject();
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: sel ? context.accentColor : context.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: sel ? context.accentColor : context.borderColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: sel
+                ? (context.isDark ? AppColors.background : Colors.white)
+                : context.textColor,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _subjectChip(BuildContext context, String label, String? value) {
+    final sel = _selectedSubject == value;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedSubject = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: sel ? context.accentColor : context.cardColor,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: sel ? context.accentColor : context.borderColor,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: sel
+                ? (context.isDark ? AppColors.background : Colors.white)
+                : context.textColor,
+            fontSize: 13,
+            fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyBox(BuildContext context, {String? message}) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 60),
+        child: Column(
+          children: [
+            Icon(Icons.inbox_outlined, color: context.greyColor, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              widget.asPastQuestions
+                  ? 'No past-question papers yet'
+                  : 'No CBT exams available',
+              style: TextStyle(
+                color: context.textColor,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message ??
+                  (widget.asPastQuestions
+                      ? 'Admin posts Past Questions under CBT → Past Questions. They will appear here to sit as timed CBT.'
+                      : 'Admin will upload $_boardLabel packs for your subjects.'),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: context.greyColor, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(20, 18, 16, 18),
+      decoration: BoxDecoration(
+        gradient: AppGradients.hero(context),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF7C3AED).withOpacity(0.25),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const StudentBackButton(lightOnGradient: true),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.asPastQuestions ? 'Past Questions' : 'CBT Practice',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  widget.asPastQuestions
+                      ? 'Timed CBT papers uploaded as Past Questions — not CBT Practice'
+                      : '$_boardLabel · download then use offline',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.88),
+                    fontSize: 13,
+                  ),
+                ),
+                if (_daysRemaining != null) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        _daysRemaining! > 0
+                            ? Icons.verified_rounded
+                            : Icons.warning_rounded,
+                        color: _daysRemaining! > 0 ? Colors.green : Colors.orange,
+                        size: 12,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _daysRemaining! > 0
+                            ? '$_daysRemaining days remaining'
+                            : 'Payment expired',
+                        style: TextStyle(
+                          color: _daysRemaining! > 0 ? Colors.green : Colors.orange,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: _openPackages,
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: const Icon(
+                Icons.workspace_premium_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CbtSessionsScreen()),
+            ),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.history_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 6),
+                  Text(
+                    'History',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExamCard extends StatelessWidget {
+  final String title, description, examType;
+  final int? durationMins, totalQuestions;
+  final bool isBusy;
+  final bool isDownloaded;
+  final bool isPreview;
+  final VoidCallback onDownload;
+  final VoidCallback onStart;
+
+  const _ExamCard({
+    required this.title,
+    required this.description,
+    required this.examType,
+    this.durationMins,
+    this.totalQuestions,
+    required this.isBusy,
+    required this.isDownloaded,
+    this.isPreview = false,
+    required this.onDownload,
+    required this.onStart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: context.accentColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.menu_book_outlined,
+                  color: context.accentColor,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: context.textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (examType.isNotEmpty)
+                      Text(
+                        examType,
+                        style: TextStyle(
+                          color: context.accentColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    if (isDownloaded)
+                      Text(
+                        'Downloaded · ready offline',
+                        style: TextStyle(
+                          color: Colors.green.shade400,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              description,
+              style: TextStyle(
+                color: context.greyColor,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (durationMins != null) ...[
+                Icon(Icons.timer_outlined, color: context.greyColor, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  '$durationMins Mins',
+                  style: TextStyle(color: context.greyColor, fontSize: 12),
+                ),
+                const SizedBox(width: 16),
+              ],
+              if (totalQuestions != null) ...[
+                Icon(Icons.help_outline, color: context.greyColor, size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  '$totalQuestions Questions',
+                  style: TextStyle(color: context.greyColor, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: isBusy ? null : onDownload,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: context.accentColor,
+                    side: BorderSide(color: context.accentColor),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                    minimumSize: const Size(0, 42),
+                  ),
+                  child: isBusy
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.accentColor,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isDownloaded
+                                  ? Icons.check_circle
+                                  : Icons.download,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(isDownloaded ? 'Downloaded' : 'Download'),
+                          ],
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: isBusy ? null : onStart,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: context.accentColor,
+                    foregroundColor: context.isDark
+                        ? AppColors.background
+                        : Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 12,
+                    ),
+                    minimumSize: const Size(0, 42),
+                  ),
+                  child: isBusy
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.isDark
+                                ? AppColors.background
+                                : Colors.white,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPreview ? Icons.lock_outline : Icons.play_arrow,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(isPreview ? 'Unlock to Start' : 'Start'),
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
+          if (isPreview) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange, size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Preview only - payment or coupon required to start',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}

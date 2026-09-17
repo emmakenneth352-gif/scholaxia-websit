@@ -193,6 +193,12 @@ from fastapi.responses import FileResponse  # noqa: F811 — kept near routes fo
 
 # Explicit routes so /app works even if StaticFiles mount order is flaky on Render.
 @app.get("/app")
+async def app_home_redirect():
+    """Redirect /app → /app/ so relative asset paths (css/..., js/...) resolve."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/app/", status_code=307)
+
+
 @app.get("/app/")
 async def app_home():
     if not WEBSITE_STATIC_DIR.is_dir():

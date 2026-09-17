@@ -3531,8 +3531,7 @@
           showLiveJoinResult(res || {});
         })
         .catch(function (err) {
-          revealJoinCodeInput();
-          alert("Could not join with that code. Paste the access code from your teacher invite or access code list, then try again.\n\n" + errMsg(err));
+          alert("Could not join with that code: " + errMsg(err));
         })
         .then(function () {
           joinCodeBtn.disabled = false;
@@ -3694,8 +3693,7 @@
         showLiveJoinResult(res || {});
       })
       .catch(function (err) {
-        revealJoinCodeInput();
-        alert("Could not join that class automatically. Enter the class code below and try again.\n\n" + errMsg(err));
+        alert("Could not join: " + errMsg(err));
       })
       .then(function () {
         joinBtn.disabled = false;
@@ -3794,17 +3792,6 @@
     enterLiveClassroom(res || {});
   }
 
-  function revealJoinCodeInput() {
-    var form = $("joinCodeForm");
-    if (!form) return;
-    form.scrollIntoView({ behavior: "smooth", block: "center" });
-    var input = $("joinCodeInput");
-    if (input) {
-      input.focus();
-      input.select();
-    }
-  }
-
   var joinCodeForm = $("joinCodeForm");
   if (joinCodeForm) {
     joinCodeForm.addEventListener("submit", function (e) {
@@ -3820,8 +3807,7 @@
           $("joinCodeInput").value = "";
         })
         .catch(function (err) {
-          revealJoinCodeInput();
-          alert("Could not join with that code. Check the code and try again.\n\n" + errMsg(err));
+          alert("Could not join with that code: " + errMsg(err));
         })
         .then(function () {
           btn.disabled = false;
@@ -3877,11 +3863,12 @@
   }
 
   var PLAN_SUBJECTS_FALLBACK = {
-    holiday_primary: ["Mathematics", "English Language", "Phonics", "Moral values"],
-    holiday_jss: ["Mathematics", "English Language", "Phonics", "French", "Computer"],
-    holiday_ss_science: ["Mathematics", "English", "Physics", "Chemistry", "Biology"],
-    holiday_ss_art: ["Mathematics", "English", "Literature-in-English", "CRS/IRS", "Government"],
-    holiday_ss_commercial: ["Mathematics", "English", "Financial Accounting", "Commerce", "Economics"],
+    single_class: ["1 live session", "One-on-one tutor", "Class notes"],
+    jamb_prep: ["4 subjects", "4 sessions weekly", "JAMB past questions & CBT drills"],
+    jamb_waec_neco_prep: ["6 subjects", "5 sessions weekly", "JAMB, WAEC & NECO practice", "Mock exams"],
+    private_lesson: ["4 subjects", "4 sessions weekly", "Dedicated one-on-one tutor", "Unlimited Sia AI Tutor"],
+    primary_school: ["3 subjects", "3 sessions weekly", "Mathematics, English & Phonics", "Parent feedback"],
+    nursery_school: ["2 subjects", "2 sessions weekly", "Reading & Phonics", "Parent feedback"],
   };
 
   function planSubjectsHtml(p) {

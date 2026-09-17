@@ -1770,7 +1770,6 @@ async function uploadPastQuestionProduct() {
   var subject = ((document.getElementById("pq-subject") || {}).value || "").trim();
   var board = ((document.getElementById("pq-exam-board") || {}).value || "").trim();
   var desc = ((document.getElementById("pq-description") || {}).value || "").trim();
-  var year = Number(((document.getElementById("pq-year") || {}).value || "").trim());
   var price = Number(((document.getElementById("pq-price") || {}).value || "0").replace(/,/g, ""));
 
   var coverFile = coverInput && coverInput.files && coverInput.files[0];
@@ -1790,10 +1789,6 @@ async function uploadPastQuestionProduct() {
   }
   if (!board) {
     if (err) err.textContent = "Select an exam board.";
-    return;
-  }
-  if (!year || year < 1990 || year > 2100) {
-    if (err) err.textContent = "Enter a valid year (e.g. 2025).";
     return;
   }
   if (!desc) {
@@ -1823,7 +1818,7 @@ async function uploadPastQuestionProduct() {
     var pdfUp = await uploadLibraryPdf(pdfFile);
     if (!pdfUp || !pdfUp.file_key) throw new Error("PDF upload did not return a file key.");
 
-    var title = board + " " + subject + " " + year + " Past Questions";
+    var title = board + " " + subject + " Past Questions";
     var created = await adminApi("/api/v1/admin/library/books", {
       method: "POST",
       body: JSON.stringify({
@@ -1834,7 +1829,6 @@ async function uploadPastQuestionProduct() {
         cover_image_url: coverUrl,
         description: desc,
         category: "Past Questions",
-        year: year,
         library_target: "student",
         is_free: false,
         price: price,
@@ -1848,8 +1842,6 @@ async function uploadPastQuestionProduct() {
     if (pdfInput) pdfInput.value = "";
     var descEl = document.getElementById("pq-description");
     if (descEl) descEl.value = "";
-    var yearEl = document.getElementById("pq-year");
-    if (yearEl) yearEl.value = "";
     var priceEl = document.getElementById("pq-price");
     if (priceEl) priceEl.value = "";
     loadPastQuestionsAdmin();

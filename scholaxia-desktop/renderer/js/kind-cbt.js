@@ -5,7 +5,42 @@ var kindCbtState = {
   session: null,
   answers: {},
   index: 0,
-};
+};  function cleanTitle(raw) {
+    var t = String(raw || "").trim();
+    var low = t.toLowerCase();
+    if (low.indexOf("common_entrance") === 0) {
+      t = t.substring("common_entrance".length);
+    } else if (low.indexOf("common entrance") === 0) {
+      t = t.substring("common entrance".length);
+    }
+    t = t.replace(/_question_bank/gi, " ").replace(/question bank/gi, " ");
+    t = t.replace(/_/g, " ").replace(/\s+/g, " ").trim();
+    return t || "Practice";
+  }
+
+var KIND_CBT_STYLES = [
+  { icon: "&#128218;", from: "#7c3aed", to: "#4f46e5" }, /* violet book */
+  { icon: "&#127757;", from: "#0ea5e9", to: "#0369a1" }, /* globe */
+  { icon: "&#128300;", from: "#10b981", to: "#047857" }, /* science */
+  { icon: "&#128288;", from: "#f59e0b", to: "#d97706" }, /* language arts */
+  { icon: "&#129490;", from: "#ec4899", to: "#be185d" }, /* french */
+  { icon: "&#127979;", from: "#6366f1", to: "#4338ca" }, /* general */
+  { icon: "&#129513;", from: "#14b8a6", to: "#0f766e" }, /* reasoning */
+  { icon: "&#127918;", from: "#f43f5e", to: "#be123c" }, /* fun */
+];
+
+function kindCbtStyleFor(title) {
+  var t = String(title || "").toLowerCase();
+  if (t.indexOf("english") >= 0 || t.indexOf("verbal") >= 0) return KIND_CBT_STYLES[3];
+  if (t.indexOf("french") >= 0) return KIND_CBT_STYLES[4];
+  if (t.indexOf("science") >= 0) return KIND_CBT_STYLES[2];
+  if (t.indexOf("social") >= 0 || t.indexOf("study") >= 0) return KIND_CBT_STYLES[1];
+  if (t.indexOf("reasoning") >= 0 || t.indexOf("quantitative") >= 0) return KIND_CBT_STYLES[6];
+  if (t.indexOf("math") >= 0) return KIND_CBT_STYLES[0];
+  var hash = 0;
+  for (var i = 0; i < t.length; i++) hash = (hash * 31 + t.charCodeAt(i)) >>> 0;
+  return KIND_CBT_STYLES[hash % KIND_CBT_STYLES.length];
+}
 
 async function loadKindCbtPage() {
   var root = document.getElementById("kind-cbt-root");
@@ -15,8 +50,7 @@ async function loadKindCbtPage() {
     play.innerHTML = "";
   }
   if (!root) return;
-  root.classList.remove("hidden");
-  root.innerHTML = '<div class="loading">Loading Common Entrance CBT…</div>';
+  root.classList.remove("hidden");    root.innerHTML = '<div class="loading">Loading practice exams…</div>';
 
   try {
     var exams = [];
@@ -38,10 +72,11 @@ async function loadKindCbtPage() {
     }
 
     var payBanner =
-      '<div class="kind-cbt-paywall">' +
-      "<h3>Browse exams below — pay to start</h3>" +
-      "<p>Common Entrance CBT is ₦2,000 / year. Tap <strong>Start practice</strong> or pay with Paystack to unlock.</p>" +
-      '<button type="button" class="btn-action" onclick="payKindCbtPackage()">Pay ₦2,000 with Paystack</button>' +
+      '<div class="kind-cbt-paywall kind-cbt-paywall-hero">' +
+      '<div class="kind-cbt-paywall-art" aria-hidden="true">&#127891;</div>' +
+      "<h3>Unlock Common Entrance practice</h3>" +
+      "<p>Year-round access to every Common Entrance exam for <strong>&#8358;2,000 / year</strong>, paid securely with Paystack.</p>" +
+      '<button type="button" class="kind-cbt-pay-btn" onclick="payKindCbtPackage()">&#128179; Pay ₦2,000 with Paystack</button>' +
       "</div>";
 
     if (!exams.length) {
@@ -57,21 +92,29 @@ async function loadKindCbtPage() {
 
     root.innerHTML =
       (hasAccess
-        ? '<div class="kind-cbt-status is-active">Access active — Common Entrance unlocked</div>'
+        ? '<div class="kind-cbt-status is-active">&#127881; Access active — every Common Entrance exam is unlocked</div>'
         : payBanner) +
+      '<div class="kind-cbt-section-title">Pick a practice exam</div>' +
       '<div class="kind-cbt-grid">' +
       exams
-        .map(function (ex) {
+        .map(function (ex, idx) {
           var id = ex.id || "";
-          var title = ex.title || "Common Entrance";
+          var title = cleanTitle(ex.title || ex.subject || "Practice");
           var subject = ex.subject || "";
+          var st = kindCbtStyleFor(title);
+          var qCount = ex.question_count || ex.total_questions || null;
           return (
-            '<article class="kind-cbt-card">' +
+            '<article class="kind-cbt-card" style="background:linear-gradient(150deg,' + st.from + "," + st.to + ')"' +
+            ' onclick="startKindCbtExam(\'' + kindEsc(id) + '\', this)">' +
+            '<div class="kind-cbt-card-icon">' + st.icon + "</div>" +
+            '<div class="kind-cbt-card-body">' +
             "<h4>" + kindEsc(title) + "</h4>" +
-            "<p>" + kindEsc(subject) + "</p>" +
-            '<button type="button" class="btn-action btn-sm" onclick="startKindCbtExam(\'' +
-            kindEsc(id) +
-            "', this)\">Start practice</button>" +
+            (subject && subject.toLowerCase() !== title.toLowerCase()
+              ? "<p>" + kindEsc(subject) + "</p>"
+              : "") +
+            (qCount ? '<span class="kind-cbt-card-meta">' + qCount + " questions</span>" : "") +
+            '</div>' +
+            '<span class="kind-cbt-card-cta">Start &#9654;</span>' +
             "</article>"
           );
         })
@@ -182,7 +225,7 @@ function renderKindCbtPlayer() {
     '<div class="kind-cbt-player">' +
     '<div class="kind-cbt-player-head">' +
     "<h3>" +
-    kindEsc(kindCbtState.exam.title || "Common Entrance") +
+    kindEsc(cleanTitle(kindCbtState.exam.title || "Practice")) +
     "</h3>" +
     "<p>Question " +
     (i + 1) +

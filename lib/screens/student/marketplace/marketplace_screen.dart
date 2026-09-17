@@ -17,6 +17,7 @@ class MarketplaceScreen extends StatefulWidget {
 
 class _MarketplaceScreenState extends State<MarketplaceScreen> {
   final _api = ApiService();
+  final _searchController = TextEditingController();
   bool _loading = true;
   String _category = 'all';
   List<Map<String, dynamic>> _products = [];
@@ -44,6 +45,13 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
     super.initState();
     _load();
     _refreshCartCount();
+    _searchController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -81,6 +89,19 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
 
   String _price(Map<String, dynamic> p) {
     return formatMarketplaceNaira((p['price'] as num?) ?? 0);
+  }
+
+  List<Map<String, dynamic>> get _filteredProducts {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _products;
+    return _products.where((product) {
+      final title = (product['title'] ?? '').toString().toLowerCase();
+      final description = (product['description'] ?? '').toString().toLowerCase();
+      final category = (product['category'] ?? '').toString().toLowerCase();
+      return title.contains(query) ||
+             description.contains(query) ||
+             category.contains(query);
+    }).toList();
   }
 
   Future<void> _refreshCartCount() async {
@@ -210,6 +231,26 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                 style: TextStyle(color: context.greyColor, fontSize: 13, height: 1.4),
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: TextField(
+                controller: _searchController,
+                style: TextStyle(color: context.textColor),
+                decoration: InputDecoration(
+                  hintText: 'Search products...',
+                  hintStyle: TextStyle(color: context.greyColor),
+                  prefixIcon: Icon(Icons.search, color: context.greyColor),
+                  filled: true,
+                  fillColor: context.surfColor,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+              ),
+            ),
             SizedBox(
               height: 44,
               child: ScrollConfiguration(
@@ -287,7 +328,7 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                   : RefreshIndicator(
                       color: context.accentColor,
                       onRefresh: _load,
-                      child: _products.isEmpty
+                      child: _filteredProducts.isEmpty
                           ? ListView(
                               physics: const AlwaysScrollableScrollPhysics(),
                               children: [
@@ -321,9 +362,9 @@ class _MarketplaceScreenState extends State<MarketplaceScreen> {
                                 crossAxisSpacing: 12,
                                 mainAxisExtent: 268,
                               ),
-                              itemCount: _products.length,
+                              itemCount: _filteredProducts.length,
                               itemBuilder: (_, i) {
-                                final p = _products[i];
+                                final p = _filteredProducts[i];
                                 final title = p['title']?.toString() ?? 'Item';
                                 final image = p['image_url']?.toString();
                                 final desc = parseMarketplaceMeta(

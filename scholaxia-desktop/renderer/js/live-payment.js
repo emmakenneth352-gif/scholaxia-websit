@@ -182,7 +182,7 @@ async function completeJoinClass(classId, card) {
     teacher_name: data.teacher_name || (card && card.dataset && card.dataset.teacher) || "",
     mic_allowed: !!data.mic_allowed,
     camera_allowed: !!data.camera_allowed,
-    role: "student",
+    role: String(localStorage.getItem("sia_role") || "").toLowerCase() === "kind" ? "kind" : "student",
     end_time: endTime,
   };
   if (!sess.room_id) throw new Error("Could not join — missing class room. Refresh and try again.");
@@ -238,13 +238,12 @@ async function joinClassWithAccessCode(code) {
       teacher_id: data.teacher_id || "",
       title: data.title || preview.title || "Live Class",
       subject: data.subject || preview.subject || "",
-      teacher_name: data.teacher_name || preview.teacher_name || "",
-      mic_allowed: !!data.mic_allowed,
-      camera_allowed: !!data.camera_allowed,
-      role: "student",
-      end_time: endTime,
-    };
-    if (typeof persistLiveSession === "function") persistLiveSession(sess);
+      teacher_name: data.teacher_name || preview.teacher_name || "",    mic_allowed: !!data.mic_allowed,
+    camera_allowed: !!data.camera_allowed,
+    role: String(localStorage.getItem("sia_role") || "").toLowerCase() === "kind" ? "kind" : "student",
+    end_time: endTime,
+  };
+  if (typeof persistLiveSession === "function") persistLiveSession(sess);
     else localStorage.setItem("live_session", JSON.stringify(sess));
     window.location.href = "classroom.html";
   } finally {

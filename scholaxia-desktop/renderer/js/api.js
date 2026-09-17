@@ -1,9 +1,36 @@
 /* Scholaxia website API — calls production backend */
 (function (global) {
-  var API_BASE = "https://scholaxia1.onrender.com";
+  // Desktop builds are served from the local desktop-server (127.0.0.1:17890),
+  // which proxies /api-proxy/* to the remote API — same-origin, no CORS.
+  function scholaxiaApiBase() {
+    try {
+      var host = String((global.location && global.location.hostname) || "").toLowerCase();
+      if (host === "127.0.0.1" || host === "localhost") {
+        return global.location.origin + "/api-proxy";
+      }
+    } catch (e) { /* fall through */ }
+    return "https://scholaxia1.onrender.com";
+  }
+
+  var API_BASE = scholaxiaApiBase();
   global.API_BASE = API_BASE;
 
+  // Old public contract: returns the AbortSignal itself (callers do `signal: fetchTimeout(ms)`).
   function fetchTimeout(ms) {
+    try {
+      if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) {
+        return AbortSignal.timeout(ms || 25000);
+      }
+    } catch (e) { /* fall through */ }
+    var ctrl = new AbortController();
+    setTimeout(function () {
+      try { ctrl.abort(); } catch (e) {}
+    }, ms || 25000);
+    return ctrl.signal;
+  }
+
+  // Internal handle with manual clear (used by api/apiUpload/readHealth internals).
+  function fetchTimeoutHandle(ms) {
     var ctrl = new AbortController();
     var timer = setTimeout(function () {
       try { ctrl.abort(); } catch (e) {}
@@ -32,7 +59,7 @@
       });
       return data;
     } catch (xhrErr) {
-      var t = fetchTimeout(timeout);
+      var t = fetchTimeoutHandle(timeout);
       try {
         var res = await fetch(API_BASE + "/health", {
           method: "GET",
@@ -343,7 +370,7 @@
           try { await ensureAwake(); } catch (w2) {}
           await new Promise(function (resolve) { setTimeout(resolve, 700 * i); });
         }
-        t = fetchTimeout(timeoutMs);
+        t = fetchTimeoutHandle(timeoutMs);
         var res = await fetch(API_BASE + path, {
           method: method,
           mode: "cors",
@@ -414,11 +441,13 @@
       xhr.onerror = function () { reject(new Error("Failed to fetch")); };
       xhr.ontimeout = function () { reject(new Error("The user aborted a request.")); };
       xhr.send(
-        options.body
-          ? options.body instanceof FormData
+        options.body == null
+          ? null
+          : options.body instanceof FormData
             ? options.body
-            : JSON.stringify(options.body)
-          : null
+            : typeof options.body === "string"
+              ? options.body // already serialized — do NOT double-encode
+              : JSON.stringify(options.body)
       );
     });
   }
@@ -430,7 +459,7 @@
     if (token && !options.noAuth && !headers.Authorization) {
       headers.Authorization = "Bearer " + token;
     }
-    var t = options.signal ? null : fetchTimeout(options.timeout || 90000);
+    var t = options.signal ? null : fetchTimeoutHandle(options.timeout || 90000);
     var res = await fetch(API_BASE + path, {
       method: options.method || "POST",
       headers: headers,
@@ -561,5 +590,306 @@
     dashboardForRole: dashboardForRole,
     requireAuth: requireAuth,
   };
-  global.api = global.ScholaxiaAPI;
+  // `api` must be the callable fetcher — feature scripts do api("/path").
+  // (Assigning the namespace object here broke every data load: the object
+  // clobbered the hoisted global function, so api("/x") threw "not a function"
+  // and pages showed "Network error" / "can't load" everywhere.)
+  global.api = api;
 })(window);
+
+// ── Global auth helpers (used across app.js, marketplace.js, etc.) ──────────
+// Restored: these were dropped in the api.js rewrite and left callers
+// (notably initUserUI in app.js) throwing ReferenceError on startup.
+function isStudentLoggedIn() {
+  try {
+    return !!localStorage.getItem("sia_token");
+  } catch (e) {
+    return false;
+  }
+}
+
+var PUBLIC_APP_PAGES = ["dashboard", "school-portal", "marketplace", "study-materials", "past-questions", "about", "contact"];
+
+function isPagePublic(page) {
+  return PUBLIC_APP_PAGES.indexOf(page) >= 0;
+}
+
+function goToLogin(returnPage) {
+  var page = returnPage || sessionStorage.getItem("sia_current_page") || "dashboard";
+  if (page && !isPagePublic(page)) {
+    sessionStorage.setItem("sia_login_return", page);
+  }
+  window.location.href = "index.html" + (page && !isPagePublic(page) ? "?return=" + encodeURIComponent(page) : "");
+}
+
+if (typeof window !== "undefined") {
+  window.isStudentLoggedIn = isStudentLoggedIn;
+  window.isPagePublic = isPagePublic;
+  window.goToLogin = goToLogin;
+  window.PUBLIC_APP_PAGES = PUBLIC_APP_PAGES;
+}
+
+// ── Bare-name compatibility bridge ─────────────────────────────────────────
+// Many renderer scripts (auth.js, app.js, kind.js, admin.js, teacher.js,
+// classroom.js, …) call these helpers as bare globals, but the rewritten
+// api.js only exposed them on the ScholaxiaAPI namespace — so pages failed
+// to initialize (dead buttons on index.html, blank reveal sections).
+if (typeof window !== "undefined" && window.ScholaxiaAPI) {
+  var __apiNames = ["getToken", "getUser", "saveSession", "clearSession", "fetchTimeout", "apiUpload", "fetchBinary", "loginApi", "friendlyFetchError", "wakeServer", "dashboardForRole", "requireAuth"];
+  __apiNames.forEach(function (name) {
+    if (typeof window[name] === "undefined" && typeof window.ScholaxiaAPI[name] === "function") {
+      window[name] = window.ScholaxiaAPI[name];
+    }
+  });
+}
+
+// ── Legacy global API helpers (restored from pre-rewrite api.js) ───────────
+// Feature scripts across the app call `api("/path")` as a bare async function.
+// The rewrite turned `api` into a namespace object, so every data load in the
+// student/kid apps failed with "api is not a function" ("can't load" errors).
+function parseUtcIso(iso) {
+  if (!iso) return null;
+  var s = String(iso).trim();
+  if (!s) return null;
+  if (!/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) s += "Z";
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function normalizeLiveEndTime(endTime, isLive) {
+  if (!endTime) return null;
+  var endAt = parseUtcIso(endTime);
+  if (!endAt) return null;
+  if (endAt.getTime() <= Date.now() && isLive !== false) return null;
+  return endTime;
+}
+
+function persistLiveSession(sess) {
+  if (!sess) return;
+  var json = JSON.stringify(sess);
+  try {
+    localStorage.setItem("live_session", json);
+    sessionStorage.setItem("live_session", json);
+  } catch (e) { /* ignore */ }
+}
+
+function loadLiveSessionData() {
+  try {
+    var raw = localStorage.getItem("live_session") || sessionStorage.getItem("live_session");
+    return JSON.parse(raw || "null");
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearLiveSession() {
+  try {
+    localStorage.removeItem("live_session");
+    sessionStorage.removeItem("live_session");
+  } catch (e) { /* ignore */ }
+}
+
+function isClassroomPage() {
+  try {
+    var path = window.location.pathname || "";
+    var href = window.location.href || "";
+    return /classroom\.html/i.test(path) || /classroom\.html/i.test(href);
+  } catch (e) {
+    return false;
+  }
+}
+
+function formatApiError(detail) {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(function (d) {
+      if (typeof d === "string") return d;
+      if (d && d.msg) return d.msg;
+      try { return JSON.stringify(d); } catch (e) { return String(d); }
+    }).join("; ");
+  }
+  if (detail.msg) return detail.msg;
+  try { return JSON.stringify(detail); } catch (e) { return String(detail); }
+}
+
+function setOfflineBanner(offline) {
+  var el = document.getElementById("sx-offline-banner");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "sx-offline-banner";
+    el.style.cssText =
+      "display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#F59E0B;color:#000;text-align:center;padding:6px 12px;font-size:12px;font-weight:700";
+    el.textContent = "Offline — showing saved information";
+    document.body.appendChild(el);
+  }
+  var role = "";
+  try { role = localStorage.getItem("sia_role") || ""; } catch (e) {}
+  var show = !!offline && !!getToken() && (role === "student" || role === "kind");
+  el.style.display = show ? "block" : "none";
+}
+
+function networkErrorMessage(err) {
+  if (typeof navigator !== "undefined" && !navigator.onLine) {
+    return "There is no internet on your data.";
+  }
+  var msg = (err && err.message) || "";
+  if (/failed to fetch|timed out|network error|no internet/i.test(msg)) {
+    return "There is no internet on your data.";
+  }
+  return msg || "Something went wrong.";
+}
+
+function firstName(name) {
+  return (name || "Student").split(" ")[0];
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  var d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    weekday: "short", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+var _apiWarmPromise = null;
+function warmScholaxiaApi() {
+  if (_apiWarmPromise) return _apiWarmPromise;
+  _apiWarmPromise = fetch(API_BASE + "/health", { signal: fetchTimeout(90000) })
+    .catch(function () { _apiWarmPromise = null; });
+  return _apiWarmPromise;
+}
+
+function handleApiUnauthorized(detail) {
+  var hadSession = false;
+  try { hadSession = !!localStorage.getItem("sia_token"); } catch (e) {}
+  if (typeof clearSession === "function") clearSession();
+  if (!hadSession) return;
+  var msg = (detail && String(detail)) || "Your session expired. Please sign in again.";
+  if (/another device|logged in elsewhere|session/i.test(msg)) {
+    msg = "You signed in on another device. This session was signed out.";
+  }
+  if (isClassroomPage()) {
+    clearLiveSession();
+    window.location.href = "index.html";
+    return;
+  }
+  if (typeof goToLogin === "function") {
+    goToLogin();
+  } else {
+    window.location.href = "index.html";
+  }
+}
+
+async function api(path, options) {
+  options = options || {};
+  var method = (options.method || "GET").toUpperCase();
+  var headers = Object.assign(
+    { Accept: "application/json", Authorization: "Bearer " + getToken() },
+    options.headers || {}
+  );
+  var body = options.body;
+  if (body != null && typeof body === "object" && !(typeof FormData !== "undefined" && body instanceof FormData)) {
+    if (!headers["Content-Type"] && !headers["content-type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+    body = JSON.stringify(body);
+  } else if (body != null && !headers["Content-Type"] && !headers["content-type"]) {
+    headers["Content-Type"] = "application/json";
+  }
+  if ((method === "GET" || method === "HEAD") && body == null) {
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  }
+  var res;
+  try {
+    res = await fetch(API_BASE + path, {
+      method: method,
+      headers: headers,
+      body: body,
+      signal: options.signal || fetchTimeout(options.timeoutMs || 45000),
+    });
+  } catch (ex) {
+    setOfflineBanner(true);
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      throw new Error("There is no internet on your data.");
+    }
+    if (ex.name === "AbortError" || ex.name === "TimeoutError") {
+      throw new Error("There is no internet on your data.");
+    }
+    var netMsg = (ex && ex.message) || "Network error";
+    if (/failed to fetch/i.test(netMsg)) {
+      throw new Error("There is no internet on your data.");
+    }
+    throw new Error(netMsg + ". Check your connection.");
+  }
+  setOfflineBanner(false);
+  var data = await res.json().catch(function () { return {}; });
+  if (res.status === 401) {
+    handleApiUnauthorized(formatApiError(data.detail) || data.detail);
+    return null;
+  }
+  if (!res.ok) {
+    var err = new Error(formatApiError(data.detail) || "Request failed (" + res.status + ")");
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+async function apiRetry(path, options) {
+  options = options || {};
+  var attempts = options.attempts || 3;
+  var baseDelay = options.retryDelay || 1000;
+  if (!options.skipWarm) {
+    try { await warmScholaxiaApi(); } catch (e) { /* ignore */ }
+  }
+  var lastErr;
+  for (var i = 0; i < attempts; i++) {
+    try {
+      return await api(path, options);
+    } catch (e) {
+      lastErr = e;
+      var retryable = /failed to fetch|timed out|network|waking up/i.test(e.message || "");
+      if (!retryable || i >= attempts - 1) throw e;
+      await new Promise(function (r) { setTimeout(r, baseDelay * (i + 1)); });
+      _apiWarmPromise = null;
+      try { await warmScholaxiaApi(); } catch (e2) { /* ignore */ }
+    }
+  }
+  throw lastErr;
+}
+
+if (typeof window !== "undefined") {
+  window.parseUtcIso = parseUtcIso;
+  window.normalizeLiveEndTime = normalizeLiveEndTime;
+  window.persistLiveSession = persistLiveSession;
+  window.loadLiveSessionData = loadLiveSessionData;
+  window.clearLiveSession = clearLiveSession;
+  window.isClassroomPage = isClassroomPage;
+  window.formatApiError = formatApiError;
+  window.setOfflineBanner = setOfflineBanner;
+  window.networkErrorMessage = networkErrorMessage;
+  window.firstName = firstName;
+  window.formatDate = formatDate;
+  window.warmScholaxiaApi = warmScholaxiaApi;
+  window.handleApiUnauthorized = handleApiUnauthorized;
+  window.apiRetry = apiRetry;
+  window.stripYearLabel = stripYearLabel;
+  // `api` must be a callable function — feature scripts do api("/path").
+  window.api = api;
+}
+
+// Hide upload years in titles: "WAEC Biology 2025 Past Questions" ->
+// "WAEC Biology Past Questions". Handles single years, ranges (2018 - 2023),
+// slash sessions (2024/2025) and parenthesized years.
+function stripYearLabel(text) {
+  var s = String(text == null ? "" : text);
+  s = s.replace(/[([]?\s*\b(?:19|20)\d{2}\s*(?:[-–—/]|\bto\b)\s*(?:19|20)\d{2}\s*[)\]]?\s*/gi, " ");
+  s = s.replace(/[([]\s*\b(?:19|20)\d{2}\s*[)\]]/g, " ");
+  s = s.replace(/\b(?:19|20)\d{2}\s*\/\s*(?:19|20)\d{2}\b/g, " ");
+  s = s.replace(/,?\s*\b(?:19|20)\d{2}\b/g, "");
+  return s.replace(/\s{2,}/g, " ").replace(/\s+([,.;:])/g, "$1").replace(/,\s*$/, "").trim();
+}

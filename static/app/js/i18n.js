@@ -778,4 +778,20 @@
   window.SxLang = { apply: applyLang, current: () => currentLang };
   window.SxCurr = { apply: applyCurrency, current: () => currentCurrency };
 
+  /* ─────────────────────────────────────────────────────────────
+     7. ACCOUNT LANGUAGE — once logged in, the account's chosen
+        language wins over the device default (every page load).
+     ───────────────────────────────────────────────────────────── */
+  try {
+    let acctLang = '';
+    try { acctLang = localStorage.getItem('sia_language') || ''; } catch (_) {}
+    if (!acctLang) {
+      try { acctLang = (JSON.parse(localStorage.getItem('sia_user') || 'null') || {}).language || ''; } catch (_) {}
+    }
+    acctLang = String(acctLang || '').toLowerCase().trim();
+    if (['fr', 'pt', 'ar'].includes(acctLang) && currentLang !== acctLang) {
+      applyLang(acctLang);
+    }
+  } catch (_) {}
+
 })();

@@ -11,7 +11,6 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../../api/api_endpoints.dart';
 import '../../../api/api_service.dart';
 import '../../../services/livekit_class_service.dart';
-import '../../../services/live_class_save_recorder.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/live_class_whiteboard.dart';
 
@@ -57,13 +56,11 @@ class _LiveClassScreenState extends State<LiveClassScreen>
   bool _disposed = false;
   bool _classEnded = false;
   LiveKitClassService? _liveKit;
-  LiveClassSaveRecorder? _saveRecorder;
   late final BoardController _board;
 
   bool _loading = true;
   bool _boardOpen = false;
   bool _screenShareOn = false;
-  bool _saveActive = false;
   bool _saveHintShown = false;
   bool _handRaised = false;
   final Map<String, String> _raisedHands = {};
@@ -83,8 +80,23 @@ class _LiveClassScreenState extends State<LiveClassScreen>
   Map<String, dynamic>? _classDetails;
   List<_ChatMsg> _messages = [];
   List<Map<String, dynamic>> _students = [];
+  
+  // Pop-out video functionality
+  bool _showTeacherPopout = false;
+  bool _showStudentPopouts = false;
+  List<String> _studentsWithCamera = [];
 
   static const _liveRed = Color(0xFFFF6B6B);
+
+  // Site classroom palette (classroom.css) — the live class always uses the
+  // dark look, matching the website instead of the app's light/dark theme.
+  static const _clsBg = Color(0xFF17131F);
+  static const _clsSurface = Color(0xFF1F1A2E);
+  static const _clsBorder = Color(0xFF322A4A);
+  static const _clsText = Color(0xFFF3EFFA);
+  static const _clsMuted = Color(0xFFA79FC4);
+  static const _clsPurple = Color(0xFF8B5CF6);
+  static const _clsRed = Color(0xFFEF4444);
 
   @override
   void initState() {
@@ -118,10 +130,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     _board.dispose();
     _liveKit?.disconnect();
     _liveKit?.dispose();
-    if (_saveActive) {
-      unawaited(_stopSaveClass(showNotice: false));
-    }
-    _saveRecorder?.dispose();
     if (!widget.isTeacher && widget.classId.isNotEmpty) {
       _api.leaveLiveClass(widget.classId);
     }
@@ -161,9 +169,13 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         _micOn = true;
         _camOn = true;
       } else {
-        // Open mic by default so teacher can hear the student immediately.
-        _micAllowed = true;
-        _micOn = true;
+        // Site pattern: a student's mic stays OFF until the teacher allows it
+        // (mic_access_granted). _autoEnableMic() then refreshes the token,
+        // reconnects with can_publish, and turns the mic on.
+        _micAllowed = tokenData['mic_allowed'] == true;
+        _micOn = false;
+        _cameraAllowed = tokenData['camera_allowed'] == true;
+        _camOn = false;
       }
 
       _classDetails = await _api.getLiveClassDetail(widget.classId);
@@ -447,7 +459,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
               dialogBackgroundColor: const Color(0xFF14121C),
               colorScheme: ColorScheme.dark(
                 surface: const Color(0xFF14121C),
-                primary: context.accentColor,
+                primary: _clsPurple,
               ),
             ),
             child: ScreenSelectDialog(),
@@ -611,9 +623,15 @@ class _LiveClassScreenState extends State<LiveClassScreen>
       _livekitToken = newToken;
       _livekitUrl = newUrl;
       if (!widget.isTeacher) {
-        // Match join: treat missing/null as allowed (open mic/cam by default).
-        _micAllowed = tokenData['mic_allowed'] != false;
-        _cameraAllowed = tokenData['camera_allowed'] != false;
+        // Site pattern: grants are explicit — missing/null means NOT allowed.
+        _micAllowed = tokenData['mic_allowed'] == true;
+        _cameraAllowed = tokenData['camera_allowed'] == true;
+        if (!_micAllowed) {
+          _micOn = false;
+        }
+        if (!_cameraAllowed) {
+          _camOn = false;
+        }
       }
 
       if (reconnect && _liveKit != null) {
@@ -666,7 +684,24 @@ class _LiveClassScreenState extends State<LiveClassScreen>
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-      if (mounted) setState(() => _students = list);
+      
+      // Track students with cameras enabled
+      final studentsWithCam = list
+          .where((student) => student['camera_allowed'] == true)
+          .map((student) => student['id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+      
+      if (mounted) {
+        setState(() {
+          _students = list;
+          _studentsWithCamera = studentsWithCam;
+          // Automatically show popouts when students have cameras
+          if (studentsWithCam.isNotEmpty && !_showStudentPopouts) {
+            _showStudentPopouts = true;
+          }
+        });
+      }
     } catch (_) {}
   }
 
@@ -840,13 +875,12 @@ class _LiveClassScreenState extends State<LiveClassScreen>
 
   Future<void> _endClass() async {
     final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: const Text('End class?', style: TextStyle(color: AppColors.white)),
+      context: context,          builder: (ctx) => AlertDialog(
+        backgroundColor: _clsSurface,
+        title: const Text('End class?', style: TextStyle(color: _clsText)),
         content: const Text(
           'This will end the session for all students.',
-          style: TextStyle(color: AppColors.grey),
+          style: TextStyle(color: _clsMuted),
         ),
         actions: [
           TextButton(
@@ -907,9 +941,9 @@ class _LiveClassScreenState extends State<LiveClassScreen>
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.cardBg,
-        title: const Text('Class ended', style: TextStyle(color: AppColors.white)),
-        content: Text(message, style: const TextStyle(color: AppColors.grey)),
+        backgroundColor: _clsSurface,
+        title: const Text('Class ended', style: TextStyle(color: _clsText)),
+        content: Text(message, style: const TextStyle(color: _clsMuted)),
         actions: [
           TextButton(
             onPressed: () {
@@ -921,44 +955,6 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         ],
       ),
     );
-  }
-
-  Future<void> _toggleSaveClass() async {
-    if (widget.isTeacher) return;
-    if (_saveActive) {
-      await _stopSaveClass(showNotice: true);
-      return;
-    }
-
-    _saveRecorder ??= LiveClassSaveRecorder();
-    final ok = await _saveRecorder!.start();
-    if (!ok) {
-      _toast('Microphone needed to save class.');
-      return;
-    }
-
-    if (mounted) setState(() => _saveActive = true);
-    _toast('Recording… tap Stop when done.');
-  }
-
-  Future<void> _stopSaveClass({required bool showNotice}) async {
-    if (!_saveActive || _saveRecorder == null) return;
-
-    final teacherName =
-        _classDetails?['teacher_name']?.toString() ?? 'Teacher';
-
-    final saved = await _saveRecorder!.stopAndStore(
-      title: _title,
-      subject: _subject,
-      teacher: teacherName,
-      classId: widget.classId,
-    );
-
-    if (mounted) setState(() => _saveActive = false);
-
-    if (showNotice && saved != null) {
-      _toast('Saved — open Saved tab to watch.');
-    }
   }
 
   String get _title => _classDetails?['title'] as String? ?? widget.topic;
@@ -1005,70 +1001,101 @@ class _LiveClassScreenState extends State<LiveClassScreen>
       );
     }
 
-    return Scaffold(
-      backgroundColor: context.bgColor,
-      resizeToAvoidBottomInset: true,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _topBar(context),
-            _videoArea(context),
-            if (_reactionBurst != null) _reactionBanner(context),
-            if (widget.isTeacher && _raisedHands.isNotEmpty)
-              _raisedHandsStrip(context),
-            _controls(context),
-            _reactionRow(context),
-            _tabBar(context),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _chat(context),
-                  _participants(context),
-                ],
-              ),
-            ),
-            if (_tabController.index == 0) _inputBar(context),
-          ],
+    return Theme(
+      data: ThemeData(
+        scaffoldBackgroundColor: _clsBg,
+        colorScheme: const ColorScheme.dark(
+          surface: _clsBg,
+          primary: _clsPurple,
         ),
+      ),
+      child: Stack(
+      children: [
+        Scaffold(
+          backgroundColor: _clsBg,
+          resizeToAvoidBottomInset: true,
+          body: SafeArea(
+            child: Column(
+              children: [
+                _topBar(context),
+                _statusRow(context),
+                _videoArea(context),
+                if (_reactionBurst != null) _reactionBanner(context),
+                if (widget.isTeacher && _raisedHands.isNotEmpty)
+                  _raisedHandsStrip(context),
+                _controls(context),
+                _reactionRow(context),
+                _tabBar(context),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _chat(context),
+                      _participants(context),
+                    ],
+                  ),
+                ),
+                if (_tabController.index == 0) _inputBar(context),
+              ],
+            ),
+          ),
+        ),
+        // Pop-out video for students to see teacher
+        if (!widget.isTeacher && _showTeacherPopout)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _teacherPopout(context),
+          ),
+        // Pop-out videos for teacher to see students with cameras
+        if (widget.isTeacher && _showStudentPopouts && _studentsWithCamera.isNotEmpty)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: _studentPopoutsSlider(context),
+          ),
+      ],
       ),
     );
   }
 
   Widget _topBar(BuildContext context) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: context.headerColor,
-          border: Border(bottom: BorderSide(color: context.borderColor)),
+        decoration: const BoxDecoration(
+          color: _clsSurface,
+          border: Border(bottom: BorderSide(color: _clsBorder)),
         ),
         child: Row(
           children: [
             GestureDetector(
               onTap: () => Navigator.maybePop(context),
-              child: Icon(Icons.arrow_back, color: context.textColor, size: 22),
+              child: const Icon(Icons.arrow_back, color: _clsText, size: 22),
             ),
             const SizedBox(width: 12),
-            Icon(Icons.auto_awesome, color: context.accentColor, size: 16),
-            const SizedBox(width: 4),
-            Text('Scholaxia',
-                style: TextStyle(
-                    color: context.accentColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold)),
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _clsPurple.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.school_outlined,
+                  color: _clsPurple, size: 22),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_title,
-                      style: TextStyle(
-                          color: context.textColor,
+                      style: const TextStyle(
+                          color: _clsText,
                           fontSize: 14,
                           fontWeight: FontWeight.bold),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
-                  Text(_subject,
-                      style: TextStyle(color: context.greyColor, fontSize: 11),
+                  Text('$_subject • Live class',
+                      style: const TextStyle(color: _clsMuted, fontSize: 11),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                 ],
@@ -1100,7 +1127,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
               const SizedBox(width: 8),
               IconButton(
                 onPressed: _endClass,
-                icon: const Icon(Icons.stop_circle_outlined, color: Colors.red),
+                icon: const Icon(Icons.stop_circle_outlined, color: _clsRed),
                 tooltip: 'End class',
               ),
             ],
@@ -1108,14 +1135,71 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         ),
       );
 
+  Widget _statusRow(BuildContext context) {
+    final connected = _liveKit?.connected == true;
+    return Container(
+      width: double.infinity,
+      color: _clsSurface,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Row(
+        children: [
+          _clsPill(
+            'In class • ${_participantCount + 1}',
+            bg: _clsBg,
+            fg: _clsText,
+          ),
+          const SizedBox(width: 8),
+          if (widget.classId.isNotEmpty)
+            _clsPill(
+              'Class ID: ${widget.classId}',
+              bg: const Color(0xFF16A34A),
+              fg: Colors.white,
+            ),
+          const Spacer(),
+          Icon(
+            connected ? Icons.wifi : Icons.wifi_off,
+            size: 14,
+            color:
+                connected ? const Color(0xFF22C55E) : _clsMuted,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              connected ? 'Connected — Video + Chat' : 'Connecting…',
+              style: const TextStyle(color: _clsMuted, fontSize: 11),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clsPill(String label, {required Color bg, required Color fg}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+              color: fg, fontSize: 11, fontWeight: FontWeight.w600),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      );
+
   Widget _videoArea(BuildContext context) {
-    final videoBg = context.isDark ? Colors.black : const Color(0xFF1F2937);
+    const videoBg = _clsBg;
     final remote = _liveKit?.primaryRemoteVideo;
     final lkConnected = _liveKit?.connected == true;
     // Shrink the top stage while the keyboard is open (e.g. typing on the
     // board) so the rest of the layout still fits.
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    final stageHeight = keyboardOpen ? 130.0 : 220.0;
+    final stageHeight = keyboardOpen ? 130.0 : 240.0;
 
     // Board canvas lives at the top (video area) for everyone. The teacher's
     // toolbar + keyboard live at the bottom in the BOARD tab, both driven by
@@ -1148,15 +1232,71 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Colors.black54,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Text(
-                    'SCREEN / BOARD',
+                    'TEACHER SCREEN',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            Positioned(
+              top: 8,
+              left: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _liveRed,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    const Text(
+                      'LIVE',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Pop-out button for students to see teacher in small box
+            if (!widget.isTeacher)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: () => setState(() => _showTeacherPopout = !_showTeacherPopout),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Icon(
+                      _showTeacherPopout ? Icons.fullscreen_exit : Icons.picture_in_picture,
+                      color: Colors.white,
+                      size: 20,
                     ),
                   ),
                 ),
@@ -1175,7 +1315,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
           children: [
             Icon(
               lkConnected ? Icons.videocam_off_outlined : Icons.videocam_outlined,
-              color: context.accentColor.withOpacity(0.7),
+              color: _clsPurple.withOpacity(0.7),
               size: 48,
             ),
             const SizedBox(height: 10),
@@ -1183,18 +1323,15 @@ class _LiveClassScreenState extends State<LiveClassScreen>
               !_hasValidLiveKitToken
                   ? 'Chat only — video not configured'
                   : (_liveKit?.placeholderMessage ?? 'Connecting…'),
-              style: TextStyle(
-                  color: context.isDark
-                      ? context.greyColor
-                      : Colors.white.withOpacity(0.85),
-                  fontSize: 13),
+              style: const TextStyle(
+                  color: _clsMuted, fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 6),
             Text(
               _subject.toUpperCase(),
-              style: TextStyle(
-                color: context.accentColor,
+              style: const TextStyle(
+                color: _clsPurple,
                 fontSize: 11,
                 letterSpacing: 2,
                 fontWeight: FontWeight.w600,
@@ -1223,15 +1360,15 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     final entries = _raisedHands.entries.toList();
     return Container(
       width: double.infinity,
-      color: context.accentColor.withOpacity(0.12),
+      color: _clsPurple.withOpacity(0.14),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Raised hands (${entries.length})',
+          const Text(
+            'Raised hands',
             style: TextStyle(
-              color: context.accentColor,
+              color: _clsPurple,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1261,7 +1398,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     const emojis = ['👍', '❤️', '😂', '👏', '🎉'];
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      color: context.surfColor,
+      color: Colors.transparent,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: emojis
@@ -1276,8 +1413,9 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: context.accentColor.withOpacity(0.1),
+                      color: _clsSurface,
                       shape: BoxShape.circle,
+                      border: Border.all(color: _clsBorder),
                     ),
                     child: Text(e, style: const TextStyle(fontSize: 18)),
                   ),
@@ -1289,42 +1427,84 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     );
   }
 
-  Widget _controls(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        color: context.surfColor,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  Widget _controls(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Column(
           children: [
-            _btn(
-              context,
-              _micOn ? Icons.mic : Icons.mic_off,
-              'Mic',
-              _toggleMic,
-              enabled: widget.isTeacher || _micAllowed,
-            ),
-            _btn(
-              context,
-              _camOn ? Icons.videocam : Icons.videocam_off,
-              'Cam',
-              _toggleCam,
-              enabled: widget.isTeacher || _cameraAllowed,
-            ),
-            if (widget.isTeacher) ...[
-              _btn(
-                context,
-                _screenShareOn ? Icons.stop_screen_share : Icons.screen_share,
-                'Share',
-                _toggleScreenShare,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+              decoration: BoxDecoration(
+                color: _clsSurface,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: _clsBorder),
               ),
-            ],
-            if (!widget.isTeacher)
-              _btn(context, Icons.pan_tool_alt_outlined, 'Hand', _toggleHand),
-            _btn(
-              context,
-              Icons.call_end,
-              widget.isTeacher ? 'End' : 'Leave',
-              widget.isTeacher ? _endClass : () => Navigator.maybePop(context),
-              red: true,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _btn(
+                    context,
+                    _micOn ? Icons.mic : Icons.mic_off,
+                    'Mic',
+                    _toggleMic,
+                    enabled: widget.isTeacher || _micAllowed,
+                    active: _micOn,
+                  ),
+                  _btn(
+                    context,
+                    _camOn ? Icons.videocam : Icons.videocam_off,
+                    'Cam',
+                    _toggleCam,
+                    enabled: widget.isTeacher || _cameraAllowed,
+                    active: _camOn,
+                  ),
+                  if (widget.isTeacher)
+                    _btn(
+                      context,
+                      _screenShareOn
+                          ? Icons.stop_screen_share
+                          : Icons.screen_share,
+                      'Share',
+                      _toggleScreenShare,
+                      active: _screenShareOn,
+                    ),
+                  if (!widget.isTeacher)
+                    _btn(
+                      context,
+                      Icons.pan_tool_alt_outlined,
+                      'Hand',
+                      _toggleHand,
+                      active: _handRaised,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: _clsRed,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: widget.isTeacher
+                    ? _endClass
+                    : () => Navigator.maybePop(context),
+                icon: Icon(
+                  widget.isTeacher
+                      ? Icons.stop_circle_outlined
+                      : Icons.call_end,
+                  size: 20,
+                ),
+                label: Text(
+                  widget.isTeacher ? 'End Class' : 'Leave Class',
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
           ],
         ),
@@ -1335,52 +1515,50 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     IconData icon,
     String label,
     VoidCallback onTap, {
-    bool red = false,
     bool enabled = true,
+    bool active = false,
   }) =>
       GestureDetector(
-        onTap: enabled ? onTap : onTap,
+        onTap: onTap,
         child: Opacity(
           opacity: enabled ? 1 : 0.45,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 50,
+                height: 50,
                 decoration: BoxDecoration(
-                  color: red
-                      ? _liveRed
-                      : (context.isDark
-                          ? AppColors.surfaceLight
-                          : context.accentColor.withOpacity(0.12)),
+                  color: active ? _clsPurple : _clsBg,
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: active ? _clsPurple : _clsBorder,
+                    width: 1.5,
+                  ),
                 ),
                 child: Icon(
                   icon,
-                  color: red
-                      ? Colors.white
-                      : (context.isDark ? Colors.white : context.accentColor),
+                  color: active ? Colors.white : _clsText,
                   size: 22,
                 ),
               ),
               const SizedBox(height: 4),
               Text(label,
-                  style: TextStyle(color: context.greyColor, fontSize: 10)),
+                  style: const TextStyle(color: _clsMuted, fontSize: 10)),
             ],
           ),
         ),
       );
 
   Widget _tabBar(BuildContext context) => Container(
-        decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: context.borderColor))),
+        decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: _clsBorder))),
         child: TabBar(
           controller: _tabController,
-          labelColor: context.accentColor,
-          unselectedLabelColor: context.greyColor,
+          labelColor: _clsPurple,
+          unselectedLabelColor: _clsMuted,
           labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-          indicatorColor: context.accentColor,
+          indicatorColor: _clsPurple,
           indicatorWeight: 2,
           dividerColor: Colors.transparent,
           tabs: [
@@ -1398,7 +1576,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     if (_messages.isEmpty) {
       return Center(
         child: Text('No messages yet.',
-            style: TextStyle(color: context.greyColor)),
+            style: const TextStyle(color: _clsMuted)),
       );
     }
     return ListView.builder(
@@ -1412,7 +1590,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
             padding: const EdgeInsets.only(bottom: 8),
             child: Center(
               child: Text(m.text,
-                  style: TextStyle(color: context.greyColor, fontSize: 12)),
+                  style: const TextStyle(color: _clsMuted, fontSize: 12)),
             ),
           );
         }
@@ -1424,14 +1602,10 @@ class _LiveClassScreenState extends State<LiveClassScreen>
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             constraints: const BoxConstraints(maxWidth: 300),
             decoration: BoxDecoration(
-              color: isMe
-                  ? context.accentColor.withOpacity(0.12)
-                  : context.cardColor,
+              color: isMe ? _clsPurple.withOpacity(0.15) : _clsSurface,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isMe
-                    ? context.accentColor.withOpacity(0.3)
-                    : context.borderColor,
+                color: isMe ? _clsPurple.withOpacity(0.4) : _clsBorder,
               ),
             ),
             child: Column(
@@ -1440,12 +1614,12 @@ class _LiveClassScreenState extends State<LiveClassScreen>
               children: [
                 if (m.sender.isNotEmpty)
                   Text(m.sender,
-                      style: TextStyle(
-                          color: context.accentColor,
+                      style: const TextStyle(
+                          color: _clsPurple,
                           fontSize: 10,
                           fontWeight: FontWeight.bold)),
                 Text(m.text,
-                    style: TextStyle(color: context.textColor, fontSize: 14)),
+                    style: const TextStyle(color: _clsText, fontSize: 14)),
               ],
             ),
           ),
@@ -1463,12 +1637,12 @@ class _LiveClassScreenState extends State<LiveClassScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.people_outline, color: context.accentColor, size: 40),
+              Icon(Icons.people_outline, color: _clsPurple, size: 40),
               const SizedBox(height: 12),
               Text(
                 '$total in class',
-                style: TextStyle(
-                  color: context.textColor,
+                style: const TextStyle(
+                  color: _clsText,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1478,7 +1652,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 'You and your teacher are connected.\n'
                 'Use reactions or raise hand below.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: context.greyColor, fontSize: 13),
+                style: const TextStyle(color: _clsMuted, fontSize: 13),
               ),
             ],
           ),
@@ -1488,7 +1662,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
     if (_students.isEmpty) {
       return Center(
         child: Text('Waiting for students to join…',
-            style: TextStyle(color: context.greyColor)),
+            style: const TextStyle(color: _clsMuted)),
       );
     }
     return ListView.separated(
@@ -1504,9 +1678,9 @@ class _LiveClassScreenState extends State<LiveClassScreen>
         return Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: context.cardColor,
+            color: _clsSurface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.borderColor),
+            border: Border.all(color: _clsBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1533,17 +1707,17 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 children: [
                   CircleAvatar(
                     radius: 18,
-                    backgroundColor: context.accentColor.withOpacity(0.15),
+                    backgroundColor: _clsPurple.withOpacity(0.18),
                     child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                        style: TextStyle(
-                            color: context.accentColor,
+                        style: const TextStyle(
+                            color: _clsPurple,
                             fontWeight: FontWeight.bold)),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(name,
-                        style: TextStyle(
-                            color: context.textColor,
+                        style: const TextStyle(
+                            color: _clsText,
                             fontWeight: FontWeight.w600)),
                   ),
                 ],
@@ -1567,7 +1741,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                     FilledButton(
                       onPressed: sid.isEmpty ? null : () => _allowMic(sid),
                       style: FilledButton.styleFrom(
-                        backgroundColor: context.accentColor,
+                        backgroundColor: _clsPurple,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         minimumSize: const Size(0, 32),
                       ),
@@ -1587,7 +1761,7 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                     OutlinedButton(
                       onPressed: sid.isEmpty ? null : () => _allowCamera(sid),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: context.accentColor,
+                        foregroundColor: _clsPurple,
                         padding: const EdgeInsets.symmetric(horizontal: 10),
                         minimumSize: const Size(0, 32),
                       ),
@@ -1604,9 +1778,9 @@ class _LiveClassScreenState extends State<LiveClassScreen>
 
   Widget _inputBar(BuildContext context) => Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-        decoration: BoxDecoration(
-          color: context.bgColor,
-          border: Border(top: BorderSide(color: context.borderColor)),
+        decoration: const BoxDecoration(
+          color: _clsSurface,
+          border: Border(top: BorderSide(color: _clsBorder)),
         ),
         child: Row(
           children: [
@@ -1615,16 +1789,16 @@ class _LiveClassScreenState extends State<LiveClassScreen>
                 height: 40,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: context.surfColor,
+                  color: _clsBg,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: context.borderColor),
+                  border: Border.all(color: _clsBorder),
                 ),
                 child: TextField(
                   controller: _chatController,
-                  style: TextStyle(color: context.textColor, fontSize: 14),
-                  decoration: InputDecoration(
+                  style: const TextStyle(color: _clsText, fontSize: 14),
+                  decoration: const InputDecoration(
                     hintText: 'Send a message…',
-                    hintStyle: TextStyle(color: context.greyColor),
+                    hintStyle: TextStyle(color: _clsMuted),
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
@@ -1636,12 +1810,159 @@ class _LiveClassScreenState extends State<LiveClassScreen>
             const SizedBox(width: 8),
             GestureDetector(
               onTap: _sendChat,
-              child: Icon(Icons.send_rounded,
-                  color: context.accentColor, size: 22),
+              child: const Icon(Icons.send_rounded,
+                  color: _clsPurple, size: 22),
             ),
           ],
         ),
       );
+
+  // Pop-out video for students to see teacher
+  Widget _teacherPopout(BuildContext context) {
+    final remote = _liveKit?.primaryRemoteVideo;
+    if (remote == null) return const SizedBox.shrink();
+    
+    return Container(
+      width: 120,
+      height: 90,
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _clsPurple, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: VideoTrackRenderer(
+              remote,
+              key: ValueKey(remote.mediaStreamTrack.id ?? remote.hashCode),
+              fit: VideoViewFit.cover,
+            ),
+          ),
+          Positioned(
+            top: 4,
+            right: 4,
+            child: GestureDetector(
+              onTap: () => setState(() => _showTeacherPopout = false),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.close, color: Colors.white, size: 16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Pop-out videos for teacher to see students with cameras
+  Widget _studentPopoutsSlider(BuildContext context) {
+    if (_studentsWithCamera.isEmpty) return const SizedBox.shrink();
+    
+    return Container(
+      width: 300,
+      height: 120,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _clsPurple, width: 2),
+      ),
+      child: Column(
+        children: [
+          // Header with close button
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _clsPurple.withOpacity(0.2),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                topRight: Radius.circular(10),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Students on Camera (${_studentsWithCamera.length})',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => setState(() => _showStudentPopouts = false),
+                  child: const Icon(Icons.close, color: Colors.white, size: 16),
+                ),
+              ],
+            ),
+          ),
+          // Horizontal scrollable student videos
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(4),
+              itemCount: _studentsWithCamera.length,
+              itemBuilder: (context, index) {
+                final studentId = _studentsWithCamera[index];
+                return Container(
+                  width: 80,
+                  height: 80,
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: Icon(
+                          Icons.person,
+                          color: Colors.grey[400],
+                          size: 32,
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 2,
+                        left: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'S${index + 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 8,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ChatMsg {

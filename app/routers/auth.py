@@ -74,6 +74,8 @@ class SignupStartRequest(BaseModel):
     subjects: Optional[list[str]] = None
     business_name: Optional[str] = None
     categories: Optional[list[str]] = None
+    country: Optional[str] = None
+    language: Optional[str] = None  # en | fr | pt | ar — drives site translation
 
 
 class SignupVerifyRequest(BaseModel):
@@ -118,6 +120,8 @@ class UserInfo(BaseModel):
     vendor_categories: Optional[list] = None
     vendor_whatsapp: Optional[str] = None
     kyc_completed: Optional[bool] = None
+    country: Optional[str] = None
+    language: Optional[str] = None
     age_group: Optional[str] = None
     grade_level: Optional[str] = None
     parent_email: Optional[str] = None
@@ -154,6 +158,8 @@ async def _build_user_info(user: User, db: AsyncSession) -> UserInfo:
             role=role,
             profile_picture=getattr(user, "profile_picture", None),
             phone=getattr(user, "phone", None),
+            country=getattr(user, "country", None),
+            language=getattr(user, "language", None),
             school_id=str(user.school_id) if getattr(user, "school_id", None) else None,
         )
     except Exception:
@@ -504,6 +510,8 @@ async def signup_start(payload: SignupStartRequest, db: AsyncSession = Depends(g
         "subjects": payload.subjects or [],
         "business_name": (payload.business_name or "").strip() or None,
         "categories": payload.categories or [],
+        "country": (payload.country or "").strip() or None,
+        "language": (payload.language or "").strip().lower() or None,
     }
     await store_pending_signup(email, pending)
     try:
@@ -559,6 +567,8 @@ async def signup_verify(payload: SignupVerifyRequest, db: AsyncSession = Depends
         role=role_map.get(role, UserRole.student),
         is_verified=True,
         phone=pending.get("phone"),
+        country=pending.get("country"),
+        language=pending.get("language"),
     )
     db.add(user)
     await db.flush()
@@ -730,8 +740,16 @@ async def _login_user(payload: LoginRequest, db: AsyncSession):
             phone = phone_raw
         user = await _find_user_by_phone(db, phone)
 
-    if not user or not user.hashed_password or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not user or not user.hashed_password:
+        raise HTTPException(
+            status_code=401,
+            detail="No account found for this email. Please sign up first.",
+        )
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect password for this account. Try again or reset your password.",
+        )
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; script-src-attr 'unsafe-inline'; connect-src https://scholaxia1.onrender.com http://127.0.0.1:* ws: wss:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: blob:; media-src 'self' blob: https:; frame-src 'self' http://127.0.0.1:* https://www.youtube.com https://www.youtube-nocookie.com; worker-src blob:;" />
+  <title>Scholaxia — Teacher Studio</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/scholaxia-purple.css" />
+  <link rel="stylesheet" href="css/teacher.css" />
+  <link rel="stylesheet" href="css/dark-mode.css" />
+</head>
+<body class="teacher-theme">
+
+<!-- ═══════════════ AUTH SCREEN ═══════════════ -->
+<div id="auth-screen" class="teacher-auth-page hidden">
+  <div class="teacher-auth-layout">
+    <div class="teacher-auth-hero">
+      <div class="teacher-auth-hero-inner">
+        <img src="assets/logo.png" alt="Scholaxia" class="teacher-auth-hero-logo" />
+        <h1>Teacher studio</h1>
+        <p class="teacher-auth-lead">Host live classes, share materials, publish exams &amp; grade your students — all in one place.</p>
+        <ul class="teacher-auth-features">
+          <li>&#127909; Go live with video, mic &amp; whiteboard</li>
+          <li>&#128218; Upload PDFs, worksheets &amp; video links</li>
+          <li>&#128221; Publish timed exams from a JSON file</li>
+          <li>&#128227; Send announcements to every student</li>
+        </ul>
+      </div>
+    </div>
+    <div class="teacher-auth-panel">
+      <img src="assets/logo.png" alt="" class="teacher-auth-logo" />
+      <span class="teacher-auth-eyebrow">Teacher sign in</span>
+      <h2>Welcome back</h2>
+      <form id="teacher-login-form">
+        <label id="teacher-name-label" for="teacher-login-email">Email</label>
+        <input type="email" id="teacher-login-email" required placeholder="you@school.com" autocomplete="email" />
+        <label id="teacher-email-label" for="teacher-login-password">Password</label>
+        <div class="sg-form-row">
+          <input type="password" id="teacher-login-password" required placeholder="Your password" autocomplete="current-password" />
+          <button type="button" id="teacher-pw-toggle" class="btn-sm">Show</button>
+        </div>
+        <p class="error-msg" id="teacher-login-error"></p>
+        <button type="submit" id="teacher-login-btn" class="teacher-login-btn">Log in</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP SCREEN ═══════════════ -->
+<div id="app-screen" class="app-shell app-shell-sidebar teacher-shell hidden">
+
+  <div class="sidebar-wrap" id="sidebar-wrap">
+    <aside class="app-sidebar" aria-label="Teacher navigation">
+      <a href="#" class="sidebar-brand" onclick="showTeacherPage('live'); return false;">
+        <img src="assets/logo.png" alt="" class="brand-logo sidebar-brand-logo" />
+        <span class="sidebar-brand-text">teacher</span>
+      </a>
+
+      <nav class="sidebar-nav" id="teacher-topnav" aria-label="Teacher pages">
+        <button type="button" class="nav-item topnav-btn is-active" data-page="live"><span class="nav-icon" aria-hidden="true">&#127909;</span><span class="nav-label">Live Classes</span></button>
+        <button type="button" class="nav-item topnav-btn" data-page="materials"><span class="nav-icon" aria-hidden="true">&#128218;</span><span class="nav-label">Materials</span></button>
+        <button type="button" class="nav-item topnav-btn" data-page="exams"><span class="nav-icon" aria-hidden="true">&#128221;</span><span class="nav-label">Exams</span></button>
+        <button type="button" class="nav-item topnav-btn" data-page="students"><span class="nav-icon" aria-hidden="true">&#128101;</span><span class="nav-label">Students</span></button>
+        <button type="button" class="nav-item topnav-btn" data-page="community"><span class="nav-icon" aria-hidden="true">&#128227;</span><span class="nav-label">Community</span></button>
+        <button type="button" class="nav-item topnav-btn" data-page="ai"><span class="nav-icon" aria-hidden="true">&#10022;</span><span class="nav-label">Teacher AI</span></button>
+      </nav>
+
+      <div class="side-foot" style="margin-top:auto;padding:16px;">
+        <strong style="font-size:0.9rem">Teacher studio</strong>
+        <p style="margin:4px 0 12px;font-size:0.8rem;opacity:0.7">Host live, share notes, publish exams &amp; grade work.</p>
+        <button type="button" id="teacher-logout-btn" class="btn-sm">Log out</button>
+      </div>
+    </aside>
+    <button type="button" class="sidebar-edge-toggle" id="sidebar-toggle" aria-label="Hide menu">&#8249;</button>
+  </div>
+
+  <main class="teacher-main" style="flex:1;min-width:0;">
+    <header class="teacher-topbar">
+      <div class="teacher-topbar-brand">
+        <img src="assets/logo.png" alt="" class="teacher-topbar-logo" />
+        <span class="teacher-topbar-label" id="teacher-topbar-label">Scholaxia Teacher Studio</span>
+      </div>
+      <div class="topbar-user">
+        <span id="teacher-name-label"></span>
+        <span id="teacher-user-avatar" class="user-avatar">T</span>
+      </div>
+    </header>
+
+    <!-- ─────────── LIVE CLASSES ─────────── -->
+    <section id="page-live" class="teacher-page active">
+      <div class="teacher-page-hero">
+        <h2>&#127909; Host a live class</h2>
+        <p>Schedule ahead or go live instantly. Students join with the class code.</p>
+      </div>
+
+      <div class="host-card">
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="host-title">Class title</label>
+            <input type="text" id="host-title" placeholder="e.g. Algebra — Solving equations" />
+          </div>
+          <div class="form-row">
+            <label for="host-subject">Subject</label>
+            <input type="text" id="host-subject" list="host-subject-list" placeholder="e.g. Mathematics" />
+            <datalist id="host-subject-list"></datalist>
+          </div>
+          <div class="form-row">
+            <label for="host-date">Date</label>
+            <input type="date" id="host-date" />
+          </div>
+          <div class="form-row">
+            <label for="host-start">Start time</label>
+            <input type="time" id="host-start" />
+          </div>
+          <div class="form-row">
+            <label for="host-end">End time (optional)</label>
+            <input type="time" id="host-end" />
+          </div>
+          <div class="form-row">
+            <label for="host-duration">Duration (minutes)</label>
+            <input type="number" id="host-duration" value="60" min="15" max="240" />
+          </div>
+        </div>
+
+        <div class="host-visibility-row" role="radiogroup" aria-label="Who can join">
+          <span class="host-visibility-label">Who can join?</span>
+          <div class="host-vis-grid">
+            <label class="host-vis-option is-selected">
+              <input type="radio" name="host-visibility" value="public" checked onchange="onHostVisibilityChange()" />
+              <span class="host-vis-icon" aria-hidden="true">&#127760;</span>
+              <span class="host-vis-text"><strong>Everyone</strong><small>Any student joins with the class code</small></span>
+            </label>
+            <label class="host-vis-option">
+              <input type="radio" name="host-visibility" value="private" onchange="onHostVisibilityChange()" />
+              <span class="host-vis-icon" aria-hidden="true">&#128274;</span>
+              <span class="host-vis-text"><strong>Specific students</strong><small>Only invited students (optional) + code</small></span>
+            </label>
+            <label class="host-vis-option">
+              <input type="radio" name="host-visibility" value="school_group" onchange="onHostVisibilityChange()" />
+              <span class="host-vis-icon" aria-hidden="true">&#127979;</span>
+              <span class="host-vis-text"><strong>A school group</strong><small>Whole class group joins together</small></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="host-extra-panel hidden" id="host-private-wrap">
+          <span class="sg-field-label">Invited students</span>
+          <div class="student-chip-picker" id="host-invited-picker"></div>
+          <span class="sg-selected-count" id="host-selected-count">Tap to select</span>
+          <select id="host-invited-students" multiple class="hidden"></select>
+        </div>
+
+        <div class="host-extra-panel hidden" id="host-school-wrap">
+          <div class="form-row">
+            <label for="host-school-group">School group</label>
+            <select id="host-school-group"></select>
+          </div>
+        </div>
+
+        <p class="error-msg" id="host-error"></p>
+        <div class="host-actions">
+          <button type="button" id="host-schedule-btn" class="btn-secondary">Schedule class</button>
+          <button type="button" id="host-live-btn" class="btn-action teacher-go-live">&#9654; Go live now</button>
+        </div>
+
+        <div id="host-code-share" class="teacher-code-share" hidden>
+          <div class="teacher-code-share-head">
+            <span class="teacher-code-icon">&#128273;</span>
+            <div>
+              <h4 id="host-code-title">Class is live — share this code</h4>
+              <p id="host-code-hint" class="teacher-code-hint">Students paste this code to join.</p>
+            </div>
+          </div>
+          <div class="teacher-code-row">
+            <code id="host-code-value" class="teacher-code-value">—</code>
+            <button type="button" id="host-code-copy-btn" class="btn-action btn-sm" onclick="copyTeacherHostCode()">Copy code</button>
+            <button type="button" id="host-code-share-btn" class="btn-secondary btn-sm" onclick="shareTeacherHostCode()">Copy invite text</button>
+          </div>
+          <div id="host-code-open-wrap" hidden>
+            <button type="button" class="btn-action teacher-go-live" style="width:100%;margin-top:12px" onclick="openPendingHostClassroom()">&#9654; Open classroom now</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="teacher-card-head">
+        <div>
+          <h3>&#128249; Your classes</h3>
+          <p class="teacher-card-sub">Start, enter or end your sessions.</p>
+        </div>
+        <div class="teacher-toolbar">
+          <select id="live-filter">
+            <option value="">All</option>
+            <option value="live">Live now</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="ended">Ended</option>
+          </select>
+          <button type="button" id="live-refresh-btn" class="btn-sm">Refresh</button>
+        </div>
+      </div>
+      <div id="live-table"><div class="loading">Loading…</div></div>
+
+      <div class="teacher-card-head">
+        <div>
+          <h3>&#127970; School groups</h3>
+          <p class="teacher-card-sub">Group students per school for quick whole-class invites.</p>
+        </div>
+      </div>
+
+      <div class="sg-premium-card">
+        <div class="sg-form-row">
+          <div class="sg-field">
+            <label class="sg-field-label" for="sg-school">School name</label>
+            <input type="text" id="sg-school" class="sg-input" placeholder="e.g. Chrisland Schools" />
+          </div>
+          <div class="sg-field">
+            <label class="sg-field-label" for="sg-name">Group name</label>
+            <input type="text" id="sg-name" class="sg-input" placeholder="e.g. SS2 Physics — Set A" />
+          </div>
+        </div>
+        <div class="sg-students-block">
+          <div class="sg-students-head">
+            <span class="sg-field-label">Add students</span>
+            <span class="sg-selected-count" id="sg-selected-count">Tap to select</span>
+          </div>
+          <div class="student-chip-picker" id="sg-students-picker"></div>
+        </div>
+        <p class="error-msg" id="sg-create-error"></p>
+        <button type="button" id="sg-create-btn" class="btn-action">Create group</button>
+      </div>
+
+      <div id="school-groups-list" class="sg-list-section"></div>
+    </section>
+
+    <!-- ─────────── MATERIALS ─────────── -->
+    <section id="page-materials" class="teacher-page">
+      <div class="teacher-page-hero">
+        <h2>&#128218; Study materials</h2>
+        <p>Upload PDFs, worksheets, images or video links for your students.</p>
+      </div>
+
+      <div class="teacher-card-head">
+        <div>
+          <h3>Library</h3>
+          <p class="teacher-card-sub">Your uploads plus Scholaxia library books.</p>
+        </div>
+        <div class="teacher-toolbar">
+          <select id="materials-subject-filter"></select>
+          <select id="materials-type-filter">
+            <option value="">All types</option>
+            <option value="pdf">PDF</option>
+            <option value="doc">Document</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="link">Link</option>
+          </select>
+          <button type="button" id="materials-refresh-btn" class="btn-sm">Refresh</button>
+          <button type="button" id="open-material-modal-btn" class="btn-action">+ Add material</button>
+        </div>
+      </div>
+      <div id="materials-stats" class="materials-stats"></div>
+      <div id="materials-list"><div class="loading">Loading materials…</div></div>
+    </section>
+
+    <!-- ─────────── EXAMS ─────────── -->
+    <section id="page-exams" class="teacher-page">
+      <div class="teacher-page-hero">
+        <h2>&#128221; Scholaxia exams</h2>
+        <p>Publish a timed multiple-choice exam from a JSON file — students get instant scores.</p>
+      </div>
+
+      <div class="host-card">
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="texam-title">Exam title</label>
+            <input type="text" id="texam-title" placeholder="e.g. Mathematics — Week 4 test" />
+          </div>
+          <div class="form-row">
+            <label for="texam-subject">Subject</label>
+            <input type="text" id="texam-subject" list="texam-subject-list" placeholder="e.g. Mathematics" />
+            <datalist id="texam-subject-list"></datalist>
+          </div>
+          <div class="form-row">
+            <label for="texam-duration">Duration (minutes)</label>
+            <input type="number" id="texam-duration" value="30" min="5" max="180" />
+          </div>
+          <div class="form-row">
+            <label for="texam-start">Opens at</label>
+            <input type="datetime-local" id="texam-start" />
+          </div>
+          <div class="form-row">
+            <label for="texam-end">Closes at</label>
+            <input type="datetime-local" id="texam-end" />
+          </div>
+        </div>
+
+        <div class="teacher-exam-template-row">
+          <span class="teacher-exam-file-hint" id="texam-file-hint">No file chosen</span>
+          <label class="btn-sm" for="texam-file">Choose JSON file</label>
+          <input type="file" id="texam-file" accept=".json,application/json" class="hidden" />
+          <button type="button" id="texam-download-template" class="btn-sm">Download template</button>
+        </div>
+
+        <p class="error-msg" id="texam-error"></p>
+        <div class="host-actions">
+          <button type="button" id="texam-publish-btn" class="btn-action">Publish exam</button>
+        </div>
+      </div>
+
+      <div class="teacher-card-head">
+        <div>
+          <h3>Published exams</h3>
+          <p class="teacher-card-sub">View scores per exam.</p>
+        </div>
+      </div>
+      <div id="teacher-exam-list"><div class="loading">Loading exams…</div></div>
+    </section>
+
+    <!-- ─────────── STUDENTS ─────────── -->
+    <section id="page-students" class="teacher-page">
+      <div class="teacher-page-hero">
+        <h2>&#128101; My students</h2>
+        <p>Students assigned to you by admin — host a class for any of them in one tap.</p>
+      </div>
+      <div class="teacher-card-head">
+        <div>
+          <h3>Assigned students</h3>
+          <p class="teacher-card-sub">Requests approved by admin appear here.</p>
+        </div>
+        <div class="teacher-toolbar">
+          <button type="button" id="students-refresh-btn" class="btn-sm">Refresh</button>
+        </div>
+      </div>
+      <div id="students-table"><div class="loading">Loading…</div></div>
+    </section>
+
+    <!-- ─────────── COMMUNITY ─────────── -->
+    <section id="page-community" class="teacher-page">
+      <div class="teacher-page-hero">
+        <h2>&#128227; Announcements</h2>
+        <p>Message all your students — text or voice. They get a push notification.</p>
+      </div>
+
+      <div class="community-compose-card">
+        <div class="community-compose-header">
+          <span class="community-compose-icon">&#9997;&#65039;</span>
+          <span>New announcement</span>
+        </div>
+        <textarea id="teacher-announce-input" class="announce-compose-input" rows="3" placeholder="Write an announcement for your students…"></textarea>
+        <div class="voice-controls">
+          <button type="button" id="teacher-voice-btn" class="btn-voice-record">&#127908; Tap to record voice</button>
+          <span id="teacher-voice-status" class="voice-status"></span>
+        </div>
+        <div id="teacher-voice-preview" class="voice-preview hidden"></div>
+        <audio id="teacher-voice-playback" controls class="hidden"></audio>
+        <button type="button" id="teacher-voice-delete" class="btn-sm hidden">Delete recording</button>
+        <p class="error-msg" id="teacher-announce-error"></p>
+        <div class="announce-compose-footer">
+          <button type="button" id="teacher-announce-send" class="btn-action">Send to all students</button>
+        </div>
+      </div>
+
+      <h3 class="community-feed-title">Sent announcements</h3>
+      <div id="teacher-announce-list"><div class="loading">Loading…</div></div>
+    </section>
+
+    <!-- ─────────── TEACHER AI ─────────── -->
+    <section id="page-ai" class="teacher-page">
+      <div class="teacher-page-hero">
+        <h2>&#10022; Teacher AI</h2>
+        <p>Generate lesson notes, questions, schemes of work and more.</p>
+      </div>
+
+      <div class="teacher-ai-card">
+        <div class="teacher-ai-icon">&#10022;</div>
+        <div class="teacher-ai-fields">
+          <div class="form-grid">
+            <div class="form-row">
+              <label for="teacher-ai-task">Task</label>
+              <select id="teacher-ai-task">
+                <option value="lesson_notes">Lesson notes</option>
+                <option value="questions">Questions</option>
+                <option value="scheme">Scheme of work</option>
+                <option value="explanation">Explain a topic</option>
+                <option value="assignment">Assignment</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="teacher-ai-subject">Subject</label>
+              <input type="text" id="teacher-ai-subject" list="teacher-ai-subject-list" placeholder="e.g. Biology" />
+              <datalist id="teacher-ai-subject-list"></datalist>
+            </div>
+            <div class="form-row">
+              <label for="teacher-ai-level">Level</label>
+              <input type="text" id="teacher-ai-level" value="SS2" />
+            </div>
+          </div>
+          <label class="teacher-ai-prompt-label" for="teacher-ai-details">Details</label>
+          <textarea id="teacher-ai-details" class="teacher-ai-prompt" rows="4" placeholder="e.g. Week 3 topic: Genetics — Mendel's laws with examples"></textarea>
+          <div class="ai-prompt-chips">
+            <button type="button" class="ai-prompt-chip" data-task="lesson_notes" data-prompt="Week 1 topic: Cell structure — objectives, detailed notes and 3 examples">Lesson notes</button>
+            <button type="button" class="ai-prompt-chip" data-task="questions" data-prompt="10 multiple-choice questions with answers on photosynthesis">Generate questions</button>
+            <button type="button" class="ai-prompt-chip" data-task="scheme" data-prompt="12-week scheme of work for SS2 Chemistry">Scheme of work</button>
+          </div>
+          <p class="error-msg" id="teacher-ai-error"></p>
+          <div class="teacher-ai-footnote">
+            <button type="button" id="teacher-ai-ask" class="btn-action">Ask Teacher AI</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="teacher-ai-result-wrap" class="exam-results-panel hidden">
+        <div id="teacher-ai-result" class="teacher-ai-result"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Live students (mic permissions) modal -->
+  <div id="live-students-modal" class="teacher-modal hidden">
+    <div class="teacher-modal-box">
+      <div class="teacher-modal-head">
+        <h3 id="live-students-title">Students in class</h3>
+        <button type="button" class="btn-sm" onclick="closeLiveStudentsModal()">Close</button>
+      </div>
+      <div id="live-students-list" class="live-students-list"><div class="loading">Loading…</div></div>
+    </div>
+  </div>
+
+  <!-- Material upload modal -->
+  <div id="material-modal" class="teacher-modal hidden">
+    <div class="teacher-modal-box">
+      <div class="teacher-modal-head">
+        <h3>Add material</h3>
+        <button type="button" id="material-modal-close" class="btn-sm">&#10005;</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-row">
+          <label for="mat-title">Title</label>
+          <input type="text" id="mat-title" placeholder="e.g. Week 4 worksheet" />
+        </div>
+        <div class="form-row">
+          <label for="mat-subject">Subject</label>
+          <input type="text" id="mat-subject" list="mat-subject-list" placeholder="e.g. Mathematics" />
+          <datalist id="mat-subject-list"></datalist>
+        </div>
+        <div class="form-row">
+          <label for="mat-type">Type</label>
+          <select id="mat-type" onchange="toggleMaterialInputs()">
+            <option value="pdf">PDF</option>
+            <option value="doc">Document</option>
+            <option value="image">Image</option>
+            <option value="video">Video</option>
+            <option value="link">Link</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="mat-access">Access</label>
+          <select id="mat-access" onchange="toggleMaterialPrice()">
+            <option value="free">Free</option>
+            <option value="paid">Paid</option>
+          </select>
+        </div>
+        <div class="form-row" id="mat-price-row">
+          <label for="mat-price">Price (₦)</label>
+          <input type="number" id="mat-price" value="500" min="100" />
+        </div>
+      </div>
+      <label for="mat-desc">Description</label>
+      <textarea id="mat-desc" rows="2" placeholder="Short description (optional)"></textarea>
+      <div class="mat-file-wrap">
+        <label for="mat-file">File</label>
+        <input type="file" id="mat-file" />
+      </div>
+      <div class="mat-link-wrap">
+        <label for="mat-url">URL</label>
+        <input type="url" id="mat-url" placeholder="https://…" />
+      </div>
+      <p class="error-msg" id="mat-error"></p>
+      <div class="host-actions">
+        <button type="button" id="material-modal-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="mat-save-btn" class="btn-action">Save material</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/teacher-api.js"></script>
+<script src="js/voice-recorder.js"></script>
+<script src="js/teacher-notifications.js"></script>
+<script src="js/teacher.js"></script>
+</body>
+</html>

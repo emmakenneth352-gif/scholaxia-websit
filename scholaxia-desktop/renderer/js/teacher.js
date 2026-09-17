@@ -28,8 +28,11 @@ window.onload = function () {
 };
 
 function updateTeacherTopbar(page) {
-  var title = document.getElementById("teacher-page-title");
-  if (title) title.textContent = TEACHER_PAGE_TITLES[page] || page;
+  var label = document.getElementById("teacher-topbar-label");
+  if (!label) return;
+  var base = "Scholaxia Teacher Studio";
+  var t = TEACHER_PAGE_TITLES[page];
+  label.textContent = t ? base + " — " + t : base;
 }
 
 function initTeacherSidebar() {
@@ -137,7 +140,8 @@ async function teacherLogin(ev) {
 
 function teacherLogout() {
   clearTeacherSession();
-  window.location.reload();
+  // Return to the general desktop auth screen (role select + login), not the stale teacher page.
+  window.location.href = "index.html#auth";
 }
 
 function showTeacherPage(page) {
@@ -190,13 +194,16 @@ function getSchedulePayload(goLiveNow) {
   };
 
   if (visibility === "private") {
-    var invited = getSelectedStudentIds("host-invited-picker");
-    if (!invited.length) {
-      var sel = document.getElementById("host-invited-students");
-      invited = sel ? Array.from(sel.selectedOptions).map(function (o) { return o.value; }) : [];
+    // Invited students/emails (kids are invited by email and join from their
+    // Live Class list — no code needed). Other students still join by code.
+    var ids = [];
+    var hidden = document.getElementById("host-invited-students");
+    if (hidden) {
+      Array.prototype.forEach.call(hidden.options || [], function (o) {
+        if (o.selected && o.value) ids.push(o.value);
+      });
     }
-    if (!invited.length) throw new Error("Select at least one student for a private class.");
-    body.invited_student_ids = invited;
+    if (ids.length) body.invited_student_ids = ids;
   }
   if (visibility === "school_group") {
     var gid = document.getElementById("host-school-group").value;
@@ -242,6 +249,78 @@ function setHostButtonsBusy(busy, goLiveNow) {
 
 var _teacherHostBusy = false;
 
+var _pendingHostClass = null;
+
+function showTeacherHostCode(created, body, goLiveNow) {
+  var code = (created && created.join_code) || "";
+  if (!code) return;
+  _pendingHostClass = {
+    id: created.id,
+    title: body.title,
+    subject: body.subject,
+    end: created.end_time,
+  };
+  var box = document.getElementById("host-code-share");
+  var value = document.getElementById("host-code-value");
+  var title = document.getElementById("host-code-title");
+  var hint = document.getElementById("host-code-hint");
+  var openWrap = document.getElementById("host-code-open-wrap");
+  if (value) value.textContent = code;
+  if (title) title.textContent = goLiveNow ? "Class is live — share this code" : "Class scheduled — share this code";
+  if (hint) hint.textContent = "Students open Join Live, paste this code, and they're in. It also lands in their Access Code tab automatically.";
+  if (openWrap) openWrap.hidden = !goLiveNow;
+  if (box) {
+    box.hidden = false;
+    try { box.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+  }
+}
+
+function copyTeacherHostCode() {
+  var code = ((document.getElementById("host-code-value") || {}).textContent || "").trim();
+  if (!code) return;
+  function done(btn) {
+    if (!btn) return;
+    var prev = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(function () { btn.textContent = prev; }, 1600);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(function () {
+      done(document.getElementById("host-code-copy-btn"));
+    }).catch(function () {
+      prompt("Copy this access code:", code);
+    });
+  } else {
+    prompt("Copy this access code:", code);
+  }
+}
+
+function shareTeacherHostCode() {
+  var code = ((document.getElementById("host-code-value") || {}).textContent || "").trim();
+  if (!code) return;
+  var text = "Join my Scholaxia live class with this access code: " + code;
+  if (navigator.share) {
+    navigator.share({ title: "Scholaxia class code", text: text }).catch(function () {});
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function () {
+      var btn = document.getElementById("host-code-share-btn");
+      if (btn) {
+        btn.textContent = "Copied!";
+        setTimeout(function () { btn.textContent = "Copy invite text"; }, 1600);
+      }
+    }).catch(function () {
+      prompt("Copy this invite:", text);
+    });
+  } else {
+    prompt("Copy this invite:", text);
+  }
+}
+
+function openPendingHostClassroom() {
+  if (!_pendingHostClass || !_pendingHostClass.id) return;
+  teacherEnterClassroom(_pendingHostClass.id, _pendingHostClass.title, _pendingHostClass.subject, _pendingHostClass.end, true);
+}
+
 async function teacherHostClass(goLiveNow) {
   if (_teacherHostBusy) return;
   _teacherHostBusy = true;
@@ -261,24 +340,19 @@ async function teacherHostClass(goLiveNow) {
     var titleInput = document.getElementById("host-title");
     if (titleInput) titleInput.value = "";
     await loadTeacherLive();
+    if (created.join_code) {
+      showTeacherHostCode(created, body, goLiveNow);
+      return;
+    }
     if (goLiveNow && created.id) {
       var visMsg = body.visibility === "public"
         ? "All students on Scholaxia were notified."
-        : body.visibility === "private"
-          ? "Invited students were notified."
-          : "Students in your school group were notified.";
-      var code = created.join_code || "";
-      var codeMsg = code ? " Access code: " + code + " (sent to students' Access Code tab)." : "";
-      if (confirm("Class is live!" + codeMsg + " " + visMsg + " Open classroom?")) {
+        : "Students were notified.";
+      if (confirm("Class is live! " + visMsg + " Open classroom?")) {
         teacherEnterClassroom(created.id, body.title, body.subject, created.end_time, true);
       }
     } else {
-      var schedMsg = body.visibility === "public"
-        ? "All students will see this on their dashboard when it goes live."
-        : body.visibility === "private"
-          ? "Only invited students will see this class."
-          : "Only your school group will see this class.";
-      alert("Class scheduled. " + schedMsg);
+      alert("Class scheduled.");
     }
   } catch (e) {
     var msg = (e && e.message) ? e.message : "Could not host class. Try again.";
@@ -438,6 +512,10 @@ function onHostVisibilityChange() {
   var school = document.getElementById("host-school-wrap");
   if (priv) priv.classList.toggle("hidden", vis !== "private");
   if (school) school.classList.toggle("hidden", vis !== "school_group");
+  document.querySelectorAll(".host-vis-option").forEach(function (opt) {
+    var input = opt.querySelector('input[name="host-visibility"]');
+    opt.classList.toggle("is-selected", !!(input && input.checked));
+  });
 }
 
 async function loadHostStudentPickers() {

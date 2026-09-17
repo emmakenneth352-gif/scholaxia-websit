@@ -1,82 +1,84 @@
-/** Class / Holiday promo packages — Paystack (matches mobile ClassPackagesScreen). */
+/** Live class subscription packages — Paystack (prices from server catalog). */
 
 var CLASS_PACKAGE_SECTIONS = {
   student: [
     {
-      title: "Scholaxia Holiday Promo Classes",
+      title: "Single & Exam Prep",
       plans: [
         {
-          id: "holiday_ss_science",
-          name: "Senior Secondary SS 1–3 · Science",
-          price: 11000,
-          billing: "₦11,000 · 5 live sessions weekly",
-          features: ["Maths", "English", "Physics", "Chemistry", "Biology"],
+          id: "single_class",
+          name: "Special Single Class",
+          price: 5000,
+          billing: "₦5,000 · 1 session",
+          features: ["1 live session", "One-on-one tutor", "Class notes", "Questions and answers"],
         },
         {
-          id: "holiday_ss_art",
-          name: "Senior Secondary SS 1–3 · Art",
-          price: 11000,
-          billing: "₦11,000 · 5 live sessions weekly",
-          features: ["Maths", "English", "Literature", "Government", "CRS/IRS"],
+          id: "jamb_prep",
+          name: "JAMB Prep",
+          price: 10000,
+          billing: "₦10,000 monthly · 4 sessions weekly",
+          features: ["4 subjects", "4 sessions weekly", "JAMB past questions & CBT drills", "Progress tracking"],
         },
         {
-          id: "holiday_ss_commercial",
-          name: "Senior Secondary SS 1–3 · Commercial",
-          price: 11000,
-          billing: "₦11,000 · 5 live sessions weekly",
-          features: ["Maths", "English", "Accounting", "Economics", "Commerce"],
-        },
-        {
-          id: "holiday_jss",
-          name: "Junior Secondary JSS 1–3",
-          price: 10500,
-          billing: "₦10,500 · 5 live sessions weekly",
-          features: ["Maths", "English", "Basic Science", "Civic", "Computer"],
+          id: "jamb_waec_neco_prep",
+          name: "JAMB + WAEC/NECO Prep",
+          price: 15000,
+          billing: "₦15,000 monthly · 5 sessions weekly",
+          features: ["6 subjects", "5 sessions weekly", "JAMB, WAEC & NECO practice", "Mock exams"],
         },
       ],
     },
     {
-      title: "One-on-One Classes",
+      title: "Private & School Lessons",
       plans: [
         {
-          id: "secondary_standard",
-          name: "High School (JSS & SSS) One-on-One Classes",
-          price: 50000,
-          billing: "₦50,000",
-          features: ["3 subjects of choice", "One-on-one with tutor", "Topic-based assessments", "Unlimited Sia AI Tutor"],
+          id: "private_lesson",
+          name: "Private Lesson (One-on-One)",
+          price: 25000,
+          billing: "₦25,000 monthly · 4 sessions weekly",
+          features: ["4 subjects", "4 sessions weekly", "Dedicated one-on-one tutor", "Unlimited Sia AI Tutor"],
+        },
+        {
+          id: "primary_school",
+          name: "Primary School",
+          price: 25000,
+          billing: "₦25,000 monthly · 3 sessions weekly",
+          features: ["3 subjects", "3 sessions weekly", "Mathematics, English & Phonics", "Parent feedback"],
+        },
+        {
+          id: "nursery_school",
+          name: "Nursery School",
+          price: 25000,
+          billing: "₦25,000 monthly · 2 sessions weekly",
+          features: ["2 subjects", "2 sessions weekly", "Reading & Phonics", "Parent feedback"],
         },
       ],
     },
   ],
   kind: [
     {
-      title: "Holiday Classes",
+      title: "Kids Live Classes",
       plans: [
         {
-          id: "holiday_primary",
-          name: "Primary Holiday Classes",
-          price: 15000,
-          billing: "₦15,000 · 5 live sessions weekly",
-          features: ["Mathematics", "English language", "Phonics", "Moral values"],
-        },
-      ],
-    },
-    {
-      title: "One-on-One Classes",
-      plans: [
-        {
-          id: "nursery_standard",
-          name: "Nursery One-on-One Classes",
-          price: 50000,
-          billing: "₦50,000 / Month · 4 sessions weekly",
-          features: ["Reading", "Phonics", "Counting", "Fun games", "Parent feedback"],
+          id: "single_class",
+          name: "Special Single Class",
+          price: 5000,
+          billing: "₦5,000 · 1 session",
+          features: ["1 live session", "One-on-one tutor", "Class notes"],
         },
         {
-          id: "primary_standard",
-          name: "Primary School One-on-One Classes",
-          price: 55000,
-          billing: "₦55,000 / Monthly",
-          features: ["Mathematics", "Phonics", "English", "Homework", "Progress report"],
+          id: "nursery_school",
+          name: "Nursery School",
+          price: 25000,
+          billing: "₦25,000 monthly · 2 sessions weekly",
+          features: ["2 subjects", "2 sessions weekly", "Reading & Phonics", "Counting & fun games", "Parent feedback"],
+        },
+        {
+          id: "primary_school",
+          name: "Primary School",
+          price: 25000,
+          billing: "₦25,000 monthly · 3 sessions weekly",
+          features: ["3 subjects", "3 sessions weekly", "Mathematics, English & Phonics", "Homework help", "Parent feedback"],
         },
       ],
     },
@@ -98,13 +100,13 @@ function renderClassPackages(rootId, opts) {
   var sections = kidsOnly ? CLASS_PACKAGE_SECTIONS.kind : CLASS_PACKAGE_SECTIONS.student;
   if (holidayOnly) {
     sections = sections.filter(function (s) {
-      return /holiday/i.test(s.title);
+      return /single|exam|private|school/i.test(s.title);
     });
   }
 
   var html =
     '<div class="sx-page-hero"><h2>' +
-    (kidsOnly ? "Kids class packages" : holidayOnly ? "Holiday Promo Classes" : "Class packages") +
+    (kidsOnly ? "Kids live classes" : holidayOnly ? "Live class plans" : "Class packages") +
     "</h2><p>Pay with Paystack — same packages as the mobile app.</p></div>";
 
   sections.forEach(function (sec) {

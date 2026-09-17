@@ -9,6 +9,7 @@ var KIND_PAGE_TITLES = {
   sia: "Sia AI",
   live: "Live Class",
   saved: "Saved",
+  videos: "Videos",
   games: "Games",
   cbt: "Entrance CBT",
   profile: "Profile",
@@ -105,6 +106,7 @@ function kindNav(page, opts) {
   else if (page === "games") loadKindGames();
   else if (page === "home") loadKindHome();
   else if (page === "profile") loadKindProfile();
+  else if (page === "videos" && typeof loadKindVideosPage === "function") loadKindVideosPage();
   else if (page === "cbt" && typeof loadKindCbtPage === "function") loadKindCbtPage();
   else if (page === "packages") {
     if (typeof loadKindClassPackagesPage === "function") loadKindClassPackagesPage();
@@ -123,6 +125,7 @@ function kindRefresh() {
   else if (kindCurrentPage === "live") loadKindLive();
   else if (kindCurrentPage === "saved") loadKindSaved();
   else if (kindCurrentPage === "games") loadKindGames();
+  else if (kindCurrentPage === "videos" && typeof loadKindVideosPage === "function") loadKindVideosPage();
   else if (kindCurrentPage === "profile") loadKindProfile();
   else if (kindCurrentPage === "packages" && typeof loadKindClassPackagesPage === "function") {
     loadKindClassPackagesPage();
@@ -228,7 +231,7 @@ async function submitKindBooking() {
   var err = document.getElementById("kind-book-error");
   var subject = ((document.getElementById("kind-book-subject") || {}).value || "").trim();
   var topic = ((document.getElementById("kind-book-topic") || {}).value || "").trim();
-  var packageId = ((document.getElementById("kind-book-package") || {}).value || "nursery_standard").trim();
+  var packageId = ((document.getElementById("kind-book-package") || {}).value || "nursery_school").trim();
   if (!subject) {
     if (err) err.textContent = "Enter a subject.";
     return;
@@ -287,7 +290,7 @@ async function loadKindHome() {
         localStorage.setItem("sia_age_group", me.age_group);
       }
     }
-    var live = await api("/api/v1/live-classes?status=live");
+    var live = await api("/api/v1/live-classes/?status=live");
     var count = Array.isArray(live) ? live.filter(function (c) { return c.is_live; }).length : 0;
     if (liveStat) liveStat.textContent = String(count);
     if (stats) {
@@ -353,7 +356,7 @@ async function loadKindLive() {
   if (!el) return;
   el.innerHTML = '<div class="loading">Loading live classes…</div>';
   try {
-    var rows = await api("/api/v1/live-classes?status=live");
+    var rows = await api("/api/v1/live-classes/?status=live");
     if (!Array.isArray(rows) || !rows.length) {
       el.innerHTML =
         '<div class="kind-live-empty">' +
@@ -391,6 +394,8 @@ async function loadKindLive() {
 }
 
 function kindJoinLive(classId) {
+  // Mark the role so the classroom routes the kid back to kind.html on leave.
+  try { localStorage.setItem("sia_role", "kind"); } catch (e) { /* ignore */ }
   window.location.href = "app.html?join=" + encodeURIComponent(classId);
 }
 
@@ -415,7 +420,7 @@ async function loadKindSaved() {
       );
     }).join("");
   } catch (e) {
-    el.innerHTML = '<div class="empty-state">' + kindEsc(e.message) + "</div>";
+    el.innerHTML = '<div class="empty-state">No saved lessons yet. Save a live class replay to watch here!</div>';
   }
 }
 
@@ -432,13 +437,23 @@ async function loadKindGames() {
       grid.innerHTML = '<div class="empty-state">No games available yet.</div>';
       return;
     }
-    grid.innerHTML = games.map(function (g) {
+    var GAME_STYLES = [
+      { icon: "&#128025;", from: "#f59e0b", to: "#f97316" },
+      { icon: "&#129417;", from: "#10b981", to: "#059669" },
+      { icon: "&#128027;", from: "#8b5cf6", to: "#7c3aed" },
+      { icon: "&#128012;", from: "#0ea5e9", to: "#0284c7" },
+      { icon: "&#128054;", from: "#ec4899", to: "#db2777" },
+    ];
+    grid.innerHTML = games.map(function (g, i) {
       var leaf = localStorage.getItem("kind_leaf_" + g.id) || "1";
+      var st = GAME_STYLES[i % GAME_STYLES.length];
       return (
-        '<button type="button" class="kind-game-card" onclick="startKindGame(\'' + kindEsc(g.id) + '\',\'' + kindEsc(g.title) + '\')">' +
-        '<div style="font-size:2rem;margin-bottom:8px">&#127918;</div>' +
+        '<button type="button" class="kind-game-card" style="background:linear-gradient(150deg,' + st.from + "," + st.to + ")" +
+        '" onclick="startKindGame(\'' + kindEsc(g.id) + '\',\'' + kindEsc(g.title) + '\')">' +
+        '<div class="kind-game-emoji">' + st.icon + "</div>" +
         "<strong>" + kindEsc(g.title) + "</strong>" +
         '<div class="leaf">&#127810; Leaf ' + kindEsc(leaf) + "</div>" +
+        '<span class="kind-game-play">Play &#9654;</span>' +
         "</button>"
       );
     }).join("");
@@ -596,4 +611,82 @@ if (typeof window !== "undefined") {
   window.nextKindGameQuestion = nextKindGameQuestion;
   window.exitKindGame = exitKindGame;
   window.kindLogout = kindLogout;
+}
+
+/* ── Videos page ─────────────────────────────────────────────── */
+var kindVideosCache = [];
+
+function kindVideoEmbed(url) {
+  if (typeof youtubeEmbedUrl === "function") return youtubeEmbedUrl(url);
+  var u = String(url || "").trim();
+  var m = u.match(/youtu\.be\/([A-Za-z0-9_-]{6,})/) || u.match(/[?&]v=([A-Za-z0-9_-]{6,})/);
+  if (m) return "https://www.youtube.com/embed/" + m[1];
+  return /^https?:\/\//i.test(u) ? u : "";
+}
+
+function renderKindVideos(items) {
+  var el = document.getElementById("kind-videos-list");
+  if (!el) return;
+  if (!items || !items.length) {
+    el.innerHTML =
+      '<div class="kind-live-empty"><h4>No videos yet</h4><p>New video lessons will appear here soon!</p></div>';
+    return;
+  }
+  el.innerHTML = items
+    .map(function (it) {
+      var src = kindVideoEmbed(it.video_url || it.url || "");
+      var tutor = it.tutor_name || it.tutor || "";
+      var subject = it.subject || "";
+      return (
+        '<article class="kind-video-card">' +
+        (src
+          ? '<div class="kind-video-frame"><iframe src="' + kindEsc(src) +
+            '" title="' + kindEsc(it.title || "Video") +
+            '" allowfullscreen loading="lazy"></iframe></div>'
+          : '<a class="kind-video-frame kind-video-link" href="' + kindEsc(it.video_url || "#") +
+            '" target="_blank" rel="noopener">&#9654; Watch video</a>') +
+        "<strong>" + kindEsc(it.title || "Video lesson") + "</strong>" +
+        (subject ? '<span class="kind-video-subject">' + kindEsc(subject) + "</span>" : "") +
+        (tutor ? '<span class="kind-video-tutor">Tutor: ' + kindEsc(tutor) + "</span>" : "") +
+        "</article>"
+      );
+    })
+    .join("");
+}
+
+function filterKindVideos() {
+  var input = document.getElementById("kind-videos-search");
+  var q = ((input && input.value) || "").trim().toLowerCase();
+  if (!q) {
+    renderKindVideos(kindVideosCache);
+    return;
+  }
+  renderKindVideos(
+    kindVideosCache.filter(function (it) {
+      var blob = [it.title, it.subject, it.tutor_name, it.tutor, it.exam_type]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return blob.indexOf(q) >= 0;
+    })
+  );
+}
+
+async function loadKindVideosPage() {
+  var el = document.getElementById("kind-videos-list");
+  if (!el) return;
+  el.innerHTML = '<div class="loading">Loading videos…</div>';
+  try {
+    var data = await api("/api/v1/videos/kind");
+    kindVideosCache = Array.isArray(data) ? data : (data && (data.videos || data.items || data.results)) || [];
+    renderKindVideos(kindVideosCache);
+  } catch (e) {
+    el.innerHTML =
+      '<div class="kind-live-empty"><h4>Could not load videos</h4><p>' + kindEsc(e.message) + "</p></div>";
+  }
+}
+
+if (typeof window !== "undefined") {
+  window.loadKindVideosPage = loadKindVideosPage;
+  window.filterKindVideos = filterKindVideos;
 }

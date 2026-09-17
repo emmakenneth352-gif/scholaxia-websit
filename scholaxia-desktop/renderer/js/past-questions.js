@@ -1,9 +1,31 @@
-/** Past Questions — timed CBT papers uploaded separately from CBT Practice. */
+/** Past Questions — site-parity: library-backed PDFs/papers with search,
+ *  exam-category filters, pay-to-unlock and instant open. */
+
+var _pqCache = [];
+var _pqCat = "all";
+var _pqSearch = "";
 
 function pqEsc(s) {
   var d = document.createElement("div");
   d.textContent = s == null ? "" : String(s);
   return d.innerHTML;
+}
+
+function pqCatLabel(cat) {
+  if (cat === "jamb") return "JAMB / UTME";
+  if (cat === "waec") return "WAEC";
+  if (cat === "neco") return "NECO";
+  if (cat === "post") return "Post-UTME";
+  if (cat === "common") return "Common Entrance";
+  return "All papers";
+}
+
+function pqMatchesCat(it, cat) {
+  if (cat === "all") return true;
+  var hay = ((it.exam_type || "") + " " + (it.title || "") + " " + (it.subject || "") + " " + (it.category || "")).toLowerCase();
+  if (cat === "post") return hay.indexOf("utme") > -1 || hay.indexOf("post-utme") > -1;
+  if (cat === "common") return hay.indexOf("common entrance") > -1 || hay.indexOf("common_entrance") > -1;
+  return hay.indexOf(cat) > -1;
 }
 
 async function loadPastQuestionsPage() {
@@ -13,73 +35,115 @@ async function loadPastQuestionsPage() {
 
   if (!getToken || !getToken()) {
     root.innerHTML =
-      '<div class="as-empty"><h3>Sign in required</h3><p>Log in to sit past questions as timed CBT.</p></div>';
+      '<div class="as-empty"><h3>Sign in required</h3><p>Log in to browse and sit past questions.</p></div>';
     return;
   }
 
   try {
-    var data = await api("/api/v1/cbt/exams/for-me?paper_kind=past_questions") || {};
-    var seen = {};
-    var list = []
-      .concat(data.practice_exams || [])
-      .concat(data.jamb_exams || [])
-      .concat(data.ssce_exams || [])
-      .filter(function (exam) {
-        var id = exam && exam.id;
-        if (!id || seen[id]) return false;
-        seen[id] = true;
-        return true;
+    var data = await api("/api/v1/library/student?category=Past%20Questions", { timeout: 45000, retries: 1, preferXhr: true });
+    _pqCache = [];
+    var push = function (arr) {
+      (arr || []).forEach(function (x) {
+        if (x && x.id && !_pqCache.some(function (y) { return y.id === x.id; })) _pqCache.push(x);
       });
-    if (!list.length) {
-      root.innerHTML =
-        '<div class="as-empty">' +
-        '<div class="as-empty-icon">&#128196;</div>' +
-        "<h3>No past-question papers yet</h3>" +
-        "<p>Admin uploads these under CBT → Past Questions. You sit them here as timed CBT. They are not mixed with CBT Practice.</p>" +
-        "</div>";
-      return;
+    };
+    if (Array.isArray(data)) push(data);
+    else {
+      push(data.items); push(data.results); push(data.library); push(data.books);
     }
-
-    root.innerHTML =
-      '<div class="pq-intro">' +
-      "<p>These are past-question papers. Tap Start to sit the paper as a timed CBT — not as a PDF.</p>" +
-      "</div>" +
-      '<div class="pq-grid">' +
-      list
-        .map(function (e) {
-          var id = String(e.id);
-          return (
-            '<article class="pq-card">' +
-            '<div class="pq-card-icon">&#128221;</div>' +
-            '<div class="pq-card-body">' +
-            "<h3>" + pqEsc(e.title || "Past questions") + "</h3>" +
-            "<p>" +
-            pqEsc(e.subject || "") +
-            (e.exam_type ? " · " + pqEsc(e.exam_type) : "") +
-            (e.year ? " · " + pqEsc(e.year) : "") +
-            (e.total_questions ? " · " + pqEsc(e.total_questions) + " Qs" : "") +
-            "</p>" +
-            "</div>" +
-            '<button type="button" class="btn-action pq-pay-btn" onclick="startPastQuestionExam(\'' +
-            pqEsc(id) +
-            "')\">Start CBT</button>" +
-            "</article>"
-          );
-        })
-        .join("") +
-      "</div>";
+    renderPastQuestionsPage();
   } catch (e) {
     root.innerHTML = '<div class="as-empty"><h3>Could not load</h3><p>' + pqEsc(e.message) + "</p></div>";
   }
 }
 
-async function startPastQuestionExam(examId) {
-  if (typeof cbtHubStart === "function") {
-    await cbtHubStart(examId);
-    return;
+function renderPastQuestionsPage() {
+  var root = document.getElementById("past-questions-root");
+  if (!root) return;
+
+  var cats = ["all", "jamb", "waec", "neco", "post", "common"];
+  var items = _pqCache.filter(function (it) { return pqMatchesCat(it, _pqCat); });
+  if (_pqSearch) {
+    var q = _pqSearch.toLowerCase();
+    items = items.filter(function (it) {
+      var hay = ((it.exam_type || "") + " " + (it.title || "") + " " + (it.subject || "") + " " + (it.category || "") + " " + (it.description || "")).toLowerCase();
+      return hay.indexOf(q) > -1;
+    });
   }
-  if (typeof showPage === "function") showPage("cbt");
+
+  var html =
+    '<div class="pq-toolbar">' +
+    '<input type="search" id="pq-page-search" class="library-search" placeholder="Search subject, title, exam type…" value="' + pqEsc(_pqSearch) + '" />' +
+    "</div>" +
+    '<div class="pq-tabs-row">' +
+    cats.map(function (c) {
+      return '<button type="button" class="mp-tab' + (_pqCat === c ? " active" : "") + '" data-pq-cat="' + c + '">' + pqEsc(pqCatLabel(c)) + "</button>";
+    }).join("") +
+    "</div>" +
+    '<p class="pq-count"><strong>' + items.length + "</strong> of " + _pqCache.length + " papers</p>" +
+    '<div class="pq-grid">';
+
+  if (!items.length) {
+    html += '<div class="empty-state-premium" style="grid-column:1/-1"><div class="empty-icon">&#128196;</div><h3>No past-question papers match</h3><p>Try another subject, title, or exam category.</p></div>';
+  } else {
+    html += items.map(function (it, i) {
+      var price = Number(it.price || 0);
+      var hasAccess = !!(it.has_access || it.is_free || price <= 0);
+      var catTag = (it.exam_type || it.category || "Past paper");
+      var title = typeof stripYearLabel === "function" ? stripYearLabel(it.title || it.name || "Past paper") : (it.title || "Past paper");
+      var desc = typeof stripYearLabel === "function" ? stripYearLabel(it.description || it.subject || "") : (it.description || it.subject || "");
+      var foot;
+      if (hasAccess) {
+        foot = '<button type="button" class="btn-action btn-sm" data-pq-open="' + pqEsc(it.id) + '">Read now</button>';
+      } else {
+        foot =
+          '<strong class="pq-price">₦' + price.toLocaleString("en-NG") + "</strong>" +
+          '<button type="button" class="btn-action btn-sm" data-pq-pay="' + pqEsc(it.id) + '">Pay &amp; unlock</button>';
+      }
+      return (
+        '<article class="pq-card" style="animation-delay:' + Math.min(i, 14) * 0.05 + 's">' +
+        '<span class="pq-card-tag">' + pqEsc(catTag) + "</span>" +
+        "<h4>" + pqEsc(title) + "</h4>" +
+        (desc ? '<p class="pq-card-desc">' + pqEsc(desc) + "</p>" : "") +
+        '<div class="pq-card-foot">' + foot +
+        (it.download_path || it.file_url ? '<span class="pq-downloadable">Downloadable</span>' : "") +
+        "</div></article>"
+      );
+    }).join("");
+  }
+  html += "</div>";
+  root.innerHTML = html;
+
+  var search = document.getElementById("pq-page-search");
+  if (search) {
+    search.addEventListener("input", function () {
+      _pqSearch = (search.value || "").trim();
+      renderPastQuestionsPage();
+      var s2 = document.getElementById("pq-page-search");
+      if (s2) { s2.focus(); s2.setSelectionRange(s2.value.length, s2.value.length); }
+    });
+  }
+  root.querySelectorAll("[data-pq-cat]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      _pqCat = btn.getAttribute("data-pq-cat");
+      renderPastQuestionsPage();
+    });
+  });
+  root.querySelectorAll("[data-pq-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var it = _pqCache.find(function (x) { return String(x.id) === btn.getAttribute("data-pq-open"); });
+      if (it && typeof openLibraryBookStudent === "function") openLibraryBookStudent(it.id, it);
+    });
+  });
+  root.querySelectorAll("[data-pq-pay]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var it = _pqCache.find(function (x) { return String(x.id) === btn.getAttribute("data-pq-pay"); });
+      if (!it) return;
+      if (typeof payForBook === "function") payForBook(it.id);
+      else alert("Payment is unavailable right now. Please restart the app.");
+    });
+  });
 }
 
 window.loadPastQuestionsPage = loadPastQuestionsPage;
-window.startPastQuestionExam = startPastQuestionExam;
+window.renderPastQuestionsPage = renderPastQuestionsPage;

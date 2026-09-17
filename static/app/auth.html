@@ -11,7 +11,7 @@
       href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="css/auth.css?v=20260805c" />
+    <link rel="stylesheet" href="css/auth.css?v=20260917a" />
   </head>
   <body class="auth-body">
     <div class="auth-fx" aria-hidden="true">
@@ -24,12 +24,12 @@
     <main class="auth-shell">
       <section class="auth-stage">
         <aside class="auth-visual" aria-hidden="true">
-          <img class="auth-visual-bg" src="media/banner-1.png" alt="" />
+          <img class="auth-visual-bg" src="media/auth-hero.png" alt="" />
           <div class="auth-visual-tint"></div>
           <div class="auth-visual-copy">
             <p class="auth-visual-kicker">Scholaxia Online School</p>
             <h1>Learn smarter.<br /><span>Pass stronger.</span></h1>
-            <p>Live classes, CBT practice, and Sia AI — ready when you are.</p>
+            <p>Live classes, CBT practice, past questions, AI learning and more — all in one place.</p>
             <ul class="auth-visual-points">
               <li>WAEC · NECO · JAMB</li>
               <li>Live tutors</li>
@@ -109,6 +109,24 @@
                     placeholder="At least 6 characters"
                   />
                 </label>
+                <div class="auth-pair">
+                  <label>
+                    Country
+                    <select id="signupCountry">
+                      <option value="">Select country…</option>
+                    </select>
+                  </label>
+                  <label>
+                    Language
+                    <select id="signupLanguage">
+                      <option value="en" selected>🇬🇧 English</option>
+                      <option value="fr">🇫🇷 Français (French)</option>
+                      <option value="pt">🇧🇷 Português (Portuguese)</option>
+                      <option value="ar">🇸🇦 العربية (Arabic)</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="auth-hint" id="langHint" hidden>The whole site switches to your chosen language after signup.</p>
                 <div id="kindFields" hidden>
                   <label>
                     Age group
@@ -186,7 +204,7 @@
     </main>
 
     <script src="js/i18n.js?v=31"></script>
-    <script src="js/api.js?v=20260805b"></script>
-    <script src="js/auth-page.js?v=20260805b"></script>
+    <script src="js/api.js?v=20260917a"></script>
+    <script src="js/auth-page.js?v=20260917a"></script>
   </body>
 </html>

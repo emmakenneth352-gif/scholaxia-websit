@@ -220,6 +220,20 @@ class _ClassesScreenState extends State<ClassesScreen> {
                     children: [
                       _header(context),
                       const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: ElevatedButton.icon(
+                          onPressed: () => joinLiveWithAccessCode(context, _api),
+                          icon: const Icon(Icons.qr_code_scanner, size: 18),
+                          label: const Text('Join with class code'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: context.accentColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size.fromHeight(44),
+                          ),
+                        ),
+                      ),
                       if (_loading)
                         Padding(
                           padding: const EdgeInsets.all(32),

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../api/api_service.dart';
 import '../../../theme/app_theme.dart';
 import '../../student/classes/live_class_screen.dart';
@@ -630,14 +632,9 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
   int _durationMinutes = 60;
   static const List<int> _durationOptions = [30, 45, 60, 90, 120, 180];
 
-  // 'public' = anyone in the subject, 'private' = only invited students,
+  // 'public' = anyone in the subject, 'private' = access-code join,
   // 'school_group' = a saved group.
   String _visibility = 'public';
-  bool _loadingStudents = false;
-  List<Map<String, dynamic>> _students = [];
-  final Set<String> _invited = {};
-  final Set<String> _invitedEmails = {};
-  final TextEditingController _emailCtrl = TextEditingController();
   List<Map<String, dynamic>> _groups = [];
   bool _loadingGroups = false;
   String? _groupId;
@@ -648,34 +645,6 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
     _titleCtrl = TextEditingController(text: widget.initialTitle ?? '');
     _subjectCtrl = TextEditingController(text: widget.initialSubject ?? '');
     _goLiveNow = widget.initialGoLiveNow;
-  }
-
-  Future<void> _loadInvitees() async {
-    if (_students.isNotEmpty || _loadingStudents) return;
-    setState(() => _loadingStudents = true);
-    try {
-      var rows = await widget.api.listLiveSessionRequests(status: 'approved');
-      if (rows.isEmpty) {
-        rows = await widget.api.listLiveSessionRequests();
-      }
-      final seen = <String>{};
-      final list = <Map<String, dynamic>>[];
-      for (final r in rows.whereType<Map>()) {
-        final sid = r['student_id']?.toString() ?? '';
-        if (sid.isEmpty || seen.contains(sid)) continue;
-        seen.add(sid);
-        list.add({
-          'id': sid,
-          'name': r['student_name']?.toString() ??
-              r['topic']?.toString() ??
-              'Student',
-        });
-      }
-      if (mounted) setState(() => _students = list);
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() => _loadingStudents = false);
-    }
   }
 
   Future<void> _loadGroups() async {
@@ -696,7 +665,6 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
 
   void _onVisibilityChanged(String v) {
     setState(() => _visibility = v);
-    if (v == 'private') _loadInvitees();
     if (v == 'school_group') _loadGroups();
   }
 
@@ -704,23 +672,121 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
   void dispose() {
     _titleCtrl.dispose();
     _subjectCtrl.dispose();
-    _emailCtrl.dispose();
     super.dispose();
   }
 
-  void _addEmail() {
-    final email = _emailCtrl.text.trim().toLowerCase();
-    if (email.isEmpty) return;
-    if (!email.contains('@') || !email.contains('.')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid email address.')),
-      );
-      return;
-    }
-    setState(() {
-      _invitedEmails.add(email);
-      _emailCtrl.clear();
-    });
+
+
+  /// Site-style share sheet: show the join code big, with copy + share.
+  Future<void> _showClassCodeSheet(
+    Map<String, dynamic> created,
+    String code, {
+    required bool live,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final accent = context.accentColor;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.key_rounded, color: accent),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        live ? 'Class is live — share this code' : 'Class scheduled — share this code',
+                        style: TextStyle(
+                          color: context.textColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Students open Join Live, paste this code, and they\'re in. It also lands in their Access Code tab automatically.',
+                  style: TextStyle(color: context.greyColor, fontSize: 13, height: 1.4),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                  decoration: BoxDecoration(
+                    color: context.surfColor,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: accent.withOpacity(0.4), width: 1.5),
+                  ),
+                  child: Text(
+                    code,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                      color: accent,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Clipboard.setData(ClipboardData(text: code)),
+                        icon: const Icon(Icons.copy_rounded, size: 18),
+                        label: const Text('Copy code'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () async {
+                          final text = Uri.encodeComponent(
+                            'Join my Scholaxia live class with this access code: $code',
+                          );
+                          final uri = Uri.parse('https://wa.me/?text=$text');
+                          try {
+                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          } catch (_) {
+                            await Clipboard.setData(ClipboardData(text: code));
+                            if (ctx.mounted) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                const SnackBar(content: Text('Invite text copied')),
+                              );
+                            }
+                          }
+                        },
+                        icon: const Icon(Icons.share_rounded, size: 18),
+                        label: const Text('Share'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _enterClassroom(Map<String, dynamic> created) async {
@@ -777,13 +843,6 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
     final subject = _subjectCtrl.text.trim();
     if (title.isEmpty || subject.isEmpty) return;
 
-    if (_visibility == 'private' && _invited.isEmpty && _invitedEmails.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Add at least one student for a private class.')),
-      );
-      return;
-    }
     if (_visibility == 'school_group' && (_groupId == null || _groupId!.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Select a school group.')),
@@ -800,18 +859,24 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
         goLiveNow: _goLiveNow,
         durationMinutes: _durationMinutes,
         visibility: _visibility,
-        invitedStudentIds: _invited.toList(),
-        invitedStudentEmails: _invitedEmails.toList(),
         schoolGroupId: _groupId,
       );
+      final joinCode = created['join_code']?.toString() ?? '';
       if (_goLiveNow) {
+        if (mounted && joinCode.isNotEmpty) {
+          await _showClassCodeSheet(created, joinCode, live: true);
+        }
         await _enterClassroom(created);
       } else if (mounted) {
         Navigator.pop(context);
         widget.onCreated();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Class scheduled successfully!')),
-        );
+        if (joinCode.isNotEmpty) {
+          await _showClassCodeSheet(created, joinCode, live: false);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Class scheduled successfully!')),
+          );
+        }
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -863,8 +928,8 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
           _visibilityOption(
             value: 'private',
             icon: Icons.lock_outline,
-            title: 'Specific students',
-            subtitle: 'Only students you invite can join.',
+            title: 'Private — access code',
+            subtitle: 'Only students with your class code can join.',
           ),
           _visibilityOption(
             value: 'school_group',
@@ -872,7 +937,22 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
             title: 'School group',
             subtitle: 'Only members of a saved group can join.',
           ),
-          if (_visibility == 'private') _invitePicker(),
+          if (_visibility == 'private')
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.key_rounded, size: 16, color: context.accentColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'A unique access code is generated when you create the class — share it and students join instantly. It also lands in their Access Code tab automatically.',
+                      style: TextStyle(color: context.greyColor, fontSize: 12, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_visibility == 'school_group') _groupPicker(),
           const SizedBox(height: 8),
           SwitchListTile(
@@ -1024,115 +1104,6 @@ class _CreateClassSheetState extends State<_CreateClassSheet> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _invitePicker() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Add any student directly by email.
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _emailCtrl,
-                style: TextStyle(color: context.textColor, fontSize: 14),
-                keyboardType: TextInputType.emailAddress,
-                onSubmitted: (_) => _addEmail(),
-                decoration: InputDecoration(
-                  hintText: 'Add student by email',
-                  hintStyle:
-                      TextStyle(color: context.greyColor, fontSize: 13),
-                  filled: true,
-                  fillColor: context.surfColor,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              height: 44,
-              child: ElevatedButton(
-                onPressed: _addEmail,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: context.accentColor,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                ),
-                child: const Text('Add',
-                    style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ),
-          ],
-        ),
-        if (_invitedEmails.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: _invitedEmails.map((e) {
-              return Chip(
-                label: Text(e, style: const TextStyle(fontSize: 12)),
-                backgroundColor: context.accentColor.withOpacity(0.12),
-                labelStyle: TextStyle(color: context.textColor),
-                deleteIconColor: context.greyColor,
-                onDeleted: () => setState(() => _invitedEmails.remove(e)),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              );
-            }).toList(),
-          ),
-        ],
-        const SizedBox(height: 10),
-        if (_loadingStudents)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          )
-        else if (_students.isNotEmpty) ...[
-          Text('Or pick from students who requested a session:',
-              style: TextStyle(color: context.greyColor, fontSize: 12)),
-          const SizedBox(height: 6),
-          Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            constraints: const BoxConstraints(maxHeight: 200),
-            decoration: BoxDecoration(
-              color: context.surfColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.borderColor),
-            ),
-            child: ListView(
-              shrinkWrap: true,
-              children: _students.map((s) {
-                final id = s['id'] as String;
-                final checked = _invited.contains(id);
-                return CheckboxListTile(
-                  dense: true,
-                  value: checked,
-                  activeColor: context.accentColor,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  title: Text(s['name'] as String,
-                      style:
-                          TextStyle(color: context.textColor, fontSize: 13)),
-                  onChanged: (v) => setState(() {
-                    if (v == true) {
-                      _invited.add(id);
-                    } else {
-                      _invited.remove(id);
-                    }
-                  }),
-                );
-              }).toList(),
-            ),
-          ),
-        ],
-      ],
     );
   }
 

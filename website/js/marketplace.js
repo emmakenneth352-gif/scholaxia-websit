@@ -675,5 +675,13 @@
     });
 
     $("btnOrders").addEventListener("click", loadOrders);
+
+    // Vendor hero image fallback → show text card if the banner fails to load
+    var vHero = document.querySelector(".mkt-hero-vendor-rich");
+    if (vHero) {
+      var vImg = vHero.querySelector(".mkt-vendor-hero-img");
+      if (vImg && vImg.complete && vImg.naturalWidth === 0) vHero.classList.add("img-failed");
+      if (vImg) vImg.addEventListener("error", function () { vHero.classList.add("img-failed"); });
+    }
   });
 })();

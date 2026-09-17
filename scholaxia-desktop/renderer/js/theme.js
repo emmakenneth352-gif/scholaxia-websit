@@ -16,6 +16,11 @@ function updateThemeToggleUi(theme) {
   if (btn) btn.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
   if (icon) icon.textContent = theme === "dark" ? "\u2600\uFE0F" : "\uD83C\uDF19";
   if (label) label.textContent = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  var kindBtn = document.getElementById("kind-theme-btn");
+  if (kindBtn) {
+    kindBtn.innerHTML = theme === "dark" ? "&#9728;&#65039;" : "&#127769;";
+    kindBtn.title = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+  }
 }
 
 function applyAppTheme(theme) {
@@ -35,6 +40,10 @@ function toggleAppTheme() {
 function initAppTheme() {
   applyAppTheme(getAppTheme());
 }
+
+document.addEventListener("DOMContentLoaded", function () {
+  initAppTheme();
+});
 
 (function applyThemeEarly() {
   var theme = getAppTheme();

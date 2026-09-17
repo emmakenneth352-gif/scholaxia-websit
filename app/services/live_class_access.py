@@ -85,7 +85,7 @@ async def _legacy_payment_plan(
     if not payment:
         return None
 
-    plan = get_plan(payment.live_plan_id) if payment.live_plan_id else get_plan("secondary_standard")
+    plan = get_plan(payment.live_plan_id) if payment.live_plan_id else get_plan("private_lesson")
     if not plan:
         return None
 

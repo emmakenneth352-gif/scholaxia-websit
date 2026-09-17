@@ -33,12 +33,15 @@ class _StudentShellState extends State<StudentShell>
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const SiaScreen(),
     const CbtScreen(),
+    const SiaScreen(),
     const CommunityScreen(),
     const ProfileScreen(),
   ];
 
+  // Bottom bar keeps 5 primary destinations. Tutorials, Live Class,
+  // Assignments, Library, Games, Skills and Plans remain reachable
+  // from Home's Quick Access grid.
   static const _navItems = [
     _NavItem(
       icon: Icons.home_rounded,
@@ -46,14 +49,14 @@ class _StudentShellState extends State<StudentShell>
       label: 'Home',
     ),
     _NavItem(
-      icon: Icons.auto_awesome_outlined,
-      activeIcon: Icons.auto_awesome_rounded,
-      label: 'Sia',
-    ),
-    _NavItem(
       icon: Icons.quiz_outlined,
       activeIcon: Icons.quiz_rounded,
       label: 'CBT',
+    ),
+    _NavItem(
+      icon: Icons.auto_awesome_outlined,
+      activeIcon: Icons.auto_awesome_rounded,
+      label: 'Sia AI',
     ),
     _NavItem(
       icon: Icons.people_outline_rounded,
@@ -139,7 +142,7 @@ class _StudentShellState extends State<StudentShell>
 
   void _onTabTap(int i) {
     setState(() => _currentIndex = i);
-    if (i == 3) refreshCommunityBadge(_api);
+    if (i == 3) refreshCommunityBadge(_api); // Community tab index
   }
 
   @override
@@ -186,7 +189,7 @@ class _StudentShellState extends State<StudentShell>
                   final active = i == _currentIndex;
                   final activeColor = context.accentColor;
                   final inactiveColor = context.greyColor;
-                  final badge = i == 3 ? communityBadge : 0;
+                  final badge = i == 3 ? communityBadge : 0; // Community tab
                   final item = _navItems[i];
                   return Expanded(
                     child: GestureDetector(

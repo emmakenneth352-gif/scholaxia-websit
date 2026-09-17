@@ -60,6 +60,14 @@ def _is_hard_question(prompt: str) -> bool:
         return True
     if exam_prep and (math_verb or has_digits):
         return True
+
+    # Multi-sentence questions and any explicit why/how teaching ask benefit
+    # from extended reasoning — investors want Sia to visibly out-think rivals.
+    sentence_count = len([s for s in re.split(r"[.!?\\n]+", p) if s.strip()])
+    if sentence_count >= 3 and ("?" in p or any(w in p for w in ("why", "how", "explain", "compare", "analyze", "analyse"))):
+        return True
+    if any(w in p for w in ("prove", "derive", "theorem", "proof", "essay", "lesson plan", "debate", "code", "debug", "algorithm")):
+        return True
     return False
 
 

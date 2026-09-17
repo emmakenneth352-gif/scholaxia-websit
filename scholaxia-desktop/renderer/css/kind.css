@@ -810,3 +810,357 @@ html[data-app-theme="dark"] .page-back-btn {
   border-color: #c4b5fd !important;
   color: #1e1b2e !important;
 }
+
+/* === Games: exactly 5 pretty cards in one row === */
+.kind-games-grid {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px;
+}
+@media (max-width: 1180px) { .kind-games-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 760px) { .kind-games-grid { grid-template-columns: repeat(2, 1fr); } }
+
+.kind-game-card {
+  position: relative;
+  padding: 26px 14px 18px;
+  border: none;
+  border-radius: 22px;
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(76, 29, 149, 0.22);
+  overflow: hidden;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+.kind-game-card::before {
+  content: "";
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+}
+.kind-game-card::after {
+  content: "";
+  position: absolute;
+  bottom: -52px;
+  left: -30px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.09);
+}
+.kind-game-card:hover {
+  transform: translateY(-6px) scale(1.02);
+  box-shadow: 0 18px 40px rgba(76, 29, 149, 0.34);
+}
+.kind-game-card:active { transform: translateY(-2px) scale(0.99); }
+
+.kind-game-emoji {
+  font-size: 2.6rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  margin-bottom: 10px;
+  position: relative;
+  z-index: 1;
+}
+.kind-game-card strong {
+  display: block;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff !important;
+  margin: 0 0 6px;
+  position: relative;
+  z-index: 1;
+}
+.kind-game-card .leaf {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+  position: relative;
+  z-index: 1;
+}
+.kind-game-card .kind-game-play {
+  margin-top: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  color: #6d28d9;
+  font-weight: 800;
+  font-size: 0.82rem;
+  padding: 8px 18px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  position: relative;
+  z-index: 1;
+}
+html[data-app-theme="dark"] .kind-game-card {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+
+/* === Common Entrance CBT redesign === */
+.kind-cbt-paywall-hero {
+  position: relative;
+  border-radius: 22px;
+  padding: 34px 30px;
+  text-align: center;
+  color: #fff;
+  background: linear-gradient(135deg, #6d28d9, #9333ea 55%, #ec4899);
+  box-shadow: 0 16px 40px rgba(109, 40, 217, 0.35);
+  overflow: hidden;
+  margin-bottom: 22px;
+}
+.kind-cbt-paywall-hero::before,
+.kind-cbt-paywall-hero::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+}
+.kind-cbt-paywall-hero::before { width: 180px; height: 180px; top: -70px; right: -50px; }
+.kind-cbt-paywall-hero::after { width: 140px; height: 140px; bottom: -60px; left: -40px; }
+.kind-cbt-paywall-art { font-size: 3rem; margin-bottom: 8px; position: relative; z-index: 1; }
+.kind-cbt-paywall-hero h3 {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+  position: relative;
+  z-index: 1;
+}
+.kind-cbt-paywall-hero p {
+  margin: 0 auto 18px;
+  max-width: 520px;
+  color: rgba(255, 255, 255, 0.92);
+  position: relative;
+  z-index: 1;
+}
+.kind-cbt-pay-btn {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  color: #6d28d9;
+  font-weight: 800;
+  font-size: 1rem;
+  border: none;
+  border-radius: 999px;
+  padding: 13px 30px;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.kind-cbt-pay-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28); }
+
+.kind-cbt-section-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--sx-text, #1e1b2e);
+  margin: 4px 2px 14px;
+}
+
+.kind-cbt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.kind-cbt-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: none;
+  border-radius: 20px;
+  padding: 18px;
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 10px 26px rgba(30, 27, 46, 0.18);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  overflow: hidden;
+  position: relative;
+}
+.kind-cbt-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 18px 40px rgba(30, 27, 46, 0.3);
+}
+.kind-cbt-card::after {
+  content: "";
+  position: absolute;
+  top: -46px;
+  right: -46px;
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.13);
+}
+.kind-cbt-card-icon {
+  font-size: 2.1rem;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  position: relative;
+  z-index: 1;
+}
+.kind-cbt-card-body { position: relative; z-index: 1; min-width: 0; flex: 1; }
+.kind-cbt-card-body h4 {
+  margin: 0 0 3px;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kind-cbt-card-body p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+.kind-cbt-card-meta {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.kind-cbt-card-cta {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  color: #6d28d9;
+  font-weight: 800;
+  font-size: 0.8rem;
+  padding: 8px 16px;
+  border-radius: 999px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.kind-cbt-status.is-active {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 10px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 20px rgba(5, 150, 105, 0.3);
+}
+html[data-app-theme="dark"] .kind-cbt-paywall-hero {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+html[data-app-theme="dark"] .kind-cbt-card {
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+html[data-app-theme="dark"] .kind-cbt-section-title { color: #f0edff; }
+
+/* === Videos page === */
+.kind-videos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 18px;
+}
+.kind-video-card {
+  background: var(--sx-card, #fff);
+  border: 1px solid var(--sx-border, #e9e5f5);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 6px 20px rgba(88, 28, 135, 0.08);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+}
+.kind-video-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 32px rgba(124, 58, 237, 0.16);
+}
+.kind-video-card strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 0.98rem;
+  color: var(--sx-text, #1e1b2e);
+}
+.kind-video-frame {
+  display: block;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #14101f;
+}
+.kind-video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.kind-video-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
+}
+.kind-video-subject {
+  display: inline-block;
+  margin-top: 6px;
+  margin-right: 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.1);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.kind-video-tutor {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--sx-muted, #6b7280);
+}
+html[data-app-theme="dark"] .kind-video-card {
+  background: #221d36;
+  border-color: #372f52;
+}
+html[data-app-theme="dark"] .kind-video-card strong { color: #f0edff; }
+html[data-app-theme="dark"] .kind-video-subject {
+  color: #c4b5fd;
+  background: rgba(124, 58, 237, 0.22);
+}
+html[data-app-theme="dark"] .kind-video-tutor { color: #9b93b8; }
+
+/* Kids header theme toggle */
+.kind-theme-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid var(--sx-border, #e9e5f5);
+  background: var(--sx-card, #fff);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.kind-theme-btn:hover {
+  transform: translateY(-1px);
+  border-color: var(--sx-accent, #a78bfa);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.16);
+}
+html[data-app-theme="dark"] .kind-theme-btn {
+  background: #221d36;
+  border-color: #372f52;
+}

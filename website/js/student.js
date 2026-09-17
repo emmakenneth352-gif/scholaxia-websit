@@ -3863,11 +3863,12 @@
   }
 
   var PLAN_SUBJECTS_FALLBACK = {
-    holiday_primary: ["Mathematics", "English Language", "Phonics", "Moral values"],
-    holiday_jss: ["Mathematics", "English Language", "Phonics", "French", "Computer"],
-    holiday_ss_science: ["Mathematics", "English", "Physics", "Chemistry", "Biology"],
-    holiday_ss_art: ["Mathematics", "English", "Literature-in-English", "CRS/IRS", "Government"],
-    holiday_ss_commercial: ["Mathematics", "English", "Financial Accounting", "Commerce", "Economics"],
+    single_class: ["1 live session", "One-on-one tutor", "Class notes"],
+    jamb_prep: ["4 subjects", "4 sessions weekly", "JAMB past questions & CBT drills"],
+    jamb_waec_neco_prep: ["6 subjects", "5 sessions weekly", "JAMB, WAEC & NECO practice", "Mock exams"],
+    private_lesson: ["4 subjects", "4 sessions weekly", "Dedicated one-on-one tutor", "Unlimited Sia AI Tutor"],
+    primary_school: ["3 subjects", "3 sessions weekly", "Mathematics, English & Phonics", "Parent feedback"],
+    nursery_school: ["2 subjects", "2 sessions weekly", "Reading & Phonics", "Parent feedback"],
   };
 
   function planSubjectsHtml(p) {

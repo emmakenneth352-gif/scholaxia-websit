@@ -40,6 +40,9 @@ class User(Base):
     oauth_provider: Mapped[str] = mapped_column(String(50), nullable=True)  # google, apple
     oauth_id: Mapped[str] = mapped_column(String(255), nullable=True)
     profile_picture: Mapped[str] = mapped_column(String(1000), nullable=True)
+    # Internationalization — user picks these at signup; language drives site translation
+    country: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(10), nullable=True)  # en | fr | pt | ar
     # Bumped on each login so older JWTs on other devices stop working.
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     school_id: Mapped[uuid.UUID] = mapped_column(

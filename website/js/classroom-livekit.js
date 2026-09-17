@@ -459,8 +459,10 @@
     if (!liveRoom || isTeacherRole()) return;
     var c = lk();
     if (!c) return;
+    // Identity resolution can fail on late join / server restarts. Attach ALL remote
+    // audio — students must always hear the class even if the teacher is misidentified.
     liveRoom.remoteParticipants.forEach(function (participant) {
-      if (!isTeacherParticipant(participant)) return;
+      if (participant && participant.isLocal) return;
       participant.trackPublications.forEach(function (pub) {
         var isAudio = pub.kind === c.Track.Kind.Audio || pub.kind === "audio";
         if (!isAudio) return;
@@ -470,7 +472,47 @@
         }
       });
     });
+    ensureRoomAudioPlayback();
   }
+
+  // Self-heal: every 5s, re-attach any remote audio that is subscribed but silent,
+  // and re-attach the screen share if the stage lost it. Covers browser autoplay
+  // blocks, lost audio elements, and stage clears from transient UI events.
+  setInterval(function () {
+    try {
+      if (!liveRoom || !liveVideoJoined) return;
+      var c = lk();
+      if (!c) return;
+      var healedAudio = false;
+      liveRoom.remoteParticipants.forEach(function (participant) {
+        if (!participant || participant.isLocal) return;
+        participant.trackPublications.forEach(function (pub) {
+          var isAudio = pub.kind === c.Track.Kind.Audio || pub.kind === "audio";
+          var isScreen = isScreenPublication(pub);
+          if (!isAudio && !isScreen) return;
+          if (!pub.track || pub.isMuted || pub.track.isMuted) return;
+          if (isAudio) {
+            var pid = participant.identity ? String(participant.identity) : "remote";
+            var has = remoteAudioEls.some(function (el) {
+              return el && el.getAttribute && el.getAttribute("data-participant-id") === pid;
+            });
+            if (!has) {
+              attachRemoteAudio(pub.track, participant);
+              healedAudio = true;
+            }
+          } else if (!isTeacherRole()) {
+            var stage = document.getElementById("video-remote");
+            var screenPlaying = stage && stage.querySelector('video[data-lk-track-id]') && stage.classList.contains("screen-active");
+            if (!screenPlaying && stage) {
+              setPublicationSubscribed(pub, true);
+              attachRemoteVideoToMainStage(pub.track, pub);
+            }
+          }
+        });
+      });
+      if (healedAudio) ensureRoomAudioPlayback();
+    } catch (eHeal) { /* never let the healer throw */ }
+  }, 5000);
 
   function participantRoleFromMeta(participant) {
     if (!participant || !participant.metadata) return "";
@@ -498,8 +540,9 @@
     var c = lk();
     var isAudio = !!(c && (pub.kind === c.Track.Kind.Audio || pub.kind === "audio"));
     if (isAudio) {
-      if (isTeacherRole()) return true;
-      return isTeacherParticipant(participant);
+      // AUDIO IS CHEAP — always subscribe. Identity resolution can fail (late join,
+      // missing teacher_id, server restart); missing audio is far worse than extra audio.
+      return true;
     }
     if (isScreenPublication(pub)) {
       if (!isTeacherRole()) return true;

@@ -25,6 +25,7 @@ class _SiaScreenState extends State<SiaScreen> {
   bool _loading = false;
   bool _voiceOn = true;
   List<_Msg> _messages = [];
+  String _tutorMode = 'smart'; // smart, friendly, strict, exam_mode
 
   @override
   void initState() {
@@ -59,10 +60,68 @@ class _SiaScreenState extends State<SiaScreen> {
               subject: subject,
               educationLevel: _educationLevel,
               conversationHistory: _buildHistory(),
-              tutorMode: 'smart',
+              tutorMode: _tutorMode,
             );
             return SiaVoiceAskResult(board: r.board, speakText: r.sia);
           },
+        ),
+      ),
+    );
+  }
+
+  void _showTutorModeSelector() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Choose Tutor Mode'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _TutorModeOption(
+              label: 'Smart Mode',
+              description: 'Structured, detailed explanations with step-by-step reasoning',
+              mode: 'smart',
+              currentMode: _tutorMode,
+              onTap: () {
+                setState(() => _tutorMode = 'smart');
+                Navigator.pop(ctx);
+              },
+            ),
+            const SizedBox(height: 8),
+            _TutorModeOption(
+              label: 'Friendly Mode',
+              description: 'Conversational, encouraging, and patient explanations',
+              mode: 'friendly',
+              currentMode: _tutorMode,
+              onTap: () {
+                setState(() => _tutorMode = 'friendly');
+                Navigator.pop(ctx);
+              },
+            ),
+            const SizedBox(height: 8),
+            _TutorModeOption(
+              label: 'Strict Mode',
+              description: 'Disciplined, exam-focused preparation with rigorous standards',
+              mode: 'strict',
+              currentMode: _tutorMode,
+              onTap: () {
+                setState(() => _tutorMode = 'strict');
+                Navigator.pop(ctx);
+              },
+            ),
+            const SizedBox(height: 8),
+            _TutorModeOption(
+              label: 'Exam Mode',
+              description: 'WAEC/JAMB/NECO style answers with marking scheme focus',
+              mode: 'exam_mode',
+              currentMode: _tutorMode,
+              onTap: () {
+                setState(() => _tutorMode = 'exam_mode');
+                Navigator.pop(ctx);
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -89,7 +148,7 @@ class _SiaScreenState extends State<SiaScreen> {
   _Msg _defaultWelcome() => _Msg(
         isAi: true,
         text:
-            "Hi! I'm Sia, your AI tutor. Type here for text chat, or tap the mic icon for voice chat with the board.",
+            "Hi $_studentName! I'm Sia, your AI tutor. I can help you with Mathematics, Physics, Chemistry, Biology, English, and more. Choose a tutor mode and ask me anything!",
         time: _now(),
       );
 
@@ -184,7 +243,7 @@ class _SiaScreenState extends State<SiaScreen> {
         subject: _subject,
         educationLevel: _educationLevel,
         conversationHistory: history,
-        tutorMode: 'smart',
+        tutorMode: _tutorMode,
       );
       if (mounted) {
         setState(() {
@@ -313,6 +372,12 @@ class _SiaScreenState extends State<SiaScreen> {
           onPressed: _openVoiceClassroom,
           icon: Icon(Icons.mic_rounded, color: Colors.white.withOpacity(0.95), size: 22),
           tooltip: 'Voice chat',
+        ),
+        IconButton(
+          style: compactIcon,
+          onPressed: _showTutorModeSelector,
+          icon: Icon(Icons.psychology_rounded, color: Colors.white.withOpacity(0.9), size: 20),
+          tooltip: 'Tutor mode: $_tutorMode',
         ),
         IconButton(
           style: compactIcon,
@@ -496,7 +561,9 @@ class _SiaScreenState extends State<SiaScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: _loading ? context.accentColor.withOpacity(0.5) : context.accentColor,
+              color: _loading 
+                  ? context.accentColor.withOpacity(0.5) 
+                  : context.accentColor,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(Icons.send_rounded,
@@ -504,6 +571,76 @@ class _SiaScreenState extends State<SiaScreen> {
           ),
         ),
       ]),
+    );
+  }
+}
+
+class _TutorModeOption extends StatelessWidget {
+  final String label;
+  final String description;
+  final String mode;
+  final String currentMode;
+  final VoidCallback onTap;
+
+  const _TutorModeOption({
+    required this.label,
+    required this.description,
+    required this.mode,
+    required this.currentMode,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = mode == currentMode;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected 
+              ? context.accentColor.withOpacity(0.1)
+              : context.surfColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? context.accentColor : context.borderColor,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+              color: isSelected ? context.accentColor : context.greyColor,
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: context.textColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: TextStyle(
+                      color: context.greyColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

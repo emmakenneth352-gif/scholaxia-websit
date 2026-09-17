@@ -8,7 +8,7 @@ const PAGE_TITLES = {
   assignments: "Assignments",
   "cbt-packages": "CBT Packages",
   "class-packages": "Class packages",
-  "holiday-packages": "Holiday Promo",
+  "holiday-packages": "Live Classes",
   skills: "Skills Training",
   subscription: "Subscription",
   cbt: "CBT Practice",
@@ -2067,8 +2067,10 @@ function renderSubjectPicker() {
       ? `Select exactly ${max} subjects.`
       : `Select ${min} to ${max} subjects.`;
   }
+  const min = subjectMinimumForExamType(examType);
+  const locked = selectedSubjects.length >= Math.max(min, max) && min === max;
   el.innerHTML = allSubjects.map((s, i) => `
-    <span class="subj-chip ${selectedSubjects.includes(s) ? "selected" : ""}"
+    <span class="subj-chip ${selectedSubjects.includes(s) ? "selected" : ""} ${locked ? "is-locked" : ""}"
       data-idx="${i}" onclick="toggleSubjectByIdx(${i}, ${max})">${escHtml(s)}</span>
   `).join("");
 }
@@ -2081,6 +2083,19 @@ function toggleSubjectByIdx(idx, max) {
 
 function toggleSubject(subject, max) {
   const idx = selectedSubjects.indexOf(subject);
+  const min = subjectMinimumForExamType(document.getElementById("setup-exam-type").value);
+  // Once the minimum is met the selection is locked — subjects can no longer
+  // be swapped. Press Save (or clear via the exam-type change) to reset.
+  if (idx < 0 && selectedSubjects.length >= Math.max(min, max)) {
+    if (selectedSubjects.length >= max) {
+      alert(`Selection is locked at ${max} subjects for ${formatExamType(document.getElementById("setup-exam-type").value)}. Save your profile or change the exam type to reset.`);
+      return;
+    }
+  }
+  if (idx >= 0 && selectedSubjects.length >= min && min === max) {
+    alert(`Your ${min} subjects are locked. To change them, save a new exam profile or switch exam type.`);
+    return;
+  }
   if (idx >= 0) selectedSubjects.splice(idx, 1);
   else if (selectedSubjects.length < max) selectedSubjects.push(subject);
   else alert(`You can select at most ${max} subjects for ${formatExamType(document.getElementById("setup-exam-type").value)}.`);

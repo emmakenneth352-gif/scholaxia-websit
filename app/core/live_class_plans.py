@@ -1,4 +1,8 @@
-"""Scholaxia One-on-One Live Class monthly plans."""
+"""Scholaxia live class plans — 2026 catalog.
+
+All amounts are NGN and authoritative here; clients must never send prices.
+Plan ids are stored on StudentProfile.live_plan_id and Payments.live_plan_id.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,338 +25,121 @@ class LiveClassPlan:
 
 
 LIVE_CLASS_PLANS: tuple[LiveClassPlan, ...] = (
-    # Holiday Classes first (promo front-and-center)
     LiveClassPlan(
-        id="holiday_primary",
-        category="Holiday Classes",
-        name="Primary Holiday Classes",
-        price=15000,
-        sessions=5,
-        session_minutes=60,
-        max_subjects=4,
-        features=("Mathematics", "English Language", "Phonics", "Moral values", "5 live sessions weekly"),
-        education_levels=tuple(f"PRIMARY {i}" for i in range(1, 7))
-        + ("PRIMARY",),
-        exam_types=("COMMON_ENTRANCE",),
-        billing="holiday",
-    ),
-    LiveClassPlan(
-        id="holiday_jss",
-        category="Holiday Classes",
-        name="Junior Secondary (JSS 1–3)",
-        price=10500,
-        sessions=5,
-        session_minutes=60,
-        max_subjects=5,
-        features=(
-            "Mathematics",
-            "English Language",
-            "Phonics",
-            "French",
-            "Computer",
-            "5 live sessions weekly",
-        ),
-        education_levels=("JSS", "JSS1", "JSS2", "JSS3"),
-        exam_types=("JUNIOR_WAEC",),
-        billing="holiday",
-    ),
-    LiveClassPlan(
-        id="holiday_ss_science",
-        category="Holiday Classes",
-        name="SS 1–3 Science",
-        price=11000,
-        sessions=5,
-        session_minutes=60,
-        max_subjects=5,
-        features=(
-            "Mathematics",
-            "English",
-            "Physics",
-            "Chemistry",
-            "Biology",
-            "5 live sessions weekly",
-        ),
-        education_levels=("SS", "SS1", "SS2", "SS3"),
-        exam_types=("WAEC", "NECO"),
-        billing="holiday",
-    ),
-    LiveClassPlan(
-        id="holiday_ss_art",
-        category="Holiday Classes",
-        name="SS 1–3 Art",
-        price=11000,
-        sessions=5,
-        session_minutes=60,
-        max_subjects=5,
-        features=(
-            "Mathematics",
-            "English",
-            "Literature-in-English",
-            "CRS/IRS",
-            "Government",
-            "5 live sessions weekly",
-        ),
-        education_levels=("SS", "SS1", "SS2", "SS3"),
-        exam_types=("WAEC", "NECO"),
-        billing="holiday",
-    ),
-    LiveClassPlan(
-        id="holiday_ss_commercial",
-        category="Holiday Classes",
-        name="SS 1–3 Commercial",
-        price=11000,
-        sessions=5,
-        session_minutes=60,
-        max_subjects=5,
-        features=(
-            "Mathematics",
-            "English",
-            "Financial Accounting",
-            "Commerce",
-            "Economics",
-            "5 live sessions weekly",
-        ),
-        education_levels=("SS", "SS1", "SS2", "SS3"),
-        exam_types=("WAEC", "NECO"),
-        billing="holiday",
-    ),
-    LiveClassPlan(
-        id="live_tutoring_1",
-        category="Pay-Per-Class",
-        name="1 Live Tutoring Class",
+        id="single_class",
+        category="Special Single Class",
+        name="Special Single Class",
         price=5000,
         sessions=1,
         session_minutes=90,
         max_subjects=1,
-        features=("One-on-one tutor", "Class notes", "Questions and answers"),
-        education_levels=(),
-        exam_types=(),
-        billing="bundle",
-    ),
-    LiveClassPlan(
-        id="live_tutoring_3",
-        category="Pay-Per-Class",
-        name="3 Live Tutoring Classes",
-        price=14000,
-        sessions=3,
-        session_minutes=90,
-        max_subjects=1,
-        features=("One-on-one tutor", "Save ₦1,000", "Class notes"),
-        education_levels=(),
-        exam_types=(),
-        billing="bundle",
-    ),
-    LiveClassPlan(
-        id="live_tutoring_5",
-        category="Pay-Per-Class",
-        name="5 Live Tutoring Classes",
-        price=22500,
-        sessions=5,
-        session_minutes=90,
-        max_subjects=1,
-        features=("One-on-one tutor", "Save ₦2,500", "Class notes"),
-        education_levels=(),
-        exam_types=(),
-        billing="bundle",
-    ),
-    LiveClassPlan(
-        id="nursery_standard",
-        category="Nursery",
-        name="Nursery Standard",
-        price=50000,
-        sessions=4,
-        session_minutes=45,
-        max_subjects=2,
         features=(
-            "Reading",
-            "Phonics",
-            "Counting",
-            "Fun games",
-            "Learning activities",
-            "Parent feedback session",
-            "4 sessions weekly",
+            "1 live session",
+            "One-on-one tutor",
+            "Class notes",
+            "Questions and answers",
         ),
-        education_levels=("NURSERY", "KG", "PRE-NURSERY", "NURSERY 1", "NURSERY 2"),
+        education_levels=(),
         exam_types=(),
+        billing="one_time",
     ),
     LiveClassPlan(
-        id="nursery_premium",
-        category="Nursery",
-        name="Nursery Premium",
-        price=65000,
+        id="jamb_prep",
+        category="JAMB Prep",
+        name="JAMB Prep",
+        price=10000,
         sessions=4,
-        session_minutes=45,
+        session_minutes=60,
         max_subjects=4,
         features=(
-            "Homework assistance",
-            "Learning activities",
-            "Weekly assessments",
-            "Monthly progress report",
-            "Parent feedback session",
+            "4 subjects",
             "4 sessions weekly",
+            "JAMB past questions & CBT drills",
+            "Progress tracking",
         ),
-        education_levels=("NURSERY", "KG", "PRE-NURSERY", "NURSERY 1", "NURSERY 2"),
-        exam_types=(),
+        education_levels=("JAMB", "UTME", "SS3"),
+        exam_types=("JAMB", "POST_UTME"),
+        billing="monthly",
     ),
     LiveClassPlan(
-        id="primary_standard",
-        category="Primary School",
-        name="Primary Standard",
-        price=55000,
-        sessions=8,
+        id="jamb_waec_neco_prep",
+        category="Exam Preparation",
+        name="JAMB + WAEC/NECO Prep",
+        price=15000,
+        sessions=5,
         session_minutes=60,
-        max_subjects=3,
+        max_subjects=6,
         features=(
-            "Mathematics",
-            "Phonics",
-            "English Language",
-            "Moral values",
-            "Homework",
-            "Parent feedback session",
-            "Progress report",
+            "6 subjects",
+            "5 sessions weekly",
+            "JAMB, WAEC & NECO practice",
+            "Mock exams",
+            "Progress tracking",
         ),
-        education_levels=tuple(f"PRIMARY {i}" for i in range(1, 7))
-        + tuple(f"PRY{i}" for i in range(1, 7))
-        + ("PRIMARY",),
-        exam_types=(),
+        education_levels=("JAMB", "UTME", "WAEC", "NECO", "SS"),
+        exam_types=("JAMB", "WAEC", "NECO", "POST_UTME"),
+        billing="monthly",
     ),
     LiveClassPlan(
-        id="primary_premium",
-        category="Primary School",
-        name="Primary Premium",
-        price=80000,
-        sessions=12,
+        id="private_lesson",
+        category="Private Lesson",
+        name="Private Lesson (One-on-One)",
+        price=25000,
+        sessions=4,
         session_minutes=60,
-        max_subjects=5,
+        max_subjects=4,
         features=(
-            "Homework support",
-            "Weekly assessments",
+            "4 subjects",
+            "4 sessions weekly",
+            "Dedicated one-on-one tutor",
             "Personalized study plan",
-            "Monthly progress report",
-            "Performance tracking",
-        ),
-        education_levels=tuple(f"PRIMARY {i}" for i in range(1, 7))
-        + tuple(f"PRY{i}" for i in range(1, 7))
-        + ("PRIMARY",),
-        exam_types=(),
-    ),
-    LiveClassPlan(
-        id="primary_elite",
-        category="Primary School",
-        name="Primary Elite",
-        price=70000,
-        sessions=16,
-        session_minutes=60,
-        max_subjects=99,
-        features=(
-            "Homework & assignment support",
-            "Weekly tests",
-            "Personalized study plan",
-            "Dedicated academic coach",
-            "Monthly parent consultation",
-        ),
-        education_levels=tuple(f"PRIMARY {i}" for i in range(1, 7))
-        + tuple(f"PRY{i}" for i in range(1, 7))
-        + ("PRIMARY",),
-        exam_types=(),
-    ),
-    LiveClassPlan(
-        id="secondary_standard",
-        category="High School (JSS & SSS)",
-        name="High Standard",
-        price=50000,
-        sessions=8,
-        session_minutes=60,
-        max_subjects=3,
-        features=(
-            "Three subjects of choice",
-            "One-on-one tutor",
-            "Topic-based assessments",
-            "Performance analytics",
             "Unlimited Sia AI Tutor",
         ),
         education_levels=tuple(f"JSS{i}" for i in range(1, 4))
         + tuple(f"SS{i}" for i in range(1, 4))
         + ("JSS", "SSS", "SECONDARY"),
         exam_types=(),
+        billing="monthly",
     ),
     LiveClassPlan(
-        id="secondary_premium",
-        category="High School (JSS & SSS)",
-        name="Secondary Premium",
-        price=60000,
-        sessions=12,
+        id="primary_school",
+        category="Primary School",
+        name="Primary School",
+        price=25000,
+        sessions=3,
         session_minutes=60,
-        max_subjects=6,
+        max_subjects=3,
         features=(
-            "Assignment support",
-            "Weekly assessments",
-            "Personalized study plan",
-            "Monthly progress report",
-            "Performance analytics",
+            "3 subjects",
+            "3 sessions weekly",
+            "Mathematics, English & Phonics",
+            "Homework help",
+            "Parent feedback",
         ),
-        education_levels=tuple(f"JSS{i}" for i in range(1, 4))
-        + tuple(f"SS{i}" for i in range(1, 4))
-        + ("JSS", "SSS", "SECONDARY"),
+        education_levels=tuple(f"PRIMARY {i}" for i in range(1, 7))
+        + tuple(f"PRY{i}" for i in range(1, 7))
+        + ("PRIMARY",),
         exam_types=(),
+        billing="monthly",
     ),
     LiveClassPlan(
-        id="secondary_elite",
-        category="High School (JSS & SSS)",
-        name="Secondary Elite",
-        price=80000,
-        sessions=16,
-        session_minutes=60,
-        max_subjects=99,
+        id="nursery_school",
+        category="Nursery School",
+        name="Nursery School",
+        price=25000,
+        sessions=2,
+        session_minutes=45,
+        max_subjects=2,
         features=(
-            "Assignment & project support",
-            "Weekly tests",
-            "CBT practice",
-            "Personalized study plan",
-            "Dedicated academic mentor",
-            "Parent consultation",
+            "2 subjects",
+            "2 sessions weekly",
+            "Reading & Phonics",
+            "Counting & fun games",
+            "Parent feedback",
         ),
-        education_levels=tuple(f"JSS{i}" for i in range(1, 4))
-        + tuple(f"SS{i}" for i in range(1, 4))
-        + ("JSS", "SSS", "SECONDARY"),
+        education_levels=("NURSERY", "KG", "PRE-NURSERY", "NURSERY 1", "NURSERY 2"),
         exam_types=(),
-    ),
-    LiveClassPlan(
-        id="exam_intensive",
-        category="Exam Preparation",
-        name="Exam Intensive",
-        price=80000,
-        sessions=18,
-        session_minutes=90,
-        max_subjects=4,
-        features=(
-            "JAMB prep classes",
-            "Past question practice",
-            "Mock tests",
-            "Exam strategies",
-            "Performance reports",
-        ),
-        education_levels=("JAMB", "UTME", "WAEC", "NECO", "IGCSE"),
-        exam_types=("JAMB", "WAEC", "NECO", "POST_UTME"),
-    ),
-    LiveClassPlan(
-        id="exam_mastery",
-        category="Exam Preparation",
-        name="Exam Mastery",
-        price=100000,
-        sessions=25,
-        session_minutes=120,
-        max_subjects=8,
-        features=(
-            "Intensive revision",
-            "Unlimited past questions",
-            "Weekly mock CBT exams",
-            "Exam strategy sessions",
-            "Dedicated academic mentor",
-            "Detailed performance reports",
-        ),
-        education_levels=("JAMB", "UTME", "WAEC", "NECO", "IGCSE"),
-        exam_types=("JAMB", "WAEC", "NECO", "POST_UTME"),
+        billing="monthly",
     ),
 )
 
@@ -393,16 +180,21 @@ def suggest_plan_ids(
     level = _norm(education_level)
     exam = _norm(exam_type).replace("POST UTME", "POST_UTME")
 
-    if exam in {"JAMB", "WAEC", "NECO", "POST_UTME", "IGCSE"}:
-        return ["exam_intensive", "exam_mastery"]
+    if exam in {"JAMB", "POST_UTME"} and exam == "JAMB":
+        return ["jamb_prep", "jamb_waec_neco_prep"]
+    if exam in {"WAEC", "NECO", "POST_UTME", "IGCSE"}:
+        return ["jamb_waec_neco_prep"]
 
     if any(x in level for x in ("NURSERY", "KG", "PRE NURSERY")):
-        return ["nursery_standard", "nursery_premium"]
+        return ["nursery_school"]
 
     if "PRIMARY" in level or level.startswith("PRY"):
-        return ["primary_standard", "primary_premium", "primary_elite"]
+        return ["primary_school"]
+
+    if exam in {"JAMB", "UTME"} or "JAMB" in level or "UTME" in level:
+        return ["jamb_prep", "jamb_waec_neco_prep"]
 
     if level.startswith("JSS") or level.startswith("SS") or "SECONDARY" in level:
-        return ["secondary_standard", "secondary_premium", "secondary_elite"]
+        return ["private_lesson", "jamb_waec_neco_prep"]
 
     return [p.id for p in LIVE_CLASS_PLANS]

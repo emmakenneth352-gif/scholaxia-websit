@@ -324,9 +324,8 @@
 
   async function bookClass() {
     var status = $("bookStatus");
-    var subject = (($("bookSubject") && $("bookSubject").value) || "").trim();
-    var topic = (($("bookTopic") && $("bookTopic").value) || "").trim();
-    var packageId = (($("bookPackage") && $("bookPackage").value) || "nursery_standard").trim();
+    var subject = (($("bookSubject") && $("bookSubject").value) || "").trim();    var topic = (( $("bookTopic") && $("bookTopic").value) || "").trim();
+    var packageId = (( $("bookPackage") && $("bookPackage").value) || "nursery_school").trim();
     if (!subject) {
       if (status) {
         status.textContent = "Enter a subject.";

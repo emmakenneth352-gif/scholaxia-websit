@@ -277,7 +277,7 @@
           <span class="dash-stat-icon blue">&#128221;</span>
           <div>
             <strong id="dash-stat-exams">0</strong>
-            <span>Scholaxia exams</span>
+            <span>Scholaxia tests</span>
           </div>
         </div>
         <div class="dash-stat-card">
@@ -375,7 +375,7 @@
       <div class="info-banner">Copy your code from the <strong>Access Code</strong> tab. Tap <strong>Join live</strong> on a class below and paste the code once to enter.</div>
 
       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px">
-        <button type="button" class="btn-action" style="background:linear-gradient(135deg,#16a34a,#15803d)" onclick="showPage('holiday-packages')">&#127808; Scholaxia Holiday Promo Classes</button>
+        <button type="button" class="btn-action" style="background:linear-gradient(135deg,#16a34a,#15803d)" onclick="showPage('holiday-packages')">&#127808; Scholaxia Live Class Plans</button>
         <button type="button" class="btn-secondary" onclick="showPage('class-packages')">Class packages</button>
         <button type="button" class="btn-secondary" onclick="showPage('assignments')">Assignments</button>
       </div>
@@ -449,9 +449,9 @@
 
     <section id="page-school" class="page">
 
-      <div class="info-banner">&#128221; <strong>Scholaxia Exam</strong> — tests your teacher uploads. You see your score immediately after you submit. <em>Any registered student</em> can take these (live-class payment is only for joining live video classes).</div>
+      <div class="info-banner">&#128221; <strong>Scholaxia Test</strong> — tests your teacher uploads. You see your score immediately after you submit. <em>Any registered student</em> can take these (live-class payment is only for joining live video classes).</div>
 
-      <div id="school-grid" class="card-grid"><div class="loading">Loading Scholaxia exams…</div></div>
+      <div id="school-grid" class="card-grid"><div class="loading">Loading Scholaxia tests…</div></div>
 
     </section>
 
@@ -478,9 +478,14 @@
     <section id="page-marketplace" class="page">
       <div class="sx-page-hero">
         <h2>&#128722; Scholaxia Marketplace</h2>
-        <p>Shop gadgets, laptops, phones, books and more. Book an item and Scholaxia will chat with you. Free items can be claimed without payment.</p>
+        <p>Shop gadgets, laptops, phones, books and more. Add items to your cart and pay securely with Paystack.</p>
       </div>
-      <input type="search" id="marketplace-search" class="library-search" placeholder="Search products…" autocomplete="off" />
+      <div class="mp-toolbar">
+        <input type="search" id="marketplace-search" class="library-search" placeholder="Search products…" autocomplete="off" />
+        <button type="button" id="mp-cart-fab" class="mp-cart-fab" onclick="openMarketplaceCart()" aria-label="Open cart">
+          &#128722; Cart <span id="mp-cart-badge" class="mp-cart-badge hidden">0</span>
+        </button>
+      </div>
       <div id="marketplace-tabs" class="mp-tabs"></div>
       <div id="marketplace-grid" class="mp-grid"><div class="loading">Loading…</div></div>
     </section>
@@ -957,21 +962,34 @@
 
 
 
-<div id="marketplace-book-modal" class="modal hidden" role="dialog" aria-modal="true">
+<!-- Marketplace cart drawer (site-style cart flow) -->
+<div id="mp-cart-drawer" class="mp-cart-drawer hidden" role="dialog" aria-modal="true" aria-label="Shopping cart">
+  <div class="mp-cart-backdrop" data-mp-close-cart></div>
+  <aside class="mp-cart-panel">
+    <header class="mp-cart-head">
+      <h3>&#128722; Your cart</h3>
+      <button type="button" class="mp-cart-close" data-mp-close-cart aria-label="Close">&#10005;</button>
+    </header>
+    <div id="mp-cart-body" class="mp-cart-body"></div>
+    <footer class="mp-cart-foot">
+      <div class="mp-cart-total-row"><span>Total</span><strong id="mp-cart-total">₦0</strong></div>
+      <button type="button" class="btn-action mp-cart-checkout-btn" onclick="mpBeginCheckout()">Checkout with Paystack</button>
+    </footer>
+  </aside>
+</div>
+
+<!-- Marketplace checkout modal -->
+<div id="mp-checkout-modal" class="modal hidden" role="dialog" aria-modal="true">
   <div class="modal-box">
-    <h3 id="mp-book-title">Book item</h3>
-    <p id="mp-book-price" class="mp-book-price"></p>
-    <form id="mp-book-form" onsubmit="submitMarketplaceBook(event)">
-      <input type="hidden" id="mp-book-product-id" />
-      <label>Full name<input type="text" id="mp-book-name" required /></label>
-      <label>Email<input type="email" id="mp-book-email" required /></label>
-      <label>Phone<input type="tel" id="mp-book-phone" placeholder="08012345678" required /></label>
-      <label>WhatsApp<input type="tel" id="mp-book-whatsapp" placeholder="08012345678" required /></label>
-      <label>Note<textarea id="mp-book-note" rows="2" placeholder="Size, color, questions…"></textarea></label>
-      <p id="mp-book-error" class="error-msg"></p>
+    <h3>Delivery details</h3>
+    <p class="modal-sub">Where should we deliver your order?</p>
+    <form onsubmit="mpSubmitCheckout(event)">
+      <label>Delivery address<textarea id="mp-checkout-address" rows="2" placeholder="House number, street, area, city…" required></textarea></label>
+      <label>Phone number<input type="tel" id="mp-checkout-phone" placeholder="08012345678" required /></label>
+      <p id="mp-checkout-error" class="error-msg"></p>
       <div class="modal-actions">
-        <button type="button" class="btn-secondary" onclick="closeMarketplaceBook()">Cancel</button>
-        <button type="submit" class="btn-action" id="mp-book-submit">Send booking</button>
+        <button type="button" class="btn-secondary" onclick="closeMarketplaceCheckout()">Cancel</button>
+        <button type="submit" class="btn-action" id="mp-checkout-submit">Pay with Paystack</button>
       </div>
     </form>
   </div>

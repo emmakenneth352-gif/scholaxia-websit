@@ -4,8 +4,13 @@
     try {
       var host = String((global.location && location.hostname) || "");
       // Same-origin when the site is served from Render — avoids GitHub Pages CORS blocks.
-      if (host === "scholaxia1.onrender.com" || host === "localhost" || host === "127.0.0.1") {
+      if (host === "scholaxia1.onrender.com") {
         return String(location.origin || "").replace(/\/$/, "") || "https://scholaxia1.onrender.com";
+      }
+      // Local dev server (e.g. 127.0.0.1:8000) has no reachable database —
+      // call the production API directly (CORS allows all origins).
+      if (host === "localhost" || host === "127.0.0.1") {
+        return "https://scholaxia1.onrender.com";
       }
     } catch (e) {}
     return "https://scholaxia1.onrender.com";
@@ -292,6 +297,8 @@
       if (data.user.school_name) localStorage.setItem("sia_user_school_name", data.user.school_name);
       if (data.user.education_level) localStorage.setItem("sia_class", data.user.education_level);
       if (data.user.school_student_id) localStorage.setItem("sia_school_student_id", data.user.school_student_id);
+      if (data.user.country) localStorage.setItem("sia_country", data.user.country);
+      if (data.user.language) localStorage.setItem("sia_language", data.user.language);
     }
   }
 

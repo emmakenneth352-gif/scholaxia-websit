@@ -112,34 +112,36 @@ function renderCbtHub() {
     grid.innerHTML = '<div class="empty-state-premium"><h3>No exam types</h3><p>CBT is not configured yet.</p></div>';
     return;
   }
-  grid.innerHTML =
+  grid.innerHTML = '<div class="cbt-hub-wrap">' +
     '<p class="cbt-hub-note">Choose <strong>JAMB</strong>, <strong>WAEC</strong>, or <strong>NECO</strong>. Question counts and timers come from admin CBT Settings.</p>' +
-    '<div class="card-grid card-grid-premium">' +
+    '<div class="cbt-type-grid">' +
     types
       .map(function (t) {
         var locked = !t.has_access;
+        var logo = t.exam_type === "JAMB" ? "img/jamb-logo.svg" : t.exam_type === "WAEC" ? "img/waec-logo.svg" : "img/neco-logo.svg";
+        var accent = t.exam_type === "JAMB" ? "cbt-type-jamb" : t.exam_type === "WAEC" ? "cbt-type-waec" : "cbt-type-neco";
         return (
-          '<div class="card sx-card cbt-exam-card" style="cursor:pointer" onclick="cbtHubOpenBoard(\'' +
+          '<div class="cbt-type-card ' + accent + '" onclick="cbtHubOpenBoard(\'' +
           cbtEsc(t.exam_type) +
           "')\">" +
-          '<div class="time-badge">' +
-          cbtEsc(t.exam_type) +
-          "</div>" +
-          "<h3>" +
-          cbtEsc(t.exam_type) +
-          "</h3>" +
-          '<p class="meta">' +
-          (locked ? "Locked — pay or redeem coupon" : "Unlocked") +
-          "</p>" +
-          '<p class="meta">' +
+          '<div class="cbt-type-logo"><img src="' + logo + '" alt="' + cbtEsc(t.exam_type) + '" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'cbt-logo-fallback\');this.parentNode.innerHTML=\'&#127919;\'" /></div>' +
+          '<div class="cbt-type-body">' +
+          "<h3>" + cbtEsc(t.exam_type) + "</h3>" +
+          '<p class="cbt-type-sub">' +
           (t.exam_type === "JAMB"
             ? "Combined package · pick " + (settings.jamb_subjects_required || 4) + " subjects"
             : "Subject practice from your registered list") +
-          "</p></div>"
+          "</p>" +
+          '<span class="cbt-type-badge ' + (locked ? "is-locked" : "is-open") + '">' +
+          (locked ? "&#128274; Locked — pay or coupon" : "&#128275; Unlocked") +
+          "</span>" +
+          "</div>" +
+          '<span class="cbt-type-arrow">&#8594;</span>' +
+          "</div>"
         );
       })
       .join("") +
-    "</div>";
+    "</div></div>";
 }
 
 function cbtHubOpenBoard(board) {
@@ -158,7 +160,7 @@ function renderCbtBoard(grid) {
     return t.exam_type === board;
   }) || { has_access: false };
 
-  var html =
+  var html = '<div class="cbt-hub-wrap">' +
     '<p class="cbt-hub-note"><button type="button" class="btn-secondary btn-sm" onclick="loadCbtHubPage()">← Exam types</button></p>' +
     "<h3 style=\"margin:8px 0\">" +
     cbtEsc(board) +
@@ -182,27 +184,30 @@ function renderCbtBoard(grid) {
       profile.jamb_subjects && profile.jamb_subjects.length
         ? profile.jamb_subjects
         : DEFAULT_JAMB_SUBJECTS;
+    var pickedCount = Object.keys(cbtHubState.jambPicked).length;
     html +=
       '<p class="cbt-hub-note">Select exactly <strong>' +
       need +
       "</strong> subjects, then START CBT. Subjects run as separate sections in one exam.</p>";
+    html += '<div class="cbt-subject-grid">';
     html += jambSubs
       .map(function (s) {
         var on = !!cbtHubState.jambPicked[s];
         return (
-          '<label class="card sx-card" style="display:flex;gap:10px;align-items:center;padding:12px;cursor:pointer">' +
-          '<input type="checkbox" ' +
-          (on ? "checked " : "") +
-          'onchange="cbtHubToggleJamb(\'' +
+          '<button type="button" class="cbt-subject-chip' + (on ? " is-on" : "") +
+          '" onclick="cbtHubToggleJamb(\'' +
           cbtEsc(s).replace(/'/g, "\\'") +
-          "', this.checked)\" /> <span>" +
+          "')\"><span class='cbt-chip-check'>" + (on ? "&#10003;" : "") + "</span>" +
           cbtEsc(s) +
-          "</span></label>"
+          "</button>"
         );
       })
       .join("");
+    html += "</div>";
     html +=
-      '<div style="margin-top:14px"><button type="button" class="btn-join" onclick="cbtHubStartJambPractice()">START CBT</button></div>';
+      '<div class="cbt-start-bar"><span id="cbt-jamb-count" class="cbt-start-count">' +
+      pickedCount + " / " + need + " selected</span>" +
+      '<button type="button" class="btn-join" onclick="cbtHubStartJambPractice()">START CBT &#8594;</button></div>';
     grid.innerHTML = html;
     return;
   }
@@ -213,26 +218,30 @@ function renderCbtBoard(grid) {
       : DEFAULT_SSCE_SUBJECTS;
   html +=
     '<p class="cbt-hub-note">Choose one subject to practice. Only your registered subjects are listed.</p>';
+  html += '<div class="cbt-subject-grid">';
   html += registered
     .map(function (s) {
       return (
-        '<div class="card sx-card cbt-exam-card"><div class="time-badge">' +
-        cbtEsc(board) +
-        "</div><h3>" +
-        cbtEsc(s) +
-        '</h3><div class="card-actions-row">' +
-        '<button type="button" class="btn-join" onclick="cbtHubStartSubject(\'' +
+        '<div class="cbt-type-card cbt-type-subject" onclick="cbtHubStartSubject(\'' +
         cbtEsc(s).replace(/'/g, "\\'") +
-        "')\">START CBT</button></div></div>"
+        "')\">" +
+        '<div class="cbt-type-icon">&#128221;</div>' +
+        '<div class="cbt-type-body"><h3>' + cbtEsc(s) + '</h3>' +
+        '<p class="cbt-type-sub">' + cbtEsc(board) + " practice</p></div>" +
+        '<span class="cbt-type-arrow">&#9654;</span></div>'
       );
     })
     .join("");
+  html += "</div>";
+  html += '</div>';
   grid.innerHTML = html;
 }
 
 function cbtHubToggleJamb(subject, on) {
+  if (on === undefined) on = !cbtHubState.jambPicked[subject];
   if (on) cbtHubState.jambPicked[subject] = true;
   else delete cbtHubState.jambPicked[subject];
+  renderCbtHub();
 }
 
 function cbtHubUnlockBoard() {
