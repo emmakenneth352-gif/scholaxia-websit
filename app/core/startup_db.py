@@ -1,9 +1,20 @@
-"""Database schema bootstrap — runs on app startup when DATABASE_URL is reachable."""
+"""Database schema bootstrap — runs on app startup when DATABASE_URL is reachable.
+
+Robustness contract (learned from the 2026-09 outage where users.country/language
+rolled back and every authenticated endpoint 500'd):
+  1. Each migration statement runs in its own savepoint — one failure can never
+     poison the transaction and roll back the statements that succeeded.
+  2. After the hand-written migrations, a self-healing safety net introspects the
+     live schema and adds any model column that is still missing, so a new model
+     field without a hand-written migration can never take production down.
+"""
 import asyncio
 import logging
 import socket
 
 from sqlalchemy import text
+from sqlalchemy.schema import CreateColumn
+from sqlalchemy.dialects import postgresql
 
 from app.core.config import settings
 from app.core.database import Base, AsyncSessionLocal, engine
@@ -16,6 +27,218 @@ _db_initialized = False
 
 def database_ready() -> bool:
     return _db_initialized
+
+
+# ── Hand-written migrations ───────────────────────────────────────────────────
+# Each statement is idempotent and runs in its own savepoint (see
+# _run_schema_migrations). Order matters only for readability; failures are
+# isolated and logged, never fatal for the rest of the list.
+_SCHEMA_STATEMENTS = (
+    # users
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(40) NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(80) NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users (phone)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id UUID NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ALTER COLUMN profile_picture TYPE VARCHAR(1000)",
+    # cbt_exams
+    "ALTER TABLE cbt_exams ALTER COLUMN created_by DROP NOT NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS paper_kind VARCHAR(32) NOT NULL DEFAULT 'cbt_practice'",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS scheduled_start TIMESTAMP NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS scheduled_end TIMESTAMP NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS year INTEGER NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS assigned_student_ids JSON NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS notes_url VARCHAR(500) NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS notes_title VARCHAR(255) NULL",
+    "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS school_id UUID NULL",
+    # community posts
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'everyone'",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS cbt_exam_id UUID NULL",
+    "UPDATE community_posts SET visibility = 'everyone' WHERE visibility IS NULL",
+    "UPDATE community_posts SET is_anonymous = FALSE WHERE is_anonymous IS NULL",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS group_id UUID NULL REFERENCES student_groups(id)",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS media_url VARCHAR(500) NULL",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(50) NULL",
+    "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NULL",
+    # student_profiles
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS jamb_subjects VARCHAR[] NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_subjects VARCHAR[] NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_exam_type VARCHAR(20) NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS education_level VARCHAR(50) NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS school_student_id VARCHAR(40) NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_id VARCHAR(80) NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_expires_at TIMESTAMP NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_sessions_used INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS community_channel_id UUID NULL",
+    # live_classes
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS academic_class VARCHAR(40) NULL",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_id UUID NULL",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'subject'",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS join_code VARCHAR(32) NULL",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS invited_student_ids TEXT NULL",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_group_id UUID NULL",
+    # marketplace
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS vendor_id UUID NULL",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS source_role VARCHAR(20) NOT NULL DEFAULT 'admin'",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS stock_qty INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE marketplace_products ALTER COLUMN image_url TYPE VARCHAR(1000)",
+    # teacher_profiles
+    "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS academic_classes VARCHAR[] NULL",
+    "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS school_id UUID NULL",
+    "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS location VARCHAR(255) NULL",
+    "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT FALSE",
+    # school exams
+    "ALTER TABLE school_exam_candidates ADD COLUMN IF NOT EXISTS school_id UUID NULL",
+    "ALTER TABLE school_exam_candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(40) NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ix_school_exam_candidates_candidate_id ON school_exam_candidates (candidate_id)",
+    "ALTER TABLE external_exams ADD COLUMN IF NOT EXISTS allowed_classes JSON NULL",
+    "ALTER TABLE external_exam_attempts ADD COLUMN IF NOT EXISTS student_user_id UUID NULL",
+    "ALTER TABLE external_exam_attempts ALTER COLUMN candidate_id DROP NOT NULL",
+    # payments
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS flutterwave_tx_ref VARCHAR(255) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS flutterwave_transaction_id VARCHAR(255) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS live_class_id UUID NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS material_id UUID NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS live_plan_id VARCHAR(80) NULL",
+    "ALTER TABLE payments ALTER COLUMN student_id DROP NOT NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS book_id UUID NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider VARCHAR(30) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_reference VARCHAR(255) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_transaction_id VARCHAR(255) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_type VARCHAR(40) NULL",
+    "ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_id VARCHAR(120) NULL",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_provider_reference "
+    "ON payments (provider_reference) WHERE provider_reference IS NOT NULL",
+    # entitlements / session requests
+    "ALTER TABLE student_entitlements ADD COLUMN IF NOT EXISTS details JSON NULL",
+    "ALTER TABLE live_session_requests ADD COLUMN IF NOT EXISTS assigned_teacher_id UUID NULL",
+    # books (library)
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS category VARCHAR(80) NOT NULL DEFAULT 'Books'",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS education_level VARCHAR(80) NULL",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS term VARCHAR(40) NULL",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS scheme_week INTEGER NULL",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS scheme_topic VARCHAR(255) NULL",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS year INTEGER NULL",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS library_target VARCHAR(20) NOT NULL DEFAULT 'student'",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS is_downloadable BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_copy BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_screenshot BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_print BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TYPE librarytarget ADD VALUE IF NOT EXISTS 'kind'",
+    # videos
+    "ALTER TABLE videos ADD COLUMN IF NOT EXISTS audience VARCHAR(20) NOT NULL DEFAULT 'student'",
+    # tables (IF NOT EXISTS — safe to re-run)
+    """
+    CREATE TABLE IF NOT EXISTS past_question_guest_access (
+        id UUID PRIMARY KEY,
+        book_id UUID NOT NULL REFERENCES books(id),
+        email VARCHAR(255) NOT NULL,
+        access_token VARCHAR(64) NOT NULL UNIQUE,
+        payment_id UUID NULL REFERENCES payments(id),
+        payment_reference VARCHAR(100) NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        expires_at TIMESTAMP WITHOUT TIME ZONE NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS ix_pq_guest_access_token ON past_question_guest_access (access_token)",
+    "CREATE INDEX IF NOT EXISTS ix_pq_guest_email ON past_question_guest_access (email)",
+    "CREATE INDEX IF NOT EXISTS ix_pq_guest_book ON past_question_guest_access (book_id)",
+    """
+    CREATE TABLE IF NOT EXISTS school_groups (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        teacher_id UUID NOT NULL REFERENCES users(id),
+        school_name VARCHAR(200) NOT NULL,
+        name VARCHAR(200) NOT NULL,
+        student_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT NOW()
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS post_reactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        post_id UUID NOT NULL REFERENCES community_posts(id),
+        user_id UUID NOT NULL REFERENCES users(id),
+        emoji VARCHAR(16) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE (post_id, user_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS kind_profiles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID UNIQUE NOT NULL REFERENCES users(id),
+        age_group VARCHAR(20) NOT NULL DEFAULT '6-8',
+        grade_level VARCHAR(50),
+        parent_email VARCHAR(255),
+        favorite_subjects TEXT[] DEFAULT '{}',
+        learning_goals VARCHAR(500),
+        preferred_language VARCHAR(30) DEFAULT 'english'
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS vendor_profiles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID UNIQUE NOT NULL REFERENCES users(id),
+        business_name VARCHAR(255) NOT NULL,
+        location VARCHAR(255),
+        categories TEXT[] DEFAULT '{}',
+        is_approved BOOLEAN NOT NULL DEFAULT FALSE
+    )
+    """,
+    # student groups
+    "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT TRUE",
+    "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS is_restricted BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)",
+    "UPDATE student_groups SET is_approved = TRUE WHERE is_approved IS NULL",
+    # Avoid Postgres enum mismatches on group member/join roles (500 source).
+    "ALTER TABLE student_group_members ALTER COLUMN role TYPE VARCHAR(20) USING role::text",
+    "ALTER TABLE student_group_join_requests ALTER COLUMN status TYPE VARCHAR(20) USING status::text",
+    # vendor profiles
+    "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500) NULL",
+    "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(40) NULL",
+    "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS nin VARCHAR(20) NULL",
+    "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS kyc_completed BOOLEAN NOT NULL DEFAULT FALSE",
+    # Postgres enums (also handled one-per-transaction in ensure_postgres_enums)
+    "ALTER TYPE examtype ADD VALUE IF NOT EXISTS 'POST_UTME'",
+    "ALTER TYPE examtype ADD VALUE IF NOT EXISTS 'JUNIOR_WAEC'",
+    "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'kind'",
+    "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'vendor'",
+    "ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'school_admin'",
+    # SIL
+    "ALTER TABLE sil_anticheat_events ADD COLUMN IF NOT EXISTS severity INTEGER NOT NULL DEFAULT 1",
+    # Marketplace escrow / vendor payouts
+    "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS platform_fee DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS vendor_net DOUBLE PRECISION NOT NULL DEFAULT 0",
+    "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(30) NOT NULL DEFAULT 'none'",
+    "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS buyer_confirmed BOOLEAN NOT NULL DEFAULT FALSE",
+    "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS buyer_confirmed_at TIMESTAMP NULL",
+    """
+    CREATE TABLE IF NOT EXISTS vendor_withdrawal_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        vendor_id UUID NOT NULL REFERENCES users(id),
+        amount DOUBLE PRECISION NOT NULL,
+        bank_name VARCHAR(255) NOT NULL,
+        account_number VARCHAR(40) NOT NULL,
+        account_name VARCHAR(255) NOT NULL,
+        status VARCHAR(30) NOT NULL DEFAULT 'pending',
+        admin_note TEXT NULL,
+        requested_at TIMESTAMP DEFAULT NOW(),
+        processed_at TIMESTAMP NULL,
+        processed_by UUID NULL REFERENCES users(id)
+    )
+    """,
+)
 
 
 async def ensure_school_campus_schema() -> None:
@@ -62,502 +285,86 @@ async def probe_database() -> bool:
         return False
 
 
-async def _run_schema_migrations(conn) -> None:
-    await conn.run_sync(Base.metadata.create_all)
-    await conn.execute(text(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS country VARCHAR(80) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(10) NULL"
-    ))
+async def _run_schema_migrations() -> None:
+    """Run create_all + every hand-written migration, each in its OWN transaction.
+
+    A single failing statement (bad SQL *or* a dropped connection) logs a warning
+    and moves on — it can never roll back the successful ones (the old
+    single-transaction version did exactly that: one bad ALTER wiped
+    users.country/language and 500'd the whole API).
+    """
     try:
-        await conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users (phone)"
-        ))
-    except Exception:
-        pass
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ALTER COLUMN created_by DROP NOT NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS paper_kind VARCHAR(32) NOT NULL DEFAULT 'cbt_practice'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'everyone'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS cbt_exam_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "UPDATE community_posts SET visibility = 'everyone' WHERE visibility IS NULL"
-    ))
-    await conn.execute(text(
-        "UPDATE community_posts SET is_anonymous = FALSE WHERE is_anonymous IS NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS scheduled_start TIMESTAMP NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS scheduled_end TIMESTAMP NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS year INTEGER NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS assigned_student_ids JSON NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS notes_url VARCHAR(500) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS notes_title VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS jamb_subjects VARCHAR[] NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_subjects VARCHAR[] NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_exam_type VARCHAR(20) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS education_level VARCHAR(50) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS academic_class VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS academic_classes VARCHAR[] NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS school_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE school_exam_candidates ADD COLUMN IF NOT EXISTS school_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS school_student_id VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE school_campuses ADD COLUMN IF NOT EXISTS subscription_active BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE school_campuses ADD COLUMN IF NOT EXISTS subscription_plan VARCHAR(80) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE external_exams ADD COLUMN IF NOT EXISTS allowed_classes JSON NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE external_exam_attempts ADD COLUMN IF NOT EXISTS student_user_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE external_exam_attempts ALTER COLUMN candidate_id DROP NOT NULL"
-    ))
-    try:
-        await conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ix_school_exam_candidates_candidate_id ON school_exam_candidates (candidate_id)"
-        ))
-    except Exception:
-        pass
-    await conn.execute(text(
-        "ALTER TABLE cbt_exams ADD COLUMN IF NOT EXISTS school_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS flutterwave_tx_ref VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS flutterwave_transaction_id VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS live_class_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS material_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS live_plan_id VARCHAR(80) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_entitlements ADD COLUMN IF NOT EXISTS details JSON NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_id VARCHAR(80) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_expires_at TIMESTAMP NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_sessions_used INTEGER NOT NULL DEFAULT 0"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS community_channel_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_session_requests ADD COLUMN IF NOT EXISTS assigned_teacher_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS is_free BOOLEAN NOT NULL DEFAULT TRUE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS price DOUBLE PRECISION NOT NULL DEFAULT 0"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS category VARCHAR(80) NOT NULL DEFAULT 'Books'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS education_level VARCHAR(80) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS term VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS scheme_week INTEGER NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS scheme_topic VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS year INTEGER NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ALTER COLUMN student_id DROP NOT NULL"
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS past_question_guest_access (
-            id UUID PRIMARY KEY,
-            book_id UUID NOT NULL REFERENCES books(id),
-            email VARCHAR(255) NOT NULL,
-            access_token VARCHAR(64) NOT NULL UNIQUE,
-            payment_id UUID NULL REFERENCES payments(id),
-            payment_reference VARCHAR(100) NULL,
-            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-            expires_at TIMESTAMP WITHOUT TIME ZONE NULL
-        )
-        """
-    ))
-    await conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_pq_guest_access_token ON past_question_guest_access (access_token)"
-    ))
-    await conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_pq_guest_email ON past_question_guest_access (email)"
-    ))
-    await conn.execute(text(
-        "CREATE INDEX IF NOT EXISTS ix_pq_guest_book ON past_question_guest_access (book_id)"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS library_target VARCHAR(20) NOT NULL DEFAULT 'student'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS is_downloadable BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_copy BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_screenshot BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE books ADD COLUMN IF NOT EXISTS allow_print BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    try:
-        await conn.execute(text("ALTER TYPE librarytarget ADD VALUE IF NOT EXISTS 'kind'"))
-    except Exception:
-        pass
-    await conn.execute(text(
-        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS audience VARCHAR(20) NOT NULL DEFAULT 'student'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS book_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider VARCHAR(30) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_reference VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS provider_transaction_id VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_type VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE payments ADD COLUMN IF NOT EXISTS product_id VARCHAR(120) NULL"
-    ))
-    try:
-        await conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS ux_payments_provider_reference "
-            "ON payments (provider_reference) WHERE provider_reference IS NOT NULL"
-        ))
-    except Exception:
-        pass
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS school_groups (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            teacher_id UUID NOT NULL REFERENCES users(id),
-            school_name VARCHAR(200) NOT NULL,
-            name VARCHAR(200) NOT NULL,
-            student_ids TEXT NOT NULL DEFAULT '[]',
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-        """
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'subject'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS join_code VARCHAR(32) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS invited_student_ids TEXT NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_group_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT TRUE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS is_restricted BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS image_url VARCHAR(1000)"
-    ))
-    await conn.execute(text(
-        "UPDATE student_groups SET is_approved = TRUE WHERE is_approved IS NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS group_id UUID NULL REFERENCES student_groups(id)"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS like_count INTEGER NOT NULL DEFAULT 0"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS media_url VARCHAR(500) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS media_type VARCHAR(50) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE community_posts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NULL"
-    ))
-    # Avoid Postgres enum mismatches on group member/join roles (common Internal Server Error source).
-    for stmt in (
-        "ALTER TABLE student_group_members ALTER COLUMN role TYPE VARCHAR(20) USING role::text",
-        "ALTER TABLE student_group_join_requests ALTER COLUMN status TYPE VARCHAR(20) USING status::text",
-    ):
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
+        logger.error("create_all failed (continuing with column migrations): %s", exc)
+
+    for stmt in _SCHEMA_STATEMENTS:
+        label = " ".join(stmt.split())[:100]
         try:
-            await conn.execute(text(stmt))
-        except Exception:
-            pass
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS post_reactions (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            post_id UUID NOT NULL REFERENCES community_posts(id),
-            user_id UUID NOT NULL REFERENCES users(id),
-            emoji VARCHAR(16) NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            UNIQUE (post_id, user_id)
-        )
-        """
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS kind_profiles (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id UUID UNIQUE NOT NULL REFERENCES users(id),
-            age_group VARCHAR(20) NOT NULL DEFAULT '6-8',
-            grade_level VARCHAR(50),
-            parent_email VARCHAR(255),
-            favorite_subjects TEXT[] DEFAULT '{}',
-            learning_goals VARCHAR(500),
-            preferred_language VARCHAR(30) DEFAULT 'english'
-        )
-        """
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS vendor_profiles (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id UUID UNIQUE NOT NULL REFERENCES users(id),
-            business_name VARCHAR(255) NOT NULL,
-            location VARCHAR(255),
-            categories TEXT[] DEFAULT '{}',
-            is_approved BOOLEAN NOT NULL DEFAULT FALSE
-        )
-        """
-    ))
-    await conn.execute(text(
-        "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS address VARCHAR(500) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS whatsapp VARCHAR(40) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS nin VARCHAR(20) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE vendor_profiles ADD COLUMN IF NOT EXISTS kyc_completed BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS location VARCHAR(255) NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE teacher_profiles ADD COLUMN IF NOT EXISTS is_approved BOOLEAN NOT NULL DEFAULT FALSE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS vendor_id UUID NULL"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) NOT NULL DEFAULT 'approved'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS source_role VARCHAR(20) NOT NULL DEFAULT 'admin'"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS stock_qty INTEGER NOT NULL DEFAULT 0"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE"
-    ))
-    await conn.execute(text(
-        "ALTER TABLE marketplace_products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE"
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS marketplace_cart_items (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id UUID NOT NULL REFERENCES users(id),
-            product_id UUID NOT NULL REFERENCES marketplace_products(id),
-            quantity INTEGER NOT NULL DEFAULT 1,
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-        """
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS marketplace_orders (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            user_id UUID NOT NULL REFERENCES users(id),
-            total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
-            currency VARCHAR(10) NOT NULL DEFAULT 'NGN',
-            status VARCHAR(30) NOT NULL DEFAULT 'pending_payment',
-            delivery_address VARCHAR(500),
-            contact_phone VARCHAR(40),
-            created_at TIMESTAMP DEFAULT NOW()
-        )
-        """
-    ))
-    await conn.execute(text(
-        """
-        CREATE TABLE IF NOT EXISTS marketplace_order_items (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            order_id UUID NOT NULL REFERENCES marketplace_orders(id),
-            product_id UUID NOT NULL REFERENCES marketplace_products(id),
-            vendor_id UUID NULL REFERENCES users(id),
-            quantity INTEGER NOT NULL DEFAULT 1,
-            unit_price DOUBLE PRECISION NOT NULL DEFAULT 0,
-            tracking_status VARCHAR(40) NOT NULL DEFAULT 'pending',
-            tracking_note VARCHAR(500)
-        )
-        """
-    ))
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        except Exception as exc:
+            logger.warning("schema stmt skipped: %s -> %s", label, exc)
+
+
+async def ensure_model_columns() -> None:
+    """Self-healing safety net: add any model column missing from the live DB.
+
+    Introspects information_schema and compares it against SQLAlchemy metadata.
+    Guarantees a deploy can never 500 every authenticated endpoint just because
+    a new model field was not mirrored by a hand-written migration.
+    Each ALTER runs in its own transaction (fresh pooled connection) so one
+    failure or a dropped connection cannot affect the others.
+    """
+    added = []
     try:
-        await conn.execute(text(
-            "ALTER TABLE users ALTER COLUMN profile_picture TYPE VARCHAR(1000)"
-        ))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text(
-            "ALTER TABLE marketplace_products ALTER COLUMN image_url TYPE VARCHAR(1000)"
-        ))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text("ALTER TYPE examtype ADD VALUE IF NOT EXISTS 'POST_UTME'"))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text("ALTER TYPE examtype ADD VALUE IF NOT EXISTS 'JUNIOR_WAEC'"))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'kind'"))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'vendor'"))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'school_admin'"))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text(
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0"
-        ))
-    except Exception:
-        pass
-    try:
-        await conn.execute(text(
-            "ALTER TABLE sil_anticheat_events ADD COLUMN IF NOT EXISTS severity INTEGER NOT NULL DEFAULT 1"
-        ))
-    except Exception:
-        pass
-    # Marketplace escrow / vendor payouts
-    for stmt in (
-        "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS platform_fee DOUBLE PRECISION NOT NULL DEFAULT 0",
-        "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS vendor_net DOUBLE PRECISION NOT NULL DEFAULT 0",
-        "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS escrow_status VARCHAR(30) NOT NULL DEFAULT 'none'",
-        "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS buyer_confirmed BOOLEAN NOT NULL DEFAULT FALSE",
-        "ALTER TABLE marketplace_order_items ADD COLUMN IF NOT EXISTS buyer_confirmed_at TIMESTAMP NULL",
-        """
-        CREATE TABLE IF NOT EXISTS vendor_withdrawal_requests (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            vendor_id UUID NOT NULL REFERENCES users(id),
-            amount DOUBLE PRECISION NOT NULL,
-            bank_name VARCHAR(255) NOT NULL,
-            account_number VARCHAR(40) NOT NULL,
-            account_name VARCHAR(255) NOT NULL,
-            status VARCHAR(30) NOT NULL DEFAULT 'pending',
-            admin_note TEXT NULL,
-            requested_at TIMESTAMP DEFAULT NOW(),
-            processed_at TIMESTAMP NULL,
-            processed_by UUID NULL REFERENCES users(id)
-        )
-        """,
-    ):
-        try:
-            await conn.execute(text(stmt))
-        except Exception:
-            pass
+        async with engine.connect() as conn:
+            result = await conn.execute(text(
+                "SELECT table_name, column_name FROM information_schema.columns "
+                "WHERE table_schema='public'"
+            ))
+            live = {}
+            for t, c in result.fetchall():
+                live.setdefault(t, set()).add(c)
+
+        for table in Base.metadata.sorted_tables:
+            existing_cols = live.get(table.name)
+            if existing_cols is None:
+                continue  # missing tables are create_all's job (needs full FK graph)
+            for col in table.columns:
+                if col.name in existing_cols or col.primary_key:
+                    continue
+                try:
+                    col_ddl = str(CreateColumn(col).compile(dialect=postgresql.dialect()))
+                except Exception:
+                    continue
+                # NOT NULL without a server default breaks ADD COLUMN on a
+                # non-empty table — give scalar columns a safe default,
+                # add everything else as nullable.
+                suffix = ""
+                if not col.nullable and col.server_default is None:
+                    type_name = type(col.type).__name__
+                    if type_name == "Boolean":
+                        suffix = " DEFAULT FALSE"
+                    elif type_name in ("Integer", "BigInteger", "Float", "Numeric"):
+                        suffix = " DEFAULT 0"
+                    else:
+                        col_ddl = col_ddl.replace(" NOT NULL", "")
+                stmt = f"ALTER TABLE {table.name} ADD COLUMN IF NOT EXISTS {col_ddl}{suffix}"
+                try:
+                    async with engine.begin() as conn:
+                        await conn.execute(text(stmt))
+                    added.append(f"{table.name}.{col.name}")
+                    logger.info("ensure_model_columns: added %s.%s", table.name, col.name)
+                except Exception as exc:
+                    logger.warning(
+                        "ensure_model_columns skipped %s.%s: %s", table.name, col.name, exc
+                    )
+    except Exception as exc:
+        logger.warning("ensure_model_columns failed: %s", exc)
+    if added:
+        logger.info("ensure_model_columns: %d column(s) added: %s", len(added), ", ".join(added))
 
 
 async def ensure_cbt_coupon_tables() -> None:
@@ -699,8 +506,7 @@ async def initialize_database() -> bool:
     """Create tables, run migrations, and seed. Returns False if DATABASE_URL is invalid."""
     global _db_initialized
     try:
-        async with engine.begin() as conn:
-            await _run_schema_migrations(conn)
+        await _run_schema_migrations()
     except (socket.gaierror, OSError, ConnectionRefusedError) as exc:
         logger.error(
             "DATABASE_URL host %r cannot be resolved (%s). "
@@ -746,6 +552,11 @@ async def initialize_database() -> bool:
         await ensure_cbt_settings_schema()
     except Exception as exc:
         logger.warning("ensure_cbt_settings_schema: %s", exc)
+    # Self-healing: guarantee every model column exists (last line of defence).
+    try:
+        await ensure_model_columns()
+    except Exception as exc:
+        logger.warning("ensure_model_columns: %s", exc)
     try:
         await ensure_postgres_enums()
         _db_initialized = True
