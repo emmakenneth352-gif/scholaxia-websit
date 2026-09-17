@@ -634,16 +634,40 @@ async def start_practice_attempt(
         )
         if not subjects_clean and len(profile_ssce) == 1:
             subjects_clean = [str(profile_ssce[0]).strip()]
-        if len(subjects_clean) != 1:
+        if not subjects_clean:
             raise ValueError(f"Select one {board} subject to practice.")
-        # Soft-check: subject should be one the student registered
+
+        # First-time SSCE start: persist the chosen subject(s) to the profile and
+        # lock them — afterwards subjects can only change via an approved
+        # admin subject-change request (see routers/cbt_subject_change.py).
+        # The app may send the full registered list (1–9); the first entry is
+        # the subject practised in this attempt.
+        if not profile_ssce and profile is not None:
+            try:
+                profile.ssce_subjects = [str(s).strip() for s in subjects_clean]
+                profile.ssce_exam_type = board  # WAEC | NECO
+                profile.cbt_subjects_locked = True
+                profile.locked_at = naive_utc_now()
+                await db.flush()
+                await db.commit()
+                await db.refresh(profile)
+            except Exception:
+                logger.exception("practice start: could not persist SSCE subjects")
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+            profile_ssce = list(subjects_clean)
+        # Already registered: every requested subject must be one of them
         if profile_ssce:
-            want = subjects_clean[0].strip().lower()
             allowed_subs = {str(s).strip().lower() for s in profile_ssce}
-            if want not in allowed_subs:
-                raise ValueError(
-                    f"{subjects_clean[0]} is not in your registered {board} subjects. Update your profile."
-                )
+            for s in subjects_clean:
+                if s.strip().lower() not in allowed_subs:
+                    raise ValueError(
+                        f"{s} is not in your registered {board} subjects. "
+                        "Send your admin a subject-change request to update them."
+                    )
+        subjects_clean = [subjects_clean[0].strip()]
         duration = int(
             settings["waec_duration_minutes"] if board == "WAEC" else settings["neco_duration_minutes"]
         )

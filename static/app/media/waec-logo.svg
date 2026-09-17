@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- WAEC-style seal: navy ring, Africa map, laurel -->
+  <circle cx="60" cy="52" r="40" fill="#12355f"/>
+  <circle cx="60" cy="52" r="34" fill="none" stroke="#f2c94c" stroke-width="2.5"/>
+  <!-- Africa silhouette (simplified) -->
+  <path d="M52 34 l10 -3 8 4 3 8 -4 7 2 7 -5 9 -7 3 -6 -4 -4 -8 -1 -9 3 -7 z" fill="#f2c94c"/>
+  <!-- laurel arcs -->
+  <path d="M34 62 q8 14 26 16" fill="none" stroke="#f2c94c" stroke-width="2"/>
+  <path d="M86 62 q-8 14 -26 16" fill="none" stroke="#f2c94c" stroke-width="2"/>
+  <text x="60" y="108" font-family="Arial Black, Arial, sans-serif" font-size="19" font-weight="900" fill="#12355f" text-anchor="middle" letter-spacing="1">WAEC</text>
+</svg>

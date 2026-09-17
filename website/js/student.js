@@ -2527,10 +2527,19 @@
           board === "JAMB"
             ? "One combined CBT · your profile subjects · settings from admin"
             : "Subject practice from your registered profile subjects";
+        var logoFile =
+          board === "JAMB" ? "media/jamb-logo.svg"
+          : board === "WAEC" ? "media/waec-logo.svg"
+          : board === "NECO" ? "media/neco-logo.svg"
+          : null;
+        var logoHtml = logoFile
+          ? '<img src="' + logoFile + '" alt="' + esc(board) + ' logo" style="width:44px;height:44px;float:right;margin-left:0.75rem" onerror="this.style.display=\'none\'" />'
+          : "";
         return (
           '<button type="button" class="card card-click" data-cbt-board="' +
           esc(board) +
           '" style="text-align:left;cursor:pointer;border:1px solid #e2e8f0">' +
+          logoHtml +
           '<span class="card-tag">' +
           esc(board) +
           "</span>" +
@@ -2768,7 +2777,91 @@
           );
         })
         .join("") +
-      "</div>";
+      "</div>" +
+      '<p style="margin:1rem 0 0"><button type="button" class="btn btn-ghost btn-mini" data-cbt-subject-change="' +
+      esc(board) +
+      '">Request subject change (admin approves)</button></p>';
+  }
+
+  /* Subject-change request modal (admin approves before subjects change) */
+  var SUBJECT_CHANGE_CHOICES = [
+    "English Language", "Mathematics", "Biology", "Chemistry", "Physics",
+    "Economics", "Government", "Literature-in-English", "CRS", "IRS",
+    "Agricultural Science", "Commerce", "Accounting", "Geography",
+    "Civic Education", "Computer Studies", "Further Mathematics", "French",
+  ];
+
+  function openSubjectChangeModal(board) {
+    var profile = Object.assign({}, localProfileSubjects(), (cbtHomeCache && cbtHomeCache.profile) || {});
+    var current = (board === "JAMB" ? profile.jamb_subjects : profile.ssce_subjects) || [];
+    var picked = current.slice();
+    var overlay = document.createElement("div");
+    overlay.style.cssText =
+      "position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem";
+    function chip(s) {
+      var on = picked.indexOf(s) >= 0;
+      return (
+        '<button type="button" data-scc="' + esc(s) +
+        '" style="margin:0.2rem;padding:0.3rem 0.7rem;border-radius:999px;border:1px solid ' +
+        (on ? "#7c3aed" : "#e2e8f0") + ";background:" + (on ? "#f3e8ff" : "#fff") +
+        ';font-size:0.82rem;cursor:pointer">' + esc(s) + "</button>"
+      );
+    }
+    function body() {
+      return (
+        '<h4 style="margin:0 0 0.3rem">Request ' + esc(board) + " subject change</h4>" +
+        '<p style="margin:0 0 0.7rem;color:#64748b;font-size:0.88rem">Admin reviews and approves before your subjects change.</p>' +
+        '<div style="max-height:220px;overflow:auto">' +
+        SUBJECT_CHANGE_CHOICES.map(chip).join("") +
+        "</div>" +
+        '<textarea id="sccReason" placeholder="Why do you need this change? (optional)" style="width:100%;margin-top:0.7rem;min-height:60px"></textarea>' +
+        '<div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.8rem">' +
+        '<button type="button" id="sccCancel" class="btn btn-ghost btn-mini">Cancel</button>' +
+        '<button type="button" id="sccSend" class="btn btn-primary btn-mini">Send request</button></div>'
+      );
+    }
+    var box = document.createElement("div");
+    box.style.cssText =
+      "background:#fff;border-radius:14px;padding:1.1rem 1.2rem;max-width:420px;width:100%;max-height:85vh;overflow:auto";
+    box.innerHTML = body();
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    function close() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+    overlay.addEventListener("click", function (e) {
+      var chipBtn = e.target.closest("[data-scc]");
+      if (chipBtn) {
+        var s = chipBtn.getAttribute("data-scc");
+        var i = picked.indexOf(s);
+        if (i >= 0) picked.splice(i, 1);
+        else picked.push(s);
+        box.innerHTML = body();
+        return;
+      }
+      if (e.target === overlay) close();
+    });
+    box.addEventListener("click", function (e) {
+      if (e.target.id === "sccCancel") {
+        close();
+        return;
+      }
+      if (e.target.id === "sccSend") {
+        var reason = (document.getElementById("sccReason") || {}).value || "";
+        api
+          .api("/api/v1/cbt/subject-change-requests", {
+            method: "POST",
+            body: { board: board, new_subjects: picked, reason: reason.trim() || undefined },
+          })
+          .then(function (res) {
+            close();
+            alert((res && res.message) || "Request sent to admin.");
+          })
+          .catch(function (err) {
+            alert(errMsg(err) || "Could not send request.");
+          });
+      }
+    });
   }
 
   function startPracticeAttempt(examType, subjects, btn) {
@@ -3243,6 +3336,12 @@
       ensureBoardUnlockedThen(board, function () {
         startPracticeAttempt(board, [subject], subBtn);
       });
+      return;
+    }
+    var chgBtn = e.target.closest("[data-cbt-subject-change]");
+    if (chgBtn) {
+      openSubjectChangeModal(chgBtn.getAttribute("data-cbt-subject-change"));
+      return;
     }
   });
 

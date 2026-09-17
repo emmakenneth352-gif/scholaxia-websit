@@ -269,22 +269,37 @@ async def _infer_deepseek(prompt: str, conversation_history: list = None,
     # Auto-route hard questions to the reasoning model (smarter step-by-step).
     model = _deepseek_model_for(prompt)
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            "https://api.deepseek.com/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": messages,
-                "max_tokens": out_tokens,
-                "temperature": temperature if temperature is not None else settings.AI_TEMPERATURE,
-            },
-        )
-        response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
+    async def _call(model_name: str) -> str:
+        async with httpx.AsyncClient(timeout=75.0) as client:
+            response = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model_name,
+                    "messages": messages,
+                    "max_tokens": out_tokens,
+                    "temperature": temperature if temperature is not None else settings.AI_TEMPERATURE,
+                },
+            )
+            response.raise_for_status()
+            return response.json()["choices"][0]["message"]["content"].strip()
+
+    if model != settings.DEEPSEEK_MODEL:
+        # Reasoning model: hard-cap it and fall back to the fast chat model so
+        # the chat never hangs forever on "thinking" (2026-09 outage).
+        try:
+            return await asyncio.wait_for(_call(model), timeout=50.0)
+        except Exception as reasoner_err:
+            import logging
+            logging.getLogger(__name__).warning(
+                "deepseek-reasoner failed/timed out (%s) — falling back to chat model",
+                type(reasoner_err).__name__,
+            )
+            return await _call(settings.DEEPSEEK_MODEL)
+    return await _call(model)
 
 
 # ── Groq ──────────────────────────────────────────────────────────────────────
@@ -334,7 +349,10 @@ async def _infer_groq(prompt: str, conversation_history: list = None,
                 },
             )
             if response.status_code == 429:
-                retry_after = int(response.headers.get("retry-after", 10))
+                try:
+                    retry_after = int(response.headers.get("retry-after", 10))
+                except (TypeError, ValueError):
+                    retry_after = 10
                 await asyncio.sleep(min(retry_after, 30))
                 continue
             response.raise_for_status()
@@ -467,7 +485,9 @@ async def run_inference(prompt: str, conversation_history: list = None,
             continue
         tried.append(name)
         try:
-            result = await backends[name]()
+            # Hard cap per provider — a hung provider must never stall the
+            # student's chat past ~95s (the app shows "thinking" meanwhile).
+            result = await asyncio.wait_for(backends[name](), timeout=95.0)
             if result and len(result.strip()) >= 2:
                 return result.strip()
         except Exception as e:

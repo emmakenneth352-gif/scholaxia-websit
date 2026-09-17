@@ -262,10 +262,16 @@ class _SiaScreenState extends State<SiaScreen> {
         });
         await _persistChat();
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add(_Msg(isAi: true, text: 'Something went wrong. Please try again.', time: _now()));
+          _messages.add(_Msg(
+            isAi: true,
+            text: e.toString().contains('TimeoutException')
+                ? 'Sorry, that took too long. Please try again — tap the ⚡ chip to resend quickly.'
+                : 'Something went wrong. Please check your connection and try again.',
+            time: _now(),
+          ));
           _loading = false;
         });
         await _persistChat();

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- JAMB-style green seal -->
+  <circle cx="60" cy="52" r="40" fill="#0b7a3b"/>
+  <circle cx="60" cy="52" r="34" fill="none" stroke="#ffffff" stroke-width="2.5"/>
+  <circle cx="60" cy="52" r="30" fill="none" stroke="#f9d616" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <!-- open book -->
+  <path d="M42 52 Q51 45 60 51 Q69 45 78 52 L78 66 Q69 59 60 65 Q51 59 42 66 Z" fill="#ffffff"/>
+  <line x1="60" y1="51" x2="60" y2="65" stroke="#0b7a3b" stroke-width="1.6"/>
+  <!-- torch star -->
+  <path d="M60 30 l2.2 5.2 5.2 2.2 -5.2 2.2 -2.2 5.2 -2.2 -5.2 -5.2 -2.2 5.2 -2.2 Z" fill="#f9d616"/>
+  <text x="60" y="108" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" fill="#0b7a3b" text-anchor="middle" letter-spacing="3">JAMB</text>
+</svg>

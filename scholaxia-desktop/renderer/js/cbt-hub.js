@@ -234,7 +234,50 @@ function renderCbtBoard(grid) {
     .join("");
   html += "</div>";
   html += '</div>';
+  html +=
+    '<p style="margin:1rem 0 0"><button type="button" class="btn-secondary btn-sm" data-cbt-scr-board="' +
+    cbtEsc(board) +
+    '">Request subject change (admin approves)</button></p>';
   grid.innerHTML = html;
+}
+
+async function cbtHubRequestSubjectChange(board) {
+  var home = cbtHubState.home || {};
+  var profile = home.profile || {};
+  var current = (board === "JAMB" ? profile.jamb_subjects : profile.ssce_subjects) || [];
+  var picked = current.slice();
+  var choices = [
+    "English Language", "Mathematics", "Biology", "Chemistry", "Physics",
+    "Economics", "Government", "Literature-in-English", "CRS", "IRS",
+    "Agricultural Science", "Commerce", "Accounting", "Geography",
+    "Civic Education", "Computer Studies", "Further Mathematics", "French",
+  ];
+  // Reuse the package modal layer for a lightweight inline prompt
+  var chosen = window.prompt(
+    "Type the subjects you want (comma-separated), e.g: Biology, Chemistry, Physics\n\nYour current subjects: " +
+      (current.join(", ") || "none"),
+    current.join(", ")
+  );
+  if (!chosen) return;
+  var newSubs = chosen
+    .split(",")
+    .map(function (s) {
+      return s.trim();
+    })
+    .filter(Boolean);
+  if (!newSubs.length) return;
+  try {
+    var res = await api("/api/v1/cbt/subject-change-requests", {
+      method: "POST",
+      body: JSON.stringify({ board: board, new_subjects: newSubs }),
+    });
+    alert((res && res.message) || "Request sent to admin.");
+  } catch (e) {
+    alert((e && e.message) || "Could not send request.");
+  }
+  // keep choices referenced (future UI upgrade)
+  void choices;
+  void picked;
 }
 
 function cbtHubToggleJamb(subject, on) {
@@ -359,6 +402,13 @@ function cbtHubStartJamb() {
 if (typeof window !== "undefined") {
   window.loadCbtHubPage = loadCbtHubPage;
   window.cbtHubOpenBoard = cbtHubOpenBoard;
+  // Delegated handler for the subject-change button (re-rendered DOM)
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest("[data-cbt-scr-board]");
+    if (btn && typeof cbtHubRequestSubjectChange === "function") {
+      cbtHubRequestSubjectChange(btn.getAttribute("data-cbt-scr-board"));
+    }
+  });
   window.cbtHubToggleJamb = cbtHubToggleJamb;
   window.cbtHubUnlockBoard = cbtHubUnlockBoard;
   window.cbtHubStartJambPractice = cbtHubStartJambPractice;

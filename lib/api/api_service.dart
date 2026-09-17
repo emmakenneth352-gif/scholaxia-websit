@@ -1656,6 +1656,111 @@ class ApiService {
     return SiaResponse.fromJson(_parseMap(res));
   }
 
+  // ── CBT practice attempts (JAMB / WAEC / NECO board engine) ───────────────
+
+  /// Board-first home: exam types with access flags, profile subjects, settings.
+  Future<Map<String, dynamic>> cbtPracticeHome() async {
+    final res = await http
+        .get(
+          _uri('/api/v1/cbt/practice/home'),
+          headers: await _authHeaders(),
+        )
+        .timeout(const Duration(seconds: 30));
+    return _parseMap(res);
+  }
+
+  /// Start a practice attempt for a board (JAMB/WAEC/NECO/COMMON_ENTRANCE).
+  /// Throws ApiException with status 402 when the board package is locked.
+  Future<Map<String, dynamic>> cbtPracticeStart(
+    String examType,
+    List<String> subjects,
+  ) async {
+    final res = await http
+        .post(
+          _uri('/api/v1/cbt/practice/start'),
+          headers: await _authHeaders(),
+          body: jsonEncode({'exam_type': examType, 'subjects': subjects}),
+        )
+        .timeout(const Duration(seconds: 90));
+    return _parseMap(res);
+  }
+
+  /// Load one subject section (builds questions server-side on first open).
+  Future<Map<String, dynamic>> cbtPracticeSection(
+    String attemptId,
+    int sectionIndex,
+  ) async {
+    final res = await http
+        .get(
+          _uri('/api/v1/cbt/practice/attempts/$attemptId/sections/$sectionIndex'),
+          headers: await _authHeaders(),
+        )
+        .timeout(const Duration(seconds: 60));
+    return _parseMap(res);
+  }
+
+  Future<void> cbtPracticeSaveAnswers(
+    String attemptId,
+    Map<String, String> answers, {
+    int? sectionIndex,
+  }) async {
+    await http
+        .post(
+          _uri('/api/v1/cbt/practice/attempts/$attemptId/answers'),
+          headers: await _authHeaders(),
+          body: jsonEncode({
+            'answers': answers,
+            if (sectionIndex != null) 'section_index': sectionIndex,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+  }
+
+  Future<Map<String, dynamic>> cbtPracticeSubmit(
+    String attemptId,
+    Map<String, String> answers,
+  ) async {
+    final res = await http
+        .post(
+          _uri('/api/v1/cbt/practice/attempts/$attemptId/submit'),
+          headers: await _authHeaders(),
+          body: jsonEncode({'answers': answers}),
+        )
+        .timeout(const Duration(seconds: 60));
+    return _parseMap(res);
+  }
+
+  /// Send admin a request to change locked CBT subjects.
+  Future<Map<String, dynamic>> requestSubjectChange(
+    String board,
+    List<String> newSubjects, {
+    String? reason,
+  }) async {
+    final res = await http
+        .post(
+          _uri('/api/v1/cbt/subject-change-requests'),
+          headers: await _authHeaders(),
+          body: jsonEncode({
+            'board': board,
+            'new_subjects': newSubjects,
+            if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+    return _parseMap(res);
+  }
+
+  Future<List<dynamic>> mySubjectChangeRequests() async {
+    final res = await http
+        .get(
+          _uri('/api/v1/cbt/subject-change-requests/mine'),
+          headers: await _authHeaders(),
+        )
+        .timeout(const Duration(seconds: 30));
+    final data = _parseMap(res);
+    return (data['requests'] as List?) ?? [];
+  }
+
   /// Fetch MP3 audio for Sia / Kind / Teacher AI voice playback.
   Future<Uint8List?> fetchVoiceAudio(
     String text, {

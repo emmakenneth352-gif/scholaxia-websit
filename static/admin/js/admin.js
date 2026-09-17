@@ -212,6 +212,7 @@ function showAdminPage(page) {
   else if (page === "cbt-settings") { loadCbtSettings(); setCbtSettingsBank(cbtSettingsBank || "JAMB"); }
   else if (page === "cbt") { cbtMode = "practice"; initCbtBuilder(); setCbtBank(cbtActiveBank || "JAMB"); }
   else if (page === "coupons") loadCbtCoupons();
+  else if (page === "subject-change") loadSubjectChangeRequests();
   else if (page === "past-questions") { cbtMode = "past"; loadPastQuestionsAdmin(); }
   else if (page === "library") loadLibraryAdmin();
   else if (page === "videos") loadAdminVideos();
@@ -4206,3 +4207,55 @@ async function hostSchoolLiveClass(startNow) {
 }
 
 
+
+/* ── CBT subject-change requests (students ask admin to change locked subjects) ── */
+
+async function loadSubjectChangeRequests() {
+  var wrap = document.getElementById("subject-change-table");
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="loading">Loading requests…</div>';
+  try {
+    var data = await adminApi("/api/v1/admin/cbt/subject-change-requests?status=pending");
+    var requests = data.requests || [];
+    if (!requests.length) {
+      wrap.innerHTML = '<div class="loading">No pending subject-change requests.</div>';
+      return;
+    }
+    wrap.innerHTML =
+      '<table class="data-table"><thead><tr>' +
+      "<th>Student</th><th>Board</th><th>Current</th><th>Requested</th><th>Reason</th><th>Actions</th>" +
+      "</tr></thead><tbody>" +
+      requests
+        .map(function (r) {
+          return (
+            "<tr>" +
+            "<td>" + escHtml(r.student_name) + "<br><small>" + escHtml(r.student_email) + "</small></td>" +
+            "<td><strong>" + escHtml(r.board) + "</strong></td>" +
+            "<td>" + escHtml((r.old_subjects || []).join(", ") || "—") + "</td>" +
+            "<td>" + escHtml((r.new_subjects || []).join(", ")) + "</td>" +
+            "<td>" + escHtml(r.reason || "—") + "</td>" +
+            '<td><button type="button" class="btn-sm" onclick="reviewSubjectChange(\'' + r.id + '\', \'approve\')">Approve</button> ' +
+            '<button type="button" class="btn-sm" onclick="reviewSubjectChange(\'' + r.id + '\', \'reject\')">Reject</button></td>' +
+            "</tr>"
+          );
+        })
+        .join("") +
+      "</tbody></table>";
+  } catch (e) {
+    wrap.innerHTML = '<div class="loading">Could not load: ' + escHtml(e.message) + "</div>";
+  }
+}
+
+async function reviewSubjectChange(requestId, decision) {
+  if (decision === "approve" && !confirm("Approve this subject change? The student's subjects update immediately.")) return;
+  try {
+    var res = await adminApi("/api/v1/admin/cbt/subject-change-requests/review", {
+      method: "POST",
+      body: JSON.stringify({ request_id: requestId, decision: decision }),
+    });
+    alert((res && res.message) || "Done.");
+    loadSubjectChangeRequests();
+  } catch (e) {
+    alert(e.message || "Action failed.");
+  }
+}

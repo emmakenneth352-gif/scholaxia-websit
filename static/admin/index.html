@@ -81,6 +81,7 @@
       <button class="nav-btn" data-page="cbt" data-cbt-bank="NECO" onclick="openAdminCbtBank('NECO')">NECO Question Bank</button>
       <button class="nav-btn" data-page="cbt" data-cbt-bank="COMMON_ENTRANCE" onclick="openAdminCbtBank('COMMON_ENTRANCE')">Common Entrance Bank</button>
       <button class="nav-btn" data-page="coupons" onclick="showAdminPage('coupons')">CBT Coupons</button>
+      <button class="nav-btn" data-page="subject-change" onclick="showAdminPage('subject-change')">Subject Changes</button>
       <button class="nav-btn" data-page="past-questions" onclick="showAdminPage('past-questions')">Past Questions Shop</button>
       <div class="nav-section">More learning</div>
       <button class="nav-btn" data-page="school-office" onclick="showAdminPage('school-office')">School office</button>
@@ -199,6 +200,15 @@
         <p id="coupon-msg" class="cbt-hint small"></p>
       </div>
       <div id="coupon-table" class="data-table-wrap"><div class="loading">Open this page to load coupons…</div></div>
+    </section>
+
+    <section id="page-subject-change" class="admin-page">
+      <div class="page-head">
+        <h2>CBT Subject Change Requests</h2>
+        <button class="btn-sm" onclick="loadSubjectChangeRequests()">Refresh</button>
+      </div>
+      <p class="page-desc">Students with locked subjects ask to change them here. Approving updates the student's subjects immediately; rejecting keeps everything unchanged.</p>
+      <div id="subject-change-table" class="data-table-wrap"><div class="loading">Open this page to load requests…</div></div>
     </section>
 
     <section id="page-kind-games" class="admin-page">

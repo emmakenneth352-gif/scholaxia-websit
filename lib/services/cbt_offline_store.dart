@@ -56,6 +56,19 @@ class CbtOfflineStore {
     return f.exists();
   }
 
+  Future<void> deletePack(String examId) async {
+    if (kIsWeb) {
+      _memory.remove(examId);
+      return;
+    }
+    final f = await _file(examId);
+    if (await f.exists()) {
+      try {
+        await f.delete();
+      } catch (_) {}
+    }
+  }
+
   Future<Set<String>> downloadedIds() async {
     if (kIsWeb) return _memory.keys.toSet();
     final d = await _dir();
