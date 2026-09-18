@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -44,7 +45,7 @@ class PaystackCheckoutService {
     if (!context.mounted) return false;
 
     bool shouldVerify;
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       shouldVerify =
           await Navigator.push<bool>(
             context,
@@ -57,7 +58,7 @@ class PaystackCheckoutService {
             ),
           ) ??
           false;
-    } else if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
+    } else if (!kIsWeb && (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)) {
       shouldVerify =
           await Navigator.push<bool>(
             context,

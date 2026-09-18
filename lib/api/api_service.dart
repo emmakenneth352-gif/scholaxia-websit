@@ -1669,6 +1669,33 @@ class ApiService {
     return _parseMap(res);
   }
 
+  /// Voice Teaching Mode: one round of structured teaching steps
+  /// (voice + board lines + wait-checkpoints) animated on a teaching board.
+  Future<Map<String, dynamic>> siaTeachStep({
+    required String question,
+    String subject = 'General',
+    String? educationLevel,
+    String language = 'english',
+    String? studentReply,
+    List<Map<String, dynamic>> lessonHistory = const [],
+  }) async {
+    final res = await http
+        .post(
+          _uri('/api/v1/sia/teach-step'),
+          headers: await _authHeaders(),
+          body: jsonEncode({
+            'question': question,
+            'subject': subject,
+            if (educationLevel != null) 'education_level': educationLevel,
+            'language': language,
+            if (studentReply != null) 'student_reply': studentReply,
+            'lesson_history': lessonHistory,
+          }),
+        )
+        .timeout(const Duration(seconds: 90));
+    return _parseMap(res);
+  }
+
   /// Register (and lock) subjects for a board WITHOUT starting an exam.
   /// WAEC/NECO: pick up to 9 subjects → CONTINUE. Throws ApiException 409
   /// when subjects are already locked (then use requestSubjectChange).

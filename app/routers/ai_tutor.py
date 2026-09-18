@@ -276,6 +276,161 @@ async def ask_sia(
         }
 
 
+# ── Voice Teaching Mode: structured step-by-step lesson ──────────────────────
+
+class TeachStepRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    subject: str = "General"
+    education_level: Optional[str] = None
+    language: str = "english"
+    # What the student answered at the last checkpoint ("yes", "no", "explain again"…)
+    student_reply: Optional[str] = None
+    # The lesson so far (recent steps) so the AI can continue, not restart
+    lesson_history: Optional[List[dict]] = None
+
+
+_TEACHING_SYSTEM_PROMPT = """You are Sia, a real teacher giving a LIVE VOICE LESSON on a smart board.
+You are NOT a chatbot. You teach out loud while writing the important work on the board.
+
+Reply with ONLY a JSON object (no markdown, no code fences):
+{
+  "steps": [
+    {
+      "voice": "what you SAY out loud for this step (1-3 short spoken sentences, natural teacher talk)",
+      "board": ["short lines to WRITE on the board for this step: formulas, key terms, calculations, tiny labels"],
+      "highlight": "optional single board line number (1-based) to point at",
+      "wait": false,
+      "teacher": "point | write | think | encourage"
+    }
+  ],
+  "done": false
+}
+
+RULES:
+- The BOARD is not a transcript. Board lines = formulas, worked steps, key words, tiny labels (max ~40 chars each). The voice explains in natural full sentences.
+- For maths/science: solve step by step — each step shows one transformation on the board while the voice explains it.
+- 1 to 5 steps per reply. Keep each step focused.
+- After an important concept or a few solving steps, add ONE step with "wait": true whose voice asks a short understanding check like "Are you following me?" — that must be the LAST step of your reply.
+- If the student says they are confused or asks again, re-teach that part with a DIFFERENT simpler example.
+- If the student says yes/ok/continue, continue the lesson from where you stopped.
+- Set "done": true only when the topic is fully taught (then your last step's voice summarizes and gives the student a small practice question).
+- Language: reply in the student's language. Level: match the student's level."""
+
+
+@router.post("/teach-step")
+async def sia_teach_step(
+    payload: TeachStepRequest,
+    current_user: dict = Depends(require_student_or_kind),
+    db: AsyncSession = Depends(get_db),
+):
+    """One round of Voice Teaching Mode: returns structured steps
+    (voice + board + wait-checkpoint) that the app animates on a board."""
+    import json as _json
+    import re as _re
+
+    student_name = "there"
+    level = payload.education_level or "student"
+    try:
+        student_name = await _get_student_name(current_user["sub"], db)
+        if not payload.education_level:
+            level = await _get_student_level(current_user["sub"], db)
+    except Exception:
+        pass
+
+    lesson_lines = []
+    for s in (payload.lesson_history or [])[-12:]:
+        if not isinstance(s, dict):
+            continue
+        v = str(s.get("voice") or "").strip()
+        b = s.get("board")
+        if v:
+            lesson_lines.append(f"[voice] {v}")
+        if isinstance(b, list) and b:
+            lesson_lines.append("[board] " + " | ".join(str(x) for x in b[:4]))
+
+    question = payload.question.strip()
+    if payload.student_reply:
+        question = (
+            f"The student answered your checkpoint: \"{payload.student_reply.strip()}\". "
+            f"Continue or re-teach the lesson accordingly. Original request: {question}"
+        )
+
+    user_prompt = (
+        f"Student: {student_name}\nLevel: {level}\nSubject: {payload.subject}\n"
+        f"Language: {payload.language}\n"
+    )
+    if lesson_lines:
+        user_prompt += "\nLesson so far (most recent last):\n" + "\n".join(lesson_lines) + "\n"
+    user_prompt += f"\nStudent says: \"{question}\"\n\nProduce the next teaching steps as JSON."
+
+    try:
+        raw = await run_inference(
+            user_prompt,
+            system_prompt=_TEACHING_SYSTEM_PROMPT,
+            max_tokens=1600,
+            temperature=0.4,
+        )
+    except Exception as e:
+        return {
+            "steps": [{
+                "voice": f"Sorry {student_name}, I could not start the lesson just now. Please try again.",
+                "board": ["Connection issue", "Tap the mic and ask again"],
+                "highlight": None,
+                "wait": False,
+                "teacher": "think",
+            }],
+            "done": False,
+            "error": str(e)[:200],
+        }
+
+    # Parse JSON out of the model reply (tolerate fences / leading text)
+    steps: list = []
+    done = False
+    parse_error = None
+    try:
+        m = _re.search(r"\{[\s\S]*\}", raw)
+        data = _json.loads(m.group(0) if m else raw)
+        raw_steps = data.get("steps") or []
+        done = bool(data.get("done"))
+        for s in raw_steps[:6]:
+            if not isinstance(s, dict):
+                continue
+            voice = str(s.get("voice") or "").strip()
+            board = [str(x).strip()[:80] for x in (s.get("board") or []) if str(x).strip()][:8]
+            if not voice and not board:
+                continue
+            steps.append({
+                "voice": voice,
+                "board": board,
+                "highlight": s.get("highlight"),
+                "wait": bool(s.get("wait")),
+                "teacher": str(s.get("teacher") or "write"),
+            })
+    except Exception as e:
+        parse_error = str(e)[:160]
+
+    if not steps:
+        # Fallback: treat the raw text as one spoken step
+        text = raw.strip()
+        if text.startswith("Sia is temporarily unavailable"):
+            text = f"I'm waking up, {student_name} — give me a few seconds and ask again."
+        steps = [{
+            "voice": text[:900],
+            "board": [ln.strip("*# ")[:70] for ln in text.splitlines() if ln.strip()][:6],
+            "highlight": None,
+            "wait": False,
+            "teacher": "write",
+        }]
+
+    return {
+        "steps": steps,
+        "done": done,
+        "student": student_name,
+        "level": level,
+        **({"parse_error": parse_error} if parse_error else {}),
+    }
+
+
 # ── Mode 2: Explain a concept ─────────────────────────────────────────────────
 
 class ExplainRequest(BaseModel):

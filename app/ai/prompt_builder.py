@@ -157,17 +157,21 @@ MASTER_SYSTEM_PROMPT = SIA_IDENTITY_CORE
 
 
 def build_default_system_prompt() -> str:
-    """Compact default for calls that pass no explicit system prompt
-    (evaluate, quiz, lesson, debug endpoints). Replaces the old
-    gamification mega-prompt that drowned every response."""
-    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING
-    core = (
-        SIA_IDENTITY_CORE
-        .replace("{student_name}", "the student")
-        .replace("{subject}", "General")
-        .replace("{level}", "unknown")
-    )
-    return f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_CONVERSATION_INTEL}\n\n{core}"
+    """Compact default for calls that pass no explicit system prompt.
+
+    NOTE (prompt reset): the persona stack below is commented out — the only
+    instruction is TEACH. Restore to re-enable the full stack.
+    """
+    # ── OLD heavy persona stack (commented out) ─────────────────────────────
+    # from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING
+    # core = (
+    #     SIA_IDENTITY_CORE
+    #     .replace("{student_name}", "the student")
+    #     .replace("{subject}", "General")
+    #     .replace("{level}", "unknown")
+    # )
+    # return f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_CONVERSATION_INTEL}\n\n{core}"
+    return "You are a teacher. TEACH the student clearly, step by step."
 
 # ── Advanced reasoning layer (makes Sia smarter than generic chatbots) ────────
 
@@ -416,30 +420,47 @@ def _build_context(student_name: str, subject: str, education_level: str,
 def build_sia_system_prompt(student_name: str, subject: str, education_level: str,
                             language: str, student_memory: dict = None,
                             raw_input: str = "", intelligence_context: str = "") -> str:
-    """Full system prompt for main Sia — identity + teaching rules + deep reasoning."""
-    from app.ai.sia_accuracy import SIA_EXPERT_CAPABILITY
-    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_EXAM_RIGOR
-    context = _build_context(student_name, subject, education_level, language,
-                             student_memory, raw_input=raw_input)
-    memory_block = ""
-    if student_memory:
-        weak = student_memory.get("weak_topics", [])
-        strong = student_memory.get("strong_topics", [])
-        recent = student_memory.get("recent_topics", [])
-        if weak or strong or recent:
-            memory_block = (
-                f"\n\nStudent learning profile:\n"
-                f"- Needs work: {', '.join(weak[:5]) if weak else 'building profile'}\n"
-                f"- Strong in: {', '.join(strong[:3]) if strong else 'building profile'}\n"
-                f"- Recently studied: {', '.join(recent[:4]) if recent else 'just starting'}"
-            )
-    intel = f"\n{intelligence_context}" if intelligence_context else ""
-    # Deep-reasoning stack: accuracy → think-first protocol → exam rigor →
-    # conversation → expertise → per-question intelligence context.
+    """Full system prompt for main Sia.
+
+    NOTE (prompt reset): the previous deep-reasoning persona stack
+    (SIA_ACCURACY_FIRST + SIA_DEEP_REASONING + SIA_EXAM_RIGOR +
+    SIA_CONVERSATION_INTEL + SIA_EXPERT_CAPABILITY) is commented out below.
+    Decision: let the raw model's own teaching ability shine — the only
+    instruction is TEACH. Restore the commented block to re-enable the
+    full persona stack.
+    """
+    # ── OLD heavy persona stack (commented out — restore if needed) ──────────
+    # from app.ai.sia_accuracy import SIA_EXPERT_CAPABILITY
+    # from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_EXAM_RIGOR
+    # context = _build_context(student_name, subject, education_level, language,
+    #                          student_memory, raw_input=raw_input)
+    # memory_block = ""
+    # if student_memory:
+    #     weak = student_memory.get("weak_topics", [])
+    #     strong = student_memory.get("strong_topics", [])
+    #     recent = student_memory.get("recent_topics", [])
+    #     if weak or strong or recent:
+    #         memory_block = (
+    #             f"\n\nStudent learning profile:\n"
+    #             f"- Needs work: {', '.join(weak[:5]) if weak else 'building profile'}\n"
+    #             f"- Strong in: {', '.join(strong[:3]) if strong else 'building profile'}\n"
+    #             f"- Recently studied: {', '.join(recent[:4]) if recent else 'just starting'}"
+    #         )
+    # intel = f"\n{intelligence_context}" if intelligence_context else ""
+    # return (
+    #     f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_EXAM_RIGOR}\n\n"
+    #     f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
+    #     f"{context}{memory_block}{intel}"
+    # )
+
+    # ── NEW: minimal teaching instruction — the model teaches on its own ────
+    subject_line = (subject or "General").strip()
+    level_line = (education_level or "student").strip()
+    name_line = (student_name or "the student").strip()
     return (
-        f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_EXAM_RIGOR}\n\n"
-        f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
-        f"{context}{memory_block}{intel}"
+        "You are the student's teacher. TEACH.\n"
+        f"Student: {name_line}. Subject: {subject_line}. Level: {level_line}."
+        " Respond in the student's language."
     )
 
 
@@ -1115,19 +1136,27 @@ def _is_casual_greeting(details: str) -> bool:
 
 
 def build_teacher_system_prompt(task: str, subject: str, education_level: str) -> str:
-    from app.ai.sia_accuracy import (
-        SIA_ACCURACY_FIRST,
-        TEACHER_AI_CORE,
-        SIA_CONVERSATION_INTEL,
-        SIA_EXPERT_CAPABILITY,
-    )
-    from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_TEACHER_REASONING
-    instruction = TEACHER_TASK_PROFILES.get(task, TEACHER_TASK_PROFILES["general"])
+    """NOTE (prompt reset): persona stack commented out — instruction is TEACH."""
+    # ── OLD heavy persona stack (commented out) ─────────────────────────────
+    # from app.ai.sia_accuracy import (
+    #     SIA_ACCURACY_FIRST,
+    #     TEACHER_AI_CORE,
+    #     SIA_CONVERSATION_INTEL,
+    #     SIA_EXPERT_CAPABILITY,
+    # )
+    # from app.ai.sia_deep_reasoning import SIA_DEEP_REASONING, SIA_TEACHER_REASONING
+    # instruction = TEACHER_TASK_PROFILES.get(task, TEACHER_TASK_PROFILES["general"])
+    # return (
+    #     f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_TEACHER_REASONING}\n\n"
+    #     f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
+    #     f"{TEACHER_AI_CORE}\n\n"
+    #     f"Subject: {subject}\nLevel: {education_level}\nTask focus: {instruction}"
+    # )
+    subject_line = (subject or "General").strip()
+    level_line = (education_level or "teacher request").strip()
     return (
-        f"{SIA_ACCURACY_FIRST}\n\n{SIA_DEEP_REASONING}\n\n{SIA_TEACHER_REASONING}\n\n"
-        f"{SIA_CONVERSATION_INTEL}\n\n{SIA_EXPERT_CAPABILITY}\n\n"
-        f"{TEACHER_AI_CORE}\n\n"
-        f"Subject: {subject}\nLevel: {education_level}\nTask focus: {instruction}"
+        "You are the teacher's assistant. TEACH and prepare teaching material.\n"
+        f"Subject: {subject_line}. Level: {level_line}."
     )
 
 

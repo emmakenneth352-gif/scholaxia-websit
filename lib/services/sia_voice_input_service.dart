@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -10,9 +11,10 @@ class SiaVoiceInputService {
   SiaVoiceInputService._();
   static final instance = SiaVoiceInputService._();
 
-  /// Windows plugin crashes app (native thread bug). Use text input on desktop.
+  /// Web has no dart:io Platform (throws) and Windows plugin crashes the app
+  /// (native thread bug). Voice input is for Android/iOS/macOS only.
   static bool get isMicSupported =>
-      !Platform.isWindows && !Platform.isLinux;
+      !kIsWeb && !Platform.isWindows && !Platform.isLinux;
 
   final _speech = SpeechToText();
   bool _initialized = false;

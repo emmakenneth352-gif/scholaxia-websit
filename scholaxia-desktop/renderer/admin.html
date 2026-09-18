@@ -74,6 +74,7 @@
       <button class="nav-btn" data-page="cbt-settings" onclick="showAdminPage('cbt-settings')">CBT Settings</button>
       <button class="nav-btn" data-page="cbt" onclick="showAdminPage('cbt')">CBT Question Bank</button>
       <button class="nav-btn" data-page="coupons" onclick="showAdminPage('coupons')">CBT Coupons</button>
+      <button class="nav-btn" data-page="subject-change" onclick="showAdminPage('subject-change')">Subject Changes</button>
       <button class="nav-btn" data-page="plans" onclick="showAdminPage('plans')">Plans &amp; Pricing</button>
       <button class="nav-btn" data-page="past-questions" onclick="showAdminPage('past-questions')">Past Questions</button>
       <button class="nav-btn" data-page="school-office" onclick="showAdminPage('school-office')">School office</button>
@@ -269,6 +270,15 @@
       </div>
       <p class="page-desc">Students who enrolled in Skills programs (web design, graphics, cyber security, etc.) — payment status and amount.</p>
       <div id="skills-enroll-table" class="data-table-wrap"><div class="loading">Loading…</div></div>
+    </section>
+
+    <section id="page-subject-change" class="admin-page">
+      <div class="page-head">
+        <h2>CBT Subject Change Requests</h2>
+        <button class="btn-sm" onclick="loadSubjectChangeRequests()">Refresh</button>
+      </div>
+      <p class="page-desc">Students with locked subjects ask to change them here. Approving updates the student's subjects immediately; rejecting keeps everything unchanged.</p>
+      <div id="subject-change-table" class="data-table-wrap"><div class="loading">Open this page to load requests…</div></div>
     </section>
 
     <section id="page-plans" class="admin-page">

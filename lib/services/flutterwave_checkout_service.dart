@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart' as mobile;
 import 'package:webview_windows/webview_windows.dart' as windows;
@@ -169,7 +170,7 @@ class _FlutterwaveCheckoutPageState extends State<_FlutterwaveCheckoutPage> {
   @override
   void initState() {
     super.initState();
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       _initWindows();
     } else {
       _mobile = mobile.WebViewController()
@@ -237,7 +238,7 @@ class _FlutterwaveCheckoutPageState extends State<_FlutterwaveCheckoutPage> {
           onPressed: () => _finish(false),
         ),
       ),
-      body: Platform.isWindows
+      body: (!kIsWeb && Platform.isWindows)
           ? (_win == null
               ? const Center(child: CircularProgressIndicator())
               : windows.Webview(_win!))

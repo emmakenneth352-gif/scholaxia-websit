@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../api/api_service.dart';
 import '../../../services/chat_persistence_service.dart';
 import '../../../services/sia_voice_service.dart';
+import 'sia_voice_teaching_screen.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/student_ui.dart';
 import 'sia_voice_classroom_screen.dart';
@@ -45,6 +46,20 @@ class _SiaScreenState extends State<SiaScreen> {
   Future<void> _speakAi(String text) async {
     if (!_voiceOn || text.trim().isEmpty) return;
     await SiaVoiceService.instance.speak(text);
+  }
+
+  /// Full Voice Teaching Mode: AI teacher + board + voice checkpoints.
+  void _openVoiceTeaching() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SiaVoiceTeachingScreen(
+          studentName: _studentName,
+          subjects: _subjects,
+          initialSubject: _subject,
+          educationLevel: _educationLevel,
+        ),
+      ),
+    );
   }
 
   void _openVoiceClassroom() {
@@ -186,11 +201,7 @@ class _SiaScreenState extends State<SiaScreen> {
   }
 
   void _scrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollCtrl.hasClients) {
-        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
-      }
-    });
+    // Newest-at-top list: no scrolling needed — new messages appear at the top.
   }
 
   Future<void> _loadProfile() async {
@@ -375,9 +386,9 @@ class _SiaScreenState extends State<SiaScreen> {
         ),
         IconButton(
           style: compactIcon,
-          onPressed: _openVoiceClassroom,
+          onPressed: _openVoiceTeaching,
           icon: Icon(Icons.mic_rounded, color: Colors.white.withOpacity(0.95), size: 22),
-          tooltip: 'Voice chat',
+          tooltip: 'Voice Teaching Mode',
         ),
         IconButton(
           style: compactIcon,
@@ -407,12 +418,15 @@ class _SiaScreenState extends State<SiaScreen> {
   }
 
   Widget _buildMessages(BuildContext context) {
+    // Newest message first: the reply appears at the TOP of the screen so the
+    // student reads it immediately — no auto-scroll chasing the bottom.
     return ListView.builder(
       controller: _scrollCtrl,
+      reverse: true,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       itemCount: _messages.length,
       itemBuilder: (_, i) {
-        final m = _messages[i];
+        final m = _messages[_messages.length - 1 - i];
         return m.isAi ? _aiMsg(context, m) : _userMsg(context, m);
       },
     );
@@ -512,6 +526,8 @@ class _SiaScreenState extends State<SiaScreen> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(children: [
         _chip(context, '⚡ Explain simply', () { _inputCtrl.text = 'Explain this simply'; }),
+        const SizedBox(width: 8),
+        _chip(context, '🧑‍🏫 Voice Teaching Mode', _openVoiceTeaching),
         const SizedBox(width: 8),
         _chip(context, '🎤 Voice chat', _openVoiceClassroom),
       ]),
