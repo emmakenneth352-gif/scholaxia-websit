@@ -1,5 +1,5 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
@@ -17,6 +17,10 @@ class SiaVoiceService {
   final _player = AudioPlayer();
   bool _ready = false;
   bool _speaking = false;
+  // Completer for the audio CURRENTLY playing (completed = audio really done).
+  Completer<void>? _playDone;
+  // Queue so overlapping speak() calls play one after another (never cut off).
+  Future<void> _queue = Future.value();
   void Function(bool speaking)? onSpeakingChanged;
 
   bool get isSpeaking => _speaking;
@@ -35,11 +39,17 @@ class SiaVoiceService {
     if (_ready) return;
     try {
       await _player.setReleaseMode(ReleaseMode.stop);
-      _player.onPlayerComplete.listen((_) => _setSpeaking(false));
+      _player.onPlayerComplete.listen((_) => _finishPlay());
     } catch (e) {
       debugPrint('SiaVoice init warning: $e');
     }
     _ready = true;
+  }
+
+  void _finishPlay() {
+    final c = _playDone;
+    _playDone = null;
+    if (c != null && !c.isCompleted) c.complete();
   }
 
   String cleanForSpeech(String text) {
@@ -54,36 +64,95 @@ class SiaVoiceService {
     return t;
   }
 
+  /// Split long text into sentence-sized phrases so each TTS request is small
+  /// and starts fast (long single requests are the main cause of broken audio).
+  List<String> _splitPhrases(String text) {
+    final clean = cleanForSpeech(text);
+    if (clean.length <= 260) return [clean];
+    final parts = <String>[];
+    final sentences =
+        clean.split(RegExp(r'(?<=[.!?…:;])\s+')).where((s) => s.trim().isNotEmpty);
+    var buf = '';
+    for (final s in sentences) {
+      if (buf.length + s.length + 1 > 260 && buf.isNotEmpty) {
+        parts.add(buf.trim());
+        buf = s;
+      } else {
+        buf = buf.isEmpty ? s : '$buf $s';
+      }
+    }
+    if (buf.trim().isNotEmpty) parts.add(buf.trim());
+    return parts.isEmpty ? [clean] : parts;
+  }
+
+  /// Speaks the whole text. Returns when the audio has ACTUALLY finished
+  /// playing (or failed). Concurrent calls are queued, never cut each other.
   Future<void> speak(String text, {String language = 'english'}) async {
     final cleaned = cleanForSpeech(text);
     if (cleaned.isEmpty) return;
+    // Chain onto the playback queue so a second call waits, not interrupts.
+    final run = _queue.then((_) => _speakNow(cleaned, language: language));
+    _queue = run.catchError((_) {});
+    await run;
+  }
+
+  Future<void> _speakNow(String cleaned, {String language = 'english'}) async {
+    await init();
     var started = false;
     try {
-      await init();
-      await stop();
       _setSpeaking(true);
-
-      // Windows: SAPI is fast and needs no extra packages
-      if (!kIsWeb && Platform.isWindows) {
-        final ok = await _speakWindowsSapi(cleaned);
-        if (ok) { started = true; return; }
-      }
-
-      // Cloud TTS (works on all platforms)
-      try {
-        final bytes = await ApiService().fetchVoiceAudio(cleaned, language: language);
-        if (bytes != null && bytes.isNotEmpty) {
-          final ok = await _playMp3Bytes(bytes);
-          if (ok) { started = true; return; }
-        }
-      } catch (e) {
-        debugPrint('SiaVoice cloud TTS failed: $e');
+      final phrases = _splitPhrases(cleaned);
+      for (final phrase in phrases) {
+        if (phrase.trim().isEmpty) continue;
+        final ok = await _speakOne(phrase, language: language);
+        if (ok) started = true;
       }
     } catch (e) {
       debugPrint('SiaVoice speak failed: $e');
     } finally {
+      _finishPlay();
+      _playDone = null;
       if (!started) _setSpeaking(false);
     }
+  }
+
+  /// Speak one phrase, waiting for real playback completion.
+  Future<bool> _speakOne(String phrase, {String language = 'english'}) async {
+    await stopPlaybackOnly();
+    final done = Completer<void>();
+    _playDone = done;
+    _setSpeaking(true);
+
+    // Windows: SAPI is fast and needs no extra packages
+    if (!kIsWeb && Platform.isWindows) {
+      final ok = await _speakWindowsSapi(phrase);
+      if (ok) {
+        await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
+        _playDone = null;
+        return true;
+      }
+      // SAPI failed — fall through to cloud TTS below.
+    }
+
+    // Cloud TTS (works on all platforms)
+    var cloudOk = false;
+    try {
+      final bytes =
+          await ApiService().fetchVoiceAudio(phrase, language: language);
+      if (bytes != null && bytes.isNotEmpty) {
+        cloudOk = await _playMp3Bytes(bytes);
+      }
+    } catch (e) {
+      debugPrint('SiaVoice cloud TTS failed: $e');
+    }
+    if (!cloudOk) {
+      _finishPlay();
+      return false;
+    }
+    // Wait until onPlayerComplete really fires (or a generous safety timeout).
+    await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
+    _playDone = null;
+    return true;
   }
 
   Future<bool> _speakWindowsSapi(String text) async {
@@ -95,12 +164,13 @@ class SiaVoiceService {
       final script = [
         "Add-Type -AssemblyName System.Speech",
         "\$s = New-Object System.Speech.Synthesis.SpeechSynthesizer",
-        "\$s.Rate = -1",
+        "\$s.Rate = 0", // -1 was too fast/garbled for long sentences
         "\$s.SetOutputToWaveFile('$safePath')",
         "\$s.Speak('$safe')",
         "\$s.Dispose()",
       ].join('; ');
-      final result = await Process.run('powershell', ['-NoProfile', '-NonInteractive', '-Command', script]);
+      final result = await Process.run(
+          'powershell', ['-NoProfile', '-NonInteractive', '-Command', script]);
       if (result.exitCode != 0) return false;
       final file = File(wavPath);
       if (!await file.exists() || await file.length() == 0) return false;
@@ -129,8 +199,18 @@ class SiaVoiceService {
     }
   }
 
+  /// Internal: stop audio without touching the playback queue.
+  Future<void> stopPlaybackOnly() async {
+    try {
+      await _player.stop();
+    } catch (_) {}
+  }
+
+  /// Stop now: kills the current audio AND clears anything still queued.
   Future<void> stop() async {
+    _playDone = null; // let any pending waiter time out instead of hanging
+    _queue = Future.value(); // drop queued speech
     _setSpeaking(false);
-    try { await _player.stop(); } catch (_) {}
+    await stopPlaybackOnly();
   }
 }

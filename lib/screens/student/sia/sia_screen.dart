@@ -254,7 +254,7 @@ class _SiaScreenState extends State<SiaScreen> {
         subject: _subject,
         educationLevel: _educationLevel,
         conversationHistory: history,
-        tutorMode: _tutorMode,
+        tutorMode: _isCasual(text) ? 'friendly' : _tutorMode,
       );
       if (mounted) {
         setState(() {
@@ -288,6 +288,20 @@ class _SiaScreenState extends State<SiaScreen> {
         await _persistChat();
       }
     }
+  }
+
+  /// Casual chat (hi, how are you…) should feel like a friendly tutor, not
+  /// a structured lesson dump — DeepSeek handles the rest naturally.
+  bool _isCasual(String text) {
+    final t = text.trim().toLowerCase();
+    if (t.length > 60) return false;
+    final words = t.split(RegExp(r'\s+'));
+    const casual = {
+      'hi', 'hello', 'hey', 'good', 'morning', 'afternoon', 'evening',
+      'hola', 'sup', 'yo', 'hiya', 'how', 'are', 'you', 'wassup', 'wasup',
+      'sia', 'miss', 'sir', 'teacher', 'am', 'is', 'doing', 'fine',
+    };
+    return words.every((w) => casual.contains(w.replaceAll(RegExp(r'[^a-z ]'), '')));
   }
 
   String _now() {

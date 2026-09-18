@@ -196,7 +196,6 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
       }
 
       // Board lines appear progressively, like a teacher writing on a board.
-      final existingCount = _boardLines.length;
       for (var i = 0; i < step.board.length; i++) {
         if (!mounted) return;
         setState(() {
@@ -263,17 +262,23 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
         _heard = '';
         _statusLine = 'Listening…';
       });
+      // Checkpoint answers: submit as soon as the student finishes speaking
+      // (final result), with a fallback timer if no final result fires.
+      var submitted = false;
+      Future<void> finishUp() async {
+        if (submitted || !mounted || !_listening) return;
+        submitted = true;
+        await _stopAndHandle();
+      }
       await _voiceInput.startListening(
         onPartial: (words) {
           if (!mounted) return;
           setState(() => _heard = words);
         },
+        onFinal: autoSubmit ? (_) => finishUp() : null,
       );
       if (!autoSubmit) return;
-      // Checkpoint answers: capture a short reply then submit automatically.
-      await Future.delayed(const Duration(seconds: 4));
-      if (!mounted || !_listening) return;
-      await _stopAndHandle();
+      Future.delayed(const Duration(seconds: 7), finishUp);
     } catch (_) {
       if (mounted) setState(() => _listening = false);
     }
@@ -286,7 +291,11 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
       if (!mounted) return;
       setState(() => _listening = false);
       final heard = text.trim();
-      if (heard.isEmpty) return;
+      if (heard.isEmpty) {
+        setState(() => _statusLine =
+            "I didn't catch that — tap the mic again or type below.");
+        return;
+      }
       if (_awaitingReply) {
         await _answerCheckpoint(heard);
       } else {
@@ -329,7 +338,12 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
                 child: LayoutBuilder(
                   builder: (ctx, cons) {
                     final wide = cons.maxWidth >= 640;
-                    final teacher = _teacherPanel(cons.maxHeight * (wide ? 1.0 : 0.32));
+                    // Keep the teacher compact so the photo is always fully
+                    // visible above the board (never cut off / overlapping).
+                    final teacherH = wide
+                        ? cons.maxHeight
+                        : math.min(cons.maxHeight * 0.34, 230.0);
+                    final teacher = _teacherPanel(teacherH);
                     final board = Expanded(child: _board(context, accent));
                     if (wide) {
                       return Row(
@@ -400,23 +414,30 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
         final lift = pose.lift + math.sin(_breathe.value * math.pi * 2) * 2;
         return SizedBox(
           height: height,
-          child: Stack(alignment: Alignment.bottomCenter, children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(18),
-              child: Transform.translate(
-                offset: Offset(0, lift),
-                child: Transform.rotate(
-                  angle: lean,
-                  child: Image.asset(
-                    'asset/images/sia_teacher.png',
-                    fit: BoxFit.contain,
-                    alignment: Alignment.bottomCenter,
-                    errorBuilder: (_, __, ___) => _teacherFallback(),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            // StackFit.expand pins the photo to the panel bounds, so the
+            // teacher image can never spill over the board or off-screen.
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              fit: StackFit.expand,
+              clipBehavior: Clip.hardEdge,
+              children: [
+                Transform.translate(
+                  offset: Offset(0, lift),
+                  child: Transform.rotate(
+                    angle: lean,
+                    child: Image.asset(
+                      'asset/images/sia_teacher.png',
+                      fit: BoxFit.contain,
+                      alignment: Alignment.bottomCenter,
+                      errorBuilder: (_, __, ___) => _teacherFallback(),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ]),
+          ),
         );
       },
     );
@@ -505,7 +526,7 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
                   padding: const EdgeInsets.all(14),
                   itemCount: _boardLines.length,
                   itemBuilder: (_, i) {
-                    final isHl = hlIndex != null && (hlIndex - 1) % math.max(1, _boardLines.length) == i;
+                    final isHl = hlIndex != null && hlIndex - 1 == i;
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 3),
                       child: AnimatedContainer(
