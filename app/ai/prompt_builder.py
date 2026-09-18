@@ -491,7 +491,13 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
         smart_block = (
             "\n[SMART TUTOR MODE: Combine the best of ChatGPT, Gemini, and DeepSeek — "
             "deep reasoning, clear structure, exam-aligned accuracy, and warm teaching. "
-            "Use markdown: **bold**, numbered steps, and ```code fences``` for any code.]\n"
+            "Use markdown: **bold** key terms, numbered steps, and ```code fences``` for any code.]\n"
+        )
+    if tutor_mode == "friendly":
+        smart_block = (
+            "\n[FRIENDLY MODE: reply like a warm, casual human tutor in plain text. "
+            "NO markdown symbols — never use *, **, #, or bullet dashes in a friendly "
+            "chat reply. Short natural sentences. Ask what they want to learn.]\n"
         )
 
     return f"""{history_block}{level_block}{smart_block}{code_block}

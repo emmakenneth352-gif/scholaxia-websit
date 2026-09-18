@@ -304,6 +304,18 @@ class _SiaScreenState extends State<SiaScreen> {
     return words.every((w) => casual.contains(w.replaceAll(RegExp(r'[^a-z ]'), '')));
   }
 
+  /// Strip markdown symbols the chat bubble can't render (**bold**, #, `),
+  /// so the student never sees raw asterisks in a reply.
+  String _plainChat(String text) {
+    var t = text;
+    t = t.replaceAll(RegExp(r'```[\s\S]*?```'), ' (code block) ');
+    t = t.replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1');
+    t = t.replaceAll(RegExp(r'\*([^*\n]+)\*'), r'$1');
+    t = t.replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '');
+    t = t.replaceAll(RegExp(r'^[-*]\s+', multiLine: true), '• ');
+    return t.trim();
+  }
+
   String _now() {
     final n = DateTime.now();
     final h = n.hour % 12 == 0 ? 12 : n.hour % 12;
@@ -479,7 +491,7 @@ class _SiaScreenState extends State<SiaScreen> {
                   bottomRight: Radius.circular(12)),
               border: Border.all(color: context.borderColor),
             ),
-            child: Text(m.text,
+            child: Text(_plainChat(m.text),
                 style: TextStyle(color: context.textColor, fontSize: 14, height: 1.5)),
           ),
           const SizedBox(height: 4),
