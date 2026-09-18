@@ -343,6 +343,12 @@ async def admin_review_subject_change_request(
     if board == "JAMB":
         profile.jamb_subjects = new_subjects
     else:
+        # Per-board columns first (WAEC and NECO each keep their own list);
+        # the shared ssce_* columns mirror the latest registration.
+        if board == "WAEC":
+            profile.waec_subjects = new_subjects
+        elif board == "NECO":
+            profile.neco_subjects = new_subjects
         profile.ssce_subjects = new_subjects
         profile.ssce_exam_type = board
     profile.cbt_subjects_locked = True

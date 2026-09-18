@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, text
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional
 import json
@@ -2149,10 +2149,101 @@ class LiveSubscriptionUpdateRequest(BaseModel):
 
 
 @router.get("/live-plans")
-async def admin_list_live_plans(current_user: dict = Depends(require_admin)):
-    from app.core.live_class_plans import all_plans_dict
+async def admin_list_live_plans(
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.core.live_class_plans import all_plans_dict_db
 
-    return {"plans": all_plans_dict()}
+    return {"plans": await all_plans_dict_db(db)}
+
+
+# ── Admin-editable subscription plans (CBT packages + live class plans) ──────
+
+class PlanOverrideUpdate(BaseModel):
+    price: Optional[float] = Field(None, ge=0)
+    duration_days: Optional[int] = Field(None, ge=1, le=3650)
+    name: Optional[str] = Field(None, max_length=120)
+    is_active: Optional[bool] = None
+
+
+@router.get("/plans")
+async def admin_list_all_plans(
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """All admin-editable plans (CBT packages + live class) with overrides merged."""
+    from app.core.cbt_packages import all_cbt_packages_dict_db
+    from app.core.live_class_plans import all_plans_dict_db
+    from app.models.plan_overrides import PlanOverride
+
+    cbt = await all_cbt_packages_dict_db(db)
+    live = await all_plans_dict_db(db)
+    saved = {
+        (r.plan_group, r.plan_id): {
+            "price": None if r.price is None else float(r.price),
+            "duration_days": r.duration_days,
+            "name": r.name,
+            "is_active": bool(r.is_active),
+        }
+        for r in (await db.execute(select(PlanOverride))).scalars()
+    }
+    for item in cbt:
+        item["group"] = "cbt"
+        item["saved_override"] = saved.get(("cbt", item["id"]))
+    for item in live:
+        item["group"] = "live_class"
+        item["saved_override"] = saved.get(("live_class", item["id"]))
+    return {"cbt_plans": cbt, "live_class_plans": live}
+
+
+@router.put("/plans/{plan_group}/{plan_id}")
+async def admin_update_plan(
+    plan_group: str,
+    plan_id: str,
+    payload: PlanOverrideUpdate,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create/update an admin override for one plan (price, duration, name, active)."""
+    from app.core.cbt_packages import get_cbt_package
+    from app.core.live_class_plans import get_plan as get_live_plan
+    from app.models.plan_overrides import PlanOverride
+
+    group = (plan_group or "").strip().lower()
+    if group not in {"cbt", "live_class"}:
+        raise HTTPException(status_code=400, detail="plan_group must be 'cbt' or 'live_class'")
+    if group == "cbt" and get_cbt_package(plan_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown CBT plan id: {plan_id}")
+    if group == "live_class" and get_live_plan(plan_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown live class plan id: {plan_id}")
+
+    row = await db.get(PlanOverride, (group, plan_id))
+    if row is None:
+        row = PlanOverride(plan_group=group, plan_id=plan_id)
+        db.add(row)
+    data = payload.model_dump(exclude_unset=True)
+    if "price" in data:
+        row.price = data["price"]
+    if "duration_days" in data:
+        row.duration_days = data["duration_days"]
+    if "name" in data:
+        row.name = data["name"]
+    if "is_active" in data:
+        row.is_active = bool(data["is_active"])
+    row.updated_by = current_user.get("email") or "admin"
+    row.updated_at = naive_utc_now()
+    await db.commit()
+    await db.refresh(row)
+    return {
+        "plan_group": group,
+        "plan_id": plan_id,
+        "price": None if row.price is None else float(row.price),
+        "duration_days": row.duration_days,
+        "name": row.name,
+        "is_active": bool(row.is_active),
+        "message": "Plan saved. Students see the new price immediately.",
+    }
 
 
 @router.get("/live-subscriptions", response_model=list[LiveSubscriptionAdminResponse])

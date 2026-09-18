@@ -2813,7 +2813,7 @@
       '<p style="margin:1rem 0 0">' +
       (isRegistered
         ? '<button type="button" class="btn btn-ghost btn-mini" data-cbt-subject-change="' + esc(board) + '">Request subject change (admin approves)</button>'
-        : '<button type="button" class="btn btn-primary" id="cbtSsceStart" ' + (pickedSsce.length ? "" : "disabled") + '>START CBT</button>') +
+        : '<button type="button" class="btn btn-primary" id="cbtSsceContinue" ' + (pickedSsce.length ? "" : "disabled") + '>CONTINUE</button>') +
       "</p>";
     body.innerHTML = html;
     if (!isRegistered) {
@@ -2833,14 +2833,51 @@
           if (startBtn) startBtn.disabled = !pickedSsce.length;
           return;
         }
-        if (e.target.id === "cbtSsceStart") {
+        if (e.target.id === "cbtSsceContinue") {
           if (!pickedSsce.length) return;
-          ensureBoardUnlockedThen(board, function () {
-            startPracticeAttempt(board, pickedSsce.slice(), e.target);
-          });
+          registerSsceSubjects(board, pickedSsce.slice(), e.target);
+          return;
         }
       });
     }
+  }
+
+  /* CONTINUE: save (and lock) WAEC/NECO subjects without starting an exam.
+     After registration the board re-renders showing one card per subject. */
+  function registerSsceSubjects(board, subjects, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+    }
+    api
+      .api("/api/v1/cbt/practice/register-subjects", {
+        method: "POST",
+        body: { exam_type: board, subjects: subjects },
+        timeout: 30000,
+        retries: 0,
+        preferXhr: true,
+      })
+      .then(function () {
+        cbtHomeCache = cbtHomeCache || {};
+        var prof = (cbtHomeCache.profile = cbtHomeCache.profile || {});
+        if (board === "WAEC") prof.waec_subjects = subjects.slice();
+        else prof.neco_subjects = subjects.slice();
+        prof.ssce_subjects = subjects.slice();
+        prof.ssce_exam_type = board;
+        prof.ssce_started = !!prof.ssce_started;
+        openCbtBoard(board, { skipUnlockModal: true });
+      })
+      .catch(function (err) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "CONTINUE";
+        }
+        var msg = errMsg(err) || "Could not save subjects. Try again.";
+        if (String(err && (err.status || err.code)).indexOf("409") >= 0 || /locked/i.test(msg)) {
+          msg = "Your subjects are locked. Send your admin a subject-change request.";
+        }
+        alert(msg);
+      });
   }
 
   /* Subject-change request modal (admin approves before subjects change) */

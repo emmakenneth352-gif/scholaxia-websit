@@ -1,12 +1,64 @@
 """Scholaxia live class plans — 2026 catalog.
 
 All amounts are NGN and authoritative here; clients must never send prices.
+Admin overrides live in the `plan_overrides` table (plan_group='live_class') and are
+applied on top of these defaults at read time.
 Plan ids are stored on StudentProfile.live_plan_id and Payments.live_plan_id.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+# Admin overrides cache (refreshed from DB by refresh_live_overrides)
+_override_cache: dict[str, dict] = {}
+
+
+async def refresh_live_overrides(db: Any) -> None:
+    """Load plan_overrides (plan_group='live_class') into the module cache.
+
+    Call before serving plan lists or charging money. Never raises.
+    """
+    try:
+        from sqlalchemy import select
+
+        from app.models.plan_overrides import PlanOverride
+
+        found = (
+            await db.execute(select(PlanOverride).where(PlanOverride.plan_group == "live_class"))
+        ).scalars()
+        _override_cache.clear()
+        for r in found:
+            _override_cache[r.plan_id] = {
+                "price": None if r.price is None else float(r.price),
+                "duration_days": r.duration_days,
+                "name": r.name,
+                "is_active": bool(r.is_active),
+            }
+    except Exception as exc:  # table missing / fresh DB — defaults apply
+        logger.debug("live class plan overrides unavailable, using defaults: %s", exc)
+
+
+def _apply_override_to(plan: LiveClassPlan) -> LiveClassPlan:
+    ov = _override_cache.get(plan.id)
+    if not ov:
+        return plan
+    return LiveClassPlan(
+        id=plan.id,
+        category=plan.category,
+        name=(ov["name"] or plan.name),
+        price=(ov["price"] if ov["price"] is not None else plan.price),
+        sessions=plan.sessions,
+        session_minutes=plan.session_minutes,
+        max_subjects=plan.max_subjects,
+        features=plan.features,
+        education_levels=plan.education_levels,
+        exam_types=plan.exam_types,
+        billing=plan.billing,
+    )
 
 
 @dataclass(frozen=True)
@@ -147,10 +199,14 @@ _PLAN_MAP = {p.id: p for p in LIVE_CLASS_PLANS}
 
 
 def get_plan(plan_id: str) -> Optional[LiveClassPlan]:
-    return _PLAN_MAP.get(plan_id)
+    plan = _PLAN_MAP.get(plan_id)
+    if plan is None:
+        return None
+    return _apply_override_to(plan)
 
 
 def plan_to_dict(plan: LiveClassPlan) -> dict:
+    plan = _apply_override_to(plan)
     return {
         "id": plan.id,
         "category": plan.category,
@@ -162,11 +218,22 @@ def plan_to_dict(plan: LiveClassPlan) -> dict:
         "max_subjects": plan.max_subjects if plan.max_subjects < 99 else "All core subjects",
         "features": list(plan.features),
         "billing": plan.billing,
+        "duration_days": (30 if plan.billing == "monthly" else None),
+        "is_active": _override_cache.get(plan.id, {}).get("is_active", True),
+        "admin_editable": True,
     }
 
 
 def all_plans_dict() -> list[dict]:
-    return [plan_to_dict(p) for p in LIVE_CLASS_PLANS]
+    """Student-facing plans — inactive plans are hidden."""
+    items = [plan_to_dict(p) for p in LIVE_CLASS_PLANS]
+    return [i for i in items if i.get("is_active", True)]
+
+
+async def all_plans_dict_db(db: Any) -> list[dict]:
+    """Plans with admin overrides applied (refreshes the cache first)."""
+    await refresh_live_overrides(db)
+    return all_plans_dict()
 
 
 def _norm(value: Optional[str]) -> str:

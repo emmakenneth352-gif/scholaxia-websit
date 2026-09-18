@@ -201,6 +201,7 @@ function showAdminPage(page) {
   else if (page === "cbt-settings") { loadCbtSettings(); }
   else if (page === "cbt") { cbtMode = "practice"; initCbtBuilder(); setCbtBank(cbtActiveBank || "JAMB"); }
   else if (page === "coupons") loadCbtCoupons();
+  else if (page === "plans") loadPlansAdmin();
   else if (page === "past-questions") { cbtMode = "past"; loadPastQuestionsAdmin(); }
   else if (page === "library") loadLibraryAdmin();
   else if (page === "videos") loadAdminVideos();
@@ -3709,3 +3710,73 @@ async function hostSchoolLiveClass(startNow) {
 }
 
 
+
+/* ── Plans & Pricing (admin-editable CBT packages + live class plans) ───────── */
+async function loadPlansAdmin() {
+  var wrap = document.getElementById("plans-admin-wrap");
+  if (!wrap) return;
+  try {
+    var data = await adminApi("/api/v1/admin/plans");
+    wrap.innerHTML = renderPlansAdmin(data);
+  } catch (e) {
+    wrap.innerHTML = '<p class="error-text">' + escHtml(e.message || "Could not load plans.") + "</p>";
+  }
+}
+
+function renderPlansAdmin(data) {
+  function planCard(group, p) {
+    var saved = p.saved_override || {};
+    var shownName = saved.name || p.name;
+    var shownPrice = saved.price != null ? saved.price : p.price;
+    var active = saved.is_active != null ? saved.is_active : (p.is_active !== false);
+    return (
+      '<div class="panel" style="margin-bottom:14px" data-plan-group="' + group + '" data-plan-id="' + escHtml(p.id) + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+          "<h3 style=\"margin:0\">" + escHtml(shownName) + ' <span class="muted" style="font-weight:400;font-size:12px">(' + escHtml(p.id) + ")</span></h3>" +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" class="plan-active" ' + (active ? "checked" : "") + "> Visible to students</label>" +
+        "</div>" +
+        '<div class="form-row" style="margin-top:10px;align-items:flex-end">' +
+          '<label style="max-width:180px"><span>Price (₦)</span>' +
+            '<input type="number" class="plan-price" min="0" step="0.01" value="' + Number(shownPrice || 0) + '" />' +
+          "</label>" +
+          '<label style="max-width:180px"><span>Duration (days)</span>' +
+            '<input type="number" class="plan-duration" min="1" step="1" value="' + Number(p.duration_days || 365) + '" />' +
+          "</label>" +
+          '<label style="flex:1;min-width:200px"><span>Display name (optional)</span>' +
+            '<input type="text" class="plan-name" maxlength="120" value="' + escHtml(shownName) + '" />' +
+          "</label>" +
+          '<button class="btn-primary" style="width:auto;padding:10px 18px" onclick="savePlanOverride(this)">Save</button>' +
+        "</div>" +
+      "</div>"
+    );
+  }
+  var html = "<h3>CBT Packages</h3>";
+  (data.cbt_plans || []).forEach(function (p) { html += planCard("cbt", p); });
+  html += "<h3 style='margin-top:20px'>Live Class Plans</h3>";
+  (data.live_class_plans || []).forEach(function (p) { html += planCard("live_class", p); });
+  return html;
+}
+
+async function savePlanOverride(btn) {
+  var card = btn.closest("[data-plan-group]");
+  if (!card) return;
+  var group = card.getAttribute("data-plan-group");
+  var planId = card.getAttribute("data-plan-id");
+  var price = parseFloat(card.querySelector(".plan-price").value || "0");
+  var duration = parseInt(card.querySelector(".plan-duration").value || "0", 10);
+  var name = (card.querySelector(".plan-name").value || "").trim();
+  var isActive = !!card.querySelector(".plan-active").checked;
+  btn.disabled = true;
+  try {
+    await adminApi("/api/v1/admin/plans/" + group + "/" + encodeURIComponent(planId), {
+      method: "PUT",
+      body: JSON.stringify({ price: price, duration_days: duration, name: name, is_active: isActive }),
+    });
+    btn.textContent = "Saved ✓";
+    setTimeout(function () { btn.textContent = "Save"; }, 1500);
+  } catch (e) {
+    alert(e.message || "Could not save plan.");
+  } finally {
+    btn.disabled = false;
+  }
+}

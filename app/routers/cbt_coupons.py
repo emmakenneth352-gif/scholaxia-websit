@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cbt_packages import get_cbt_package, all_cbt_packages_dict
+from app.core.cbt_packages import get_cbt_package, all_cbt_packages_dict, refresh_cbt_overrides
 from app.core.database import get_db, engine
 from app.core.datetime_utils import naive_utc_now
 from app.core.deps import require_admin, require_student_or_kind
@@ -159,6 +159,7 @@ async def list_coupons(
                     "at": red.created_at.isoformat() if red.created_at else None,
                 }
             )
+    await refresh_cbt_overrides(db)
     return {
         "coupons": [
             _coupon_dict(r, redeemers_by_coupon.get(str(r.id), []))

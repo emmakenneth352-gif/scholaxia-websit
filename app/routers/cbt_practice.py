@@ -130,6 +130,8 @@ async def practice_home(
     jamb_subjects: list = []
     ssce_subjects: list = []
     ssce_exam = "WAEC"
+    waec_subjects: list = []
+    neco_subjects: list = []
     try:
         profile = (
             await db.execute(select(StudentProfile).where(StudentProfile.user_id == sid))
@@ -142,6 +144,13 @@ async def practice_home(
                 or []
             )
             ssce_exam = getattr(profile, "ssce_exam_type", None) or "WAEC"
+            waec_subjects = list(getattr(profile, "waec_subjects", None) or [])
+            neco_subjects = list(getattr(profile, "neco_subjects", None) or [])
+            # Legacy rows: fall back to ssce_subjects only when the board matches
+            if not waec_subjects and (ssce_exam or "").upper() == "WAEC":
+                waec_subjects = list(ssce_subjects)
+            if not neco_subjects and (ssce_exam or "").upper() == "NECO":
+                neco_subjects = list(ssce_subjects)
     except Exception:
         try:
             await db.rollback()
@@ -206,6 +215,8 @@ async def practice_home(
             "ssce_subjects": ssce_subjects,
             "ssce_exam_type": ssce_exam,
             "ssce_started": ssce_started,
+            "waec_subjects": waec_subjects,
+            "neco_subjects": neco_subjects,
         },
     }
 
@@ -233,6 +244,37 @@ async def practice_settings_public(
             "ce_subjects": list(settings.get("ce_subjects") or []),
         }
     }
+
+
+@router.post("/cbt/practice/register-subjects")
+async def register_practice_subjects(
+    payload: StartPracticeRequest,
+    current_user: dict = Depends(require_student_or_kind),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register (and lock) subjects for a board WITHOUT starting an exam.
+    WAEC/NECO: pick up to 9 subjects → CONTINUE. Later changes need admin approval
+    via /cbt/subject-change-requests."""
+    try:
+        result = await cbt_engine.register_board_subjects(
+            db,
+            student_id=current_user["sub"],
+            exam_type=payload.exam_type,
+            subjects=payload.subjects,
+        )
+    except PermissionError as exc:
+        if "SUBJECTS_LOCKED" in str(exc):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "subjects_locked",
+                    "message": "Your subjects are locked. Send your admin a subject-change request.",
+                },
+            )
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
 
 
 @router.post("/cbt/practice/start")

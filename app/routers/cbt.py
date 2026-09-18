@@ -54,11 +54,11 @@ async def _require_paid_practice_access(
 
 
 @router.get("/packages")
-async def list_cbt_packages():
-    """Annual CBT products. Prices are controlled by Scholaxia, not clients."""
-    from app.core.cbt_packages import all_cbt_packages
+async def list_cbt_packages(db: AsyncSession = Depends(get_db)):
+    """Annual CBT products. Prices come from admin overrides (or defaults)."""
+    from app.core.cbt_packages import all_cbt_packages_dict_db
 
-    return {"packages": all_cbt_packages()}
+    return {"packages": await all_cbt_packages_dict_db(db)}
 
 
 @router.get("/practice-bank/{category}")

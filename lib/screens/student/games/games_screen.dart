@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/student_ui.dart';
-import '../sil/sil_entry.dart';
 import 'math_arena_screen.dart';
 import 'spelling_bee_screen.dart';
 import 'word_arrangement_screen.dart';
@@ -90,15 +89,14 @@ class GamesScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // League entry is coming soon — the card is display-only.
                   ElevatedButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const SilEntryScreen()),
-                    ),
+                    onPressed: null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.white,
                       foregroundColor: const Color(0xFF7C3AED),
+                      disabledBackgroundColor: Colors.white.withOpacity(0.6),
+                      disabledForegroundColor: const Color(0xFF7C3AED).withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20)),
                     ),

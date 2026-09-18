@@ -75,6 +75,9 @@ class StudentProfile(Base):
     jamb_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
     ssce_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
     ssce_exam_type: Mapped[str | None] = mapped_column(String(20), nullable=True)  # WAEC | NECO
+    # Per-board registration (WAEC and NECO each keep their own subject list)
+    waec_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
+    neco_subjects: Mapped[list | None] = mapped_column(ARRAY(String), nullable=True)
     education_level: Mapped[str] = mapped_column(String(50), nullable=True)  # JSS1, SS1, JAMB etc.
     school_student_id: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     has_active_subscription: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -69,6 +69,8 @@ _SCHEMA_STATEMENTS = (
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS jamb_subjects VARCHAR[] NULL",
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_subjects VARCHAR[] NULL",
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS ssce_exam_type VARCHAR(20) NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS waec_subjects VARCHAR[] NULL",
+    "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS neco_subjects VARCHAR[] NULL",
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS education_level VARCHAR(50) NULL",
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS school_student_id VARCHAR(40) NULL",
     "ALTER TABLE student_profiles ADD COLUMN IF NOT EXISTS live_plan_id VARCHAR(80) NULL",

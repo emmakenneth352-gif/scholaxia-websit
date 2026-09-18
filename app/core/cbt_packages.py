@@ -1,11 +1,59 @@
 """Scholaxia annual CBT practice packages (server-side price catalog).
 
 Prices are authoritative here — clients must never send amounts.
+Admin overrides live in the `cbt_packages_admin` table (price / duration / name / is_active)
+and are applied on top of these defaults at read time.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
+
+# Admin overrides cache (refreshed from DB by refresh_cbt_overrides)
+_override_cache: dict[str, dict] = {}
+
+
+async def refresh_cbt_overrides(db: Any) -> None:
+    """Load plan_overrides (plan_group='cbt') into the module cache.
+
+    Call before serving catalogs or charging money. Never raises.
+    """
+    try:
+        from sqlalchemy import select
+
+        from app.models.plan_overrides import PlanOverride
+
+        found = (
+            await db.execute(select(PlanOverride).where(PlanOverride.plan_group == "cbt"))
+        ).scalars()
+        _override_cache.clear()
+        for r in found:
+            _override_cache[r.plan_id] = {
+                "price": None if r.price is None else float(r.price),
+                "duration_days": r.duration_days,
+                "name": r.name,
+                "is_active": bool(r.is_active),
+            }
+    except Exception as exc:  # table missing / fresh DB — defaults apply
+        logger.debug("cbt plan overrides unavailable, using defaults: %s", exc)
+
+
+def _apply_override_to(package: CbtPackage) -> CbtPackage:
+    ov = _override_cache.get(package.id)
+    if not ov:
+        return package
+    return CbtPackage(
+        id=package.id,
+        name=(ov["name"] or package.name),
+        price=(ov["price"] if ov["price"] is not None else package.price),
+        duration_days=(ov["duration_days"] or package.duration_days),
+        boards=package.boards,
+        audience=package.audience,
+        features=package.features,
+    )
 
 
 @dataclass(frozen=True)
@@ -99,10 +147,14 @@ _PACKAGE_MAP = {p.id: p for p in CBT_PACKAGES}
 
 
 def get_cbt_package(package_id: str) -> Optional[CbtPackage]:
-    return _PACKAGE_MAP.get((package_id or "").strip().lower())
+    pkg = _PACKAGE_MAP.get((package_id or "").strip().lower())
+    if pkg is None:
+        return None
+    return _apply_override_to(pkg)
 
 
 def cbt_package_to_dict(package: CbtPackage) -> dict:
+    package = _apply_override_to(package)
     return {
         "id": package.id,
         "name": package.name,
@@ -114,12 +166,22 @@ def cbt_package_to_dict(package: CbtPackage) -> dict:
         "billing": "annual",
         "includes_sia_ai": True,
         "features": list(package.features),
+        "is_active": _override_cache.get(package.id, {}).get("is_active", True),
+        "admin_editable": True,
     }
 
 
 def all_cbt_packages_dict() -> list[dict]:
-    return [cbt_package_to_dict(p) for p in CBT_PACKAGES]
+    """Student-facing catalog — inactive plans are hidden."""
+    items = [cbt_package_to_dict(p) for p in CBT_PACKAGES]
+    return [i for i in items if i.get("is_active", True)]
+
+
+async def all_cbt_packages_dict_db(db: Any) -> list[dict]:
+    """Catalog with admin overrides applied (refreshes the cache first)."""
+    await refresh_cbt_overrides(db)
+    return all_cbt_packages_dict()
 
 
 def all_cbt_packages() -> list[dict]:
-  return all_cbt_packages_dict()
+    return all_cbt_packages_dict()

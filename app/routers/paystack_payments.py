@@ -21,7 +21,8 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cbt_packages import all_cbt_packages_dict, get_cbt_package
+from app.core.cbt_packages import all_cbt_packages_dict, get_cbt_package, refresh_cbt_overrides
+from app.core.live_class_plans import refresh_live_overrides
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.datetime_utils import naive_utc_now
@@ -148,6 +149,7 @@ async def _resolve_product(
         return {"price_naira": float(book.price), "title": book.title, "already_owned": owned, "extra": {}}
 
     if product_type == PRODUCT_CBT_PACKAGE:
+        await refresh_cbt_overrides(db)
         package = get_cbt_package(product_id)
         if not package:
             raise HTTPException(status_code=404, detail="CBT package not found")
@@ -155,6 +157,7 @@ async def _resolve_product(
         return {"price_naira": float(package.price), "title": package.name, "already_owned": False, "extra": {"duration_days": package.duration_days}}
 
     if product_type == PRODUCT_CLASS_PACKAGE:
+        await refresh_live_overrides(db)
         plan = get_plan(product_id)
         if not plan:
             raise HTTPException(status_code=404, detail="Class package not found")
@@ -515,7 +518,11 @@ def _validate_success(payment: Payment, tx_data: dict) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/cbt-packages")
-async def list_cbt_packages(current_user: dict = Depends(require_student_or_kind)):
+async def list_cbt_packages(
+    current_user: dict = Depends(require_student_or_kind),
+    db: AsyncSession = Depends(get_db),
+):
+    await refresh_cbt_overrides(db)
     return {
         "packages": all_cbt_packages_dict(),
         "currency": "NGN",
@@ -538,7 +545,7 @@ async def list_live_class_plans_paystack(
     db: AsyncSession = Depends(get_db),
 ):
     """Live class plans for the Subscription page (Paystack path)."""
-    from app.core.live_class_plans import all_plans_dict, suggest_plan_ids
+    from app.core.live_class_plans import all_plans_dict, suggest_plan_ids, refresh_live_overrides
     from app.models.user import StudentProfile
     from app.services.live_class_access import get_live_access_info
 
@@ -579,6 +586,7 @@ async def list_live_class_plans_paystack(
         active_out = dict(active)
         active_out["expires_at"] = _iso(active.get("expires_at"))
 
+    await refresh_live_overrides(db)
     return {
         "plans": all_plans_dict(),
         "suggested_plan_ids": suggested,

@@ -1669,6 +1669,23 @@ class ApiService {
     return _parseMap(res);
   }
 
+  /// Register (and lock) subjects for a board WITHOUT starting an exam.
+  /// WAEC/NECO: pick up to 9 subjects → CONTINUE. Throws ApiException 409
+  /// when subjects are already locked (then use requestSubjectChange).
+  Future<Map<String, dynamic>> cbtRegisterSubjects(
+    String examType,
+    List<String> subjects,
+  ) async {
+    final res = await http
+        .post(
+          _uri('/api/v1/cbt/practice/register-subjects'),
+          headers: await _authHeaders(),
+          body: jsonEncode({'exam_type': examType, 'subjects': subjects}),
+        )
+        .timeout(const Duration(seconds: 30));
+    return _parseMap(res);
+  }
+
   /// Start a practice attempt for a board (JAMB/WAEC/NECO/COMMON_ENTRANCE).
   /// Throws ApiException with status 402 when the board package is locked.
   Future<Map<String, dynamic>> cbtPracticeStart(

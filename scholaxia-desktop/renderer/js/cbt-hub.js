@@ -226,7 +226,7 @@ function renderCbtBoard(grid) {
       return a.indexOf(s) === i;
     });
     html +=
-      '<p class="cbt-hub-note">Select your subjects (up to 9), then START CBT. They lock after your first exam — changes then need admin approval.</p>';
+      '<p class="cbt-hub-note">Select your subjects (up to 9), then CONTINUE to save them. They lock after that — changes then need admin approval.</p>';
     html += '<div class="cbt-subject-grid">';
     html += allChoices
       .map(function (s) {
@@ -243,7 +243,7 @@ function renderCbtBoard(grid) {
     html +=
       '<div class="cbt-start-bar"><span class="cbt-start-count">' +
       picked.length + " / up to 9 selected</span>" +
-      '<button type="button" class="btn-join" id="cbt-hub-ssce-start">START CBT &#8594;</button></div>';
+      '<button type="button" class="btn-join" id="cbt-hub-ssce-start">CONTINUE &#8594;</button></div>';
     html += "</div>";
     grid.innerHTML = html;
     grid.querySelectorAll("[data-ssce-pick]").forEach(function (btn) {
@@ -263,7 +263,7 @@ function renderCbtBoard(grid) {
           alert("Select at least one subject.");
           return;
         }
-        cbtHubStartPractice(board, cbtHubState.sscePicked.slice());
+        cbtHubRegisterSubjects(board, cbtHubState.sscePicked.slice(), startBtn);
       });
     }
     return;
@@ -365,6 +365,38 @@ async function cbtHubStartJambPractice() {
 
 async function cbtHubStartSubject(subject) {
   await cbtHubStartPractice(cbtHubState.board, [subject]);
+}
+
+/* CONTINUE: save (and lock) WAEC/NECO subjects without starting an exam.
+   After registration the hub reloads and shows one card per subject. */
+async function cbtHubRegisterSubjects(board, subjects, btn) {
+  if (cbtHubState.busy) return;
+  cbtHubState.busy = true;
+  var oldLabel = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "Saving…";
+  }
+  try {
+    await api("/api/v1/cbt/practice/register-subjects", {
+      method: "POST",
+      body: JSON.stringify({ exam_type: board, subjects: subjects }),
+    });
+    cbtHubState.sscePicked = [];
+    await loadCbtHubPage();
+  } catch (e) {
+    var msg = (e && e.message) || "Could not save subjects.";
+    if (/locked/i.test(msg) || (e && e.status === 409)) {
+      msg = "Your subjects are locked. Send your admin a subject-change request.";
+    }
+    alert(msg);
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = oldLabel;
+    }
+  } finally {
+    cbtHubState.busy = false;
+  }
 }
 
 async function cbtHubStartPractice(examType, subjects) {

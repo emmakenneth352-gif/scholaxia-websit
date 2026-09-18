@@ -102,6 +102,18 @@ class _CbtScreenState extends State<CbtScreen> {
         .toList();
   }
 
+  /// Registered subjects for a specific board (WAEC and NECO each keep their
+  /// own list; older accounts fall back to the shared ssce_subjects column).
+  List<String> _boardRegistered(String board) {
+    final p = (_home?['profile'] as Map<String, dynamic>?) ?? const {};
+    final own = ((board == 'WAEC' ? p['waec_subjects'] : p['neco_subjects'])
+            as List?) ??
+        const [];
+    if (own.isNotEmpty) return own.map((e) => e.toString()).toList();
+    if ((_profileSsceBoard() ?? '') == board) return _profileSsce();
+    return const [];
+  }
+
   String? _profileSsceBoard() {
     final p = (_home?['profile'] as Map<String, dynamic>?) ?? const {};
     final v = p['ssce_exam_type']?.toString();
@@ -132,10 +144,33 @@ class _CbtScreenState extends State<CbtScreen> {
   }
 
   bool _ssceIsRegistered() {
-    final registered = _profileSsce();
-    return registered.isNotEmpty &&
-        (_profileSsceBoard() ?? '') == _tab &&
-        _ssceStarted();
+    final registered = _boardRegistered(_tab);
+    return registered.isNotEmpty && _ssceStarted();
+  }
+
+  /// CONTINUE: register (and lock) the picked subjects without starting an exam.
+  Future<void> _registerSubjects() async {
+    final board = _tab;
+    if (_starting) return;
+    if (_picked.isEmpty) {
+      _snack('Select your subjects first (up to 9).');
+      return;
+    }
+    setState(() => _starting = true);
+    try {
+      await _api.cbtRegisterSubjects(board, _picked.toList());
+      if (!mounted) return;
+      _snack('Subjects saved & locked. Pick one to practice.');
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _snack(e.message.isEmpty ? 'Could not save subjects.' : e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Could not save subjects: $e');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   Future<void> _startPractice({String? singleSubject}) async {
@@ -160,9 +195,8 @@ class _CbtScreenState extends State<CbtScreen> {
           subjects.addAll(_picked);
         }
       } else {
-        final registered = _profileSsce();
-        final boardMatches = (_profileSsceBoard() ?? '') == board;
-        if (registered.isNotEmpty && boardMatches && _ssceStarted()) {
+        final registered = _boardRegistered(board);
+        if (registered.isNotEmpty && _ssceStarted()) {
           if (singleSubject == null ||
               !registered.any((s) => s.toLowerCase() == singleSubject.toLowerCase())) {
             _snack('Pick one of your registered subjects.');
@@ -170,12 +204,9 @@ class _CbtScreenState extends State<CbtScreen> {
           }
           subjects.add(singleSubject);
         } else {
-          // First registration: send picked subjects; server persists + locks.
-          if (_picked.isEmpty) {
-            _snack('Select your subjects first (up to 9).');
-            return;
-          }
-          subjects.addAll(_picked);
+          // Not registered yet on this board — CONTINUE saves & locks subjects.
+          _snack('Tap CONTINUE to save your subjects first.');
+          return;
         }
       }
 
@@ -378,21 +409,6 @@ class _CbtScreenState extends State<CbtScreen> {
     return _ssceSubjects();
   }
 
-  /// Board seal: small vector logo (kept monochrome in the app accent colour).
-  Widget _boardSeal(String board, {double size = 44, Color? color}) {
-    final c = color ?? context.accentColor;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: c.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(6),
-      child: CustomPaint(painter: _BoardSealPainter(board, color: c)),
-    );
-  }
-
   Widget _lockedInfo(String board) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -480,7 +496,7 @@ class _CbtScreenState extends State<CbtScreen> {
   }
 
   Widget _ssceSubjects() {
-    final registered = _profileSsce();
+    final registered = _boardRegistered(_tab);
     final isRegistered = _ssceIsRegistered();
     final allSubjects = const [
       'English Language', 'Mathematics', 'Biology', 'Chemistry', 'Physics',
@@ -492,25 +508,58 @@ class _CbtScreenState extends State<CbtScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(
         isRegistered
-            ? 'Pick one subject to practise · your subjects are locked'
-            : 'Select your subjects (up to 9). They are locked after you start — changes need admin approval.',
+            ? 'Your registered subjects — pick one to practise. Subjects are locked; changes need admin approval.'
+            : 'Select your subjects (up to 9), then CONTINUE to save them. They lock after that — changes need admin approval.',
         style: TextStyle(color: context.greyColor, fontSize: 12),
       ),
       const SizedBox(height: 12),
       if (isRegistered)
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: registered.map((s) {
-            return ActionChip(
-              label: Text(s),
-              backgroundColor: context.accentColor.withOpacity(0.12),
-              onPressed: _starting ? null : () => _startPractice(singleSubject: s),
-              avatar: Icon(Icons.play_arrow_rounded,
-                  size: 18, color: context.accentColor),
-            );
-          }).toList(),
-        )
+        // Registered subject cards — tap one to open its practice exam.
+        ...List.generate(registered.length, (i) {
+          final s = registered[i];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Material(
+              color: context.cardColor,
+              borderRadius: BorderRadius.circular(14),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: _starting ? null : () => _startPractice(singleSubject: s),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: context.borderColor),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: context.accentColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.menu_book_rounded,
+                          size: 20, color: context.accentColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(s,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                    ),
+                    Text('$_tab',
+                        style: TextStyle(
+                            color: context.greyColor, fontSize: 11)),
+                    const SizedBox(width: 8),
+                    Icon(Icons.chevron_right_rounded,
+                        color: context.accentColor),
+                  ]),
+                ),
+              ),
+            ),
+          );
+        })
       else
         Wrap(
           spacing: 8,
@@ -541,15 +590,15 @@ class _CbtScreenState extends State<CbtScreen> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: _starting ? null : _startPractice,
+            onPressed: _starting ? null : _registerSubjects,
             icon: _starting
                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.play_arrow_rounded),
+                : const Icon(Icons.check_rounded),
             label: Text(_starting
-                ? 'Opening…'
+                ? 'Saving…'
                 : _picked.isEmpty
-                    ? 'Select subjects to start'
-                    : 'START ${_picked.length == 1 ? _picked.first : "CBT"}'),
+                    ? 'Select subjects to continue'
+                    : 'CONTINUE'),
           ),
         ),
       const SizedBox(height: 10),

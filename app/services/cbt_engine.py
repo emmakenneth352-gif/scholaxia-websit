@@ -51,6 +51,27 @@ ENGLISH_ALIASES = {
     "english language (use of english)",
 }
 
+# AI chat junk that ended up inside imported bank options (e.g. a whole Sia
+# reply pasted as option C). Real exam options never look like this.
+_JUNK_OPTION_RE = re.compile(
+    r"(you have now completed|do you want me to continue|questions? part \d|"
+    r"i can continue|continue \S+ questions|part \(\d+[-–]\d+\))",
+    re.IGNORECASE,
+)
+_MAX_OPTION_LEN = 240
+
+
+def _question_has_junk(q: CBTQuestion) -> bool:
+    if _JUNK_OPTION_RE.search((q.question_text or "")):
+        return True
+    for text in (q.option_a, q.option_b, q.option_c, q.option_d):
+        t = (text or "").strip()
+        if not t:
+            continue
+        if len(t) > _MAX_OPTION_LEN or _JUNK_OPTION_RE.search(t):
+            return True
+    return False
+
 
 async def ensure_cbt_settings_schema() -> None:
     stmts = (
@@ -180,7 +201,9 @@ async def get_cbt_settings(db: AsyncSession) -> dict[str, Any]:
 
 
 async def update_cbt_settings(db: AsyncSession, payload: dict[str, Any]) -> dict[str, Any]:
-    await ensure_cbt_settings_schema()
+    # NOTE: no DDL here — ensure_cbt_settings_schema() runs at startup. DDL on a
+    # second connection inside a request deadlocks against this session's open
+    # transaction on Postgres, which made admin settings saves hang/fail silently.
     row = (await db.execute(select(CbtGlobalSettings).where(CbtGlobalSettings.id == 1))).scalar_one_or_none()
     if not row:
         row = CbtGlobalSettings(id=1)
@@ -316,7 +339,9 @@ async def _bank_questions_for(
     rows = (
         await db.execute(select(CBTQuestion).where(CBTQuestion.id.in_(ids)))
     ).scalars().all()
-    return list(rows)
+    clean = [q for q in rows if not _question_has_junk(q)]
+    # Prefer the clean set; fall back to everything only if the bank would empty.
+    return clean if clean else list(rows)
 
 
 async def build_section(
@@ -515,6 +540,119 @@ async def ensure_all_sections_built(db: AsyncSession, attempt: CbtPracticeAttemp
             await ensure_section_built(db, attempt, i)
 
 
+def _board_registered_subjects(profile, board: str) -> list[str]:
+    """Registered subjects for a WAEC/NECO board (each board keeps its own list,
+    falling back to the shared ssce_subjects / selected_subjects columns)."""
+    if profile is None:
+        return []
+    if board == "WAEC":
+        own = list(getattr(profile, "waec_subjects", None) or [])
+        if own:
+            return [str(s).strip() for s in own if str(s).strip()]
+    elif board == "NECO":
+        own = list(getattr(profile, "neco_subjects", None) or [])
+        if own:
+            return [str(s).strip() for s in own if str(s).strip()]
+    if (getattr(profile, "ssce_exam_type", None) or "").upper() == board:
+        return [str(s).strip() for s in (profile.ssce_subjects or []) if str(s).strip()]
+    return []
+
+
+def _save_board_subjects(profile, board: str, subjects: list[str]) -> None:
+    clean = [str(s).strip() for s in subjects if str(s).strip()]
+    if board == "WAEC":
+        profile.waec_subjects = clean
+    elif board == "NECO":
+        profile.neco_subjects = clean
+    profile.ssce_subjects = clean
+    profile.ssce_exam_type = board
+
+
+async def register_board_subjects(
+    db: AsyncSession,
+    *,
+    student_id: str,
+    exam_type: str,
+    subjects: list[str],
+) -> dict:
+    """Register (and lock) a WAEC/NECO subject list WITHOUT starting an exam.
+    Also validates JAMB's required-count selection. Idempotent: re-registering
+    the same board+list just refreshes it."""
+    from app.models.user import StudentProfile
+
+    board = normalize_board(exam_type)
+    if board not in {"JAMB", "WAEC", "NECO", "COMMON_ENTRANCE"}:
+        raise ValueError("Exam type must be JAMB, WAEC, NECO, or COMMON_ENTRANCE")
+    sid = uuid.UUID(str(student_id))
+    clean = []
+    for s in subjects:
+        t = (s or "").strip()
+        if t and t not in clean:
+            clean.append(t)
+
+    profile = (
+        await db.execute(select(StudentProfile).where(StudentProfile.user_id == sid))
+    ).scalar_one_or_none()
+    if profile is None:
+        raise ValueError("Complete your profile first")
+
+    # Subject changes after registration go through admin approval. The lock
+    # applies as soon as subjects were saved via the register endpoint (the
+    # per-board columns) or once a WAEC/NECO attempt has started. Legacy rows
+    # whose only record is the pre-polluted ssce_subjects list can still be
+    # re-registered once before the first exam.
+    if board in {"WAEC", "NECO"}:
+        existing = _board_registered_subjects(profile, board)
+        own_col = list(
+            getattr(profile, "waec_subjects" if board == "WAEC" else "neco_subjects", None)
+            or []
+        )
+        if existing:
+            try:
+                any_ssce = (
+                    await db.execute(
+                        select(CbtPracticeAttempt.id)
+                        .where(
+                            CbtPracticeAttempt.student_id == sid,
+                            CbtPracticeAttempt.exam_type.in_(["WAEC", "NECO"]),
+                        )
+                        .limit(1)
+                    )
+                ).first()
+                started = any_ssce is not None
+            except Exception:
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+                started = True
+            if (own_col or started) and {s.lower() for s in clean} != {s.lower() for s in existing}:
+                raise PermissionError("SUBJECTS_LOCKED_SEND_CHANGE_REQUEST")
+            if not own_col and not started:
+                pass  # legacy pre-start list: allow the one-time fix
+            else:
+                clean = existing  # no-op refresh
+    elif board == "JAMB":
+        existing_j = [str(s).strip() for s in (profile.jamb_subjects or [])]
+        if existing_j and {s.lower() for s in clean} != {s.lower() for s in existing_j}:
+            raise PermissionError("SUBJECTS_LOCKED_SEND_CHANGE_REQUEST")
+
+    if not clean:
+        raise ValueError("Select at least one subject")
+
+    if board in {"WAEC", "NECO"}:
+        _save_board_subjects(profile, board, clean)
+    elif board == "JAMB":
+        profile.jamb_subjects = clean
+    profile.cbt_subjects_locked = True
+    if profile.locked_at is None:
+        profile.locked_at = naive_utc_now()
+    await db.flush()
+    await db.commit()
+    stored = _board_registered_subjects(profile, board) if board in {"WAEC", "NECO"} else list(clean)
+    return {"ok": True, "board": board, "subjects": stored, "locked": True}
+
+
 async def start_practice_attempt(
     db: AsyncSession,
     *,
@@ -627,11 +765,7 @@ async def start_practice_attempt(
         per = int(settings.get("ce_questions_per_subject") or 40)
         sections = [section_stub(sub, per) for sub in subjects_clean]
     else:
-        profile_ssce = list(
-            (profile.ssce_subjects if profile else None)
-            or (profile.selected_subjects if profile else None)
-            or []
-        )
+        profile_ssce = _board_registered_subjects(profile, board)
         # If the student NEVER started WAEC/NECO before, ignore any pre-filled
         # 4-subject list (copied from JAMB at signup) so they can pick their own
         # subjects. Once a WAEC/NECO attempt exists, subjects are locked.
@@ -666,8 +800,7 @@ async def start_practice_attempt(
         # the subject practised in this attempt.
         if not profile_ssce and profile is not None:
             try:
-                profile.ssce_subjects = [str(s).strip() for s in subjects_clean]
-                profile.ssce_exam_type = board  # WAEC | NECO
+                _save_board_subjects(profile, board, [str(s).strip() for s in subjects_clean])
                 profile.cbt_subjects_locked = True
                 profile.locked_at = naive_utc_now()
                 await db.flush()

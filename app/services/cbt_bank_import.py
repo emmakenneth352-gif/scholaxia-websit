@@ -15,6 +15,20 @@ from app.services.cbt_import import normalize_exam_type, parse_cbt_file
 
 LOW_CONFIDENCE_THRESHOLD = 0.55
 
+# AI chat junk that sometimes gets pasted into options by AI imports
+# (e.g. a whole assistant reply used as option C). Never valid.
+_JUNK_OPTION_RE = re.compile(
+    r"(you have now completed|do you want me to continue|questions? part \d|"
+    r"i can continue|continue \S+ questions|part \(\d+[-–]\d+\))",
+    re.IGNORECASE,
+)
+_MAX_OPTION_LEN = 240
+
+
+def option_has_junk(text: str | None) -> bool:
+    t = (text or "").strip()
+    return bool(t) and (len(t) > _MAX_OPTION_LEN or bool(_JUNK_OPTION_RE.search(t)))
+
 
 def normalize_question_text(text: str | None) -> str:
     """Loose fingerprint for duplicate detection (ignore case/punct/whitespace)."""
@@ -39,7 +53,13 @@ def question_is_valid(q: dict[str, Any]) -> bool:
         (q.get("option_d") or "").strip(),
     ]
     ans = (q.get("correct_option") or "").strip().upper()
-    return bool(text and all(opts) and ans in {"A", "B", "C", "D"})
+    if ans not in {"A", "B", "C", "D"}:
+        return False
+    if not text or not all(opts):
+        return False
+    if any(option_has_junk(o) for o in opts):
+        return False
+    return True
 
 
 def question_needs_review(q: dict[str, Any]) -> bool:

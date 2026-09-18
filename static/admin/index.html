@@ -81,6 +81,7 @@
       <button class="nav-btn" data-page="cbt" data-cbt-bank="NECO" onclick="openAdminCbtBank('NECO')">NECO Question Bank</button>
       <button class="nav-btn" data-page="cbt" data-cbt-bank="COMMON_ENTRANCE" onclick="openAdminCbtBank('COMMON_ENTRANCE')">Common Entrance Bank</button>
       <button class="nav-btn" data-page="coupons" onclick="showAdminPage('coupons')">CBT Coupons</button>
+      <button class="nav-btn" data-page="plans" onclick="showAdminPage('plans')">Plans & Pricing</button>
       <button class="nav-btn" data-page="subject-change" onclick="showAdminPage('subject-change')">Subject Changes</button>
       <button class="nav-btn" data-page="past-questions" onclick="showAdminPage('past-questions')">Past Questions Shop</button>
       <div class="nav-section">More learning</div>
@@ -286,6 +287,21 @@
       </div>
       <p class="page-desc">Students who enrolled in Skills programs (web design, graphics, cyber security, etc.) — payment status and amount.</p>
       <div id="skills-enroll-table" class="data-table-wrap"><div class="loading">Loading…</div></div>
+    </section>
+
+    <section id="page-plans" class="admin-page">
+      <div class="page-head">
+        <h2>Plans &amp; Pricing</h2>
+        <div class="form-row">
+          <button class="btn-sm" onclick="loadPlansAdmin()">Refresh</button>
+        </div>
+      </div>
+      <p class="page-desc">
+        Set the prices students pay for <strong>CBT packages</strong> (JAMB, WAEC, NECO, Junior WAEC,
+        Common Entrance, combos) and <strong>Live Class plans</strong>. Turn a plan off to hide it.
+        Changes apply immediately everywhere: app, website and desktop.
+      </p>
+      <div id="plans-admin-wrap"><div class="loading">Loading…</div></div>
     </section>
 
     <section id="page-cbt-settings" class="admin-page">
