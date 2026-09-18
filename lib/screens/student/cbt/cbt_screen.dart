@@ -164,6 +164,26 @@ class _CbtScreenState extends State<CbtScreen> {
       await _load();
     } on ApiException catch (e) {
       if (!mounted) return;
+      if (e.statusCode == 404 || e.statusCode == 405) {
+        // Older backend without the register endpoint: its practice-start
+        // persists + locks subjects as a side effect, so start the exam now.
+        _snack('Saving subjects and opening ${_tab}…');
+        try {
+          final attempt = await _api.cbtPracticeStart(board, _picked.toList());
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => CbtPracticeRunnerScreen(attempt: attempt, board: board),
+            ),
+          );
+          await _load();
+        } on ApiException catch (e2) {
+          if (!mounted) return;
+          _snack(e2.message.isEmpty ? 'Could not start exam.' : e2.message);
+        }
+        return;
+      }
       _snack(e.message.isEmpty ? 'Could not save subjects.' : e.message);
     } catch (e) {
       if (!mounted) return;
