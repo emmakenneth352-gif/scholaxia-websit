@@ -483,8 +483,10 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
     """Slim user message — system prompt carries teaching rules."""
     # Small talk must reach the model CLEAN: no teach-mode injections, no
     # level/subject scaffolding — just the student's words, so the reply
-    # comes naturally from the model itself.
-    kind = classify_input(question or "", has_history=bool(conversation_history))
+    # comes naturally from the model itself. NOTE: classify with
+    # has_history=False — a greeting must stay a greeting even mid-chat
+    # (with history, short messages would classify as conversation_turn).
+    kind = classify_input(question or "", has_history=False)
     msg_len = len((question or "").strip())
     if kind in ("greeting", "casual") and msg_len <= 80:
         return (
