@@ -3729,11 +3729,17 @@ function renderPlansAdmin(data) {
     var shownName = saved.name || p.name;
     var shownPrice = saved.price != null ? saved.price : p.price;
     var active = saved.is_active != null ? saved.is_active : (p.is_active !== false);
+    var isCustom = !!p.is_custom;
     return (
       '<div class="panel" style="margin-bottom:14px" data-plan-group="' + group + '" data-plan-id="' + escHtml(p.id) + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">' +
-          "<h3 style=\"margin:0\">" + escHtml(shownName) + ' <span class="muted" style="font-weight:400;font-size:12px">(' + escHtml(p.id) + ")</span></h3>" +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" class="plan-active" ' + (active ? "checked" : "") + "> Visible to students</label>" +
+          "<h3 style=\"margin:0\">" + escHtml(shownName) + ' <span class="muted" style="font-weight:400;font-size:12px">(' + escHtml(p.id) + ")</span>" +
+          (isCustom ? ' <span class="muted" style="font-size:11px;background:#1e293b;padding:2px 8px;border-radius:8px">custom</span>' : "") +
+          "</h3>" +
+          '<div style="display:flex;align-items:center;gap:12px">' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" class="plan-active" ' + (active ? "checked" : "") + "> Visible to students</label>" +
+            (isCustom ? '<button class="btn-secondary btn-sm" style="width:auto;padding:6px 12px;color:#f87171" onclick="deleteCustomPlan(this)">Delete</button>' : "") +
+          "</div>" +
         "</div>" +
         '<div class="form-row" style="margin-top:10px;align-items:flex-end">' +
           '<label style="max-width:180px"><span>Price (₦)</span>' +
@@ -3745,16 +3751,88 @@ function renderPlansAdmin(data) {
           '<label style="flex:1;min-width:200px"><span>Display name (optional)</span>' +
             '<input type="text" class="plan-name" maxlength="120" value="' + escHtml(shownName) + '" />' +
           "</label>" +
+          (group === "cbt" && isCustom
+            ? '<label style="max-width:260px"><span>Unlocks boards</span><div class="plan-boards" style="display:flex;flex-wrap:wrap;gap:6px">' +
+              ["JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"].map(function (b) {
+                var on = (p.boards || []).indexOf(b) >= 0;
+                return '<label style="display:flex;align-items:center;gap:4px;font-size:12px"><input type="checkbox" class="plan-board" value="' + b + '" ' + (on ? "checked" : "") + "> " + b + "</label>";
+              }).join("") + "</div></label>"
+            : "") +
           '<button class="btn-primary" style="width:auto;padding:10px 18px" onclick="savePlanOverride(this)">Save</button>' +
         "</div>" +
       "</div>"
     );
   }
-  var html = "<h3>CBT Packages</h3>";
+  var html =
+    '<div class="panel" style="margin-bottom:18px">' +
+      "<h3 style='margin-top:0'>Add a new plan</h3>" +
+      '<p class="muted" style="font-size:13px">Creates a plan students can buy immediately (app, website, desktop). Built-in plans cannot be recreated — only new ids.</p>' +
+      '<div class="form-row" style="align-items:flex-end">' +
+        '<label><span>Type</span><select id="newPlanGroup" style="min-width:140px"><option value="cbt">CBT package</option><option value="live_class">Live class plan</option></select></label>' +
+        '<label><span>Plan id (letters/numbers)</span><input type="text" id="newPlanId" maxlength="60" placeholder="e.g. waec_plus" /></label>' +
+        '<label><span>Display name</span><input type="text" id="newPlanName" maxlength="120" placeholder="e.g. WAEC Plus" /></label>' +
+        '<label style="max-width:140px"><span>Price (₦)</span><input type="number" id="newPlanPrice" min="0" step="0.01" placeholder="3000" /></label>' +
+        '<label style="max-width:150px"><span>Duration (days)</span><input type="number" id="newPlanDuration" min="1" step="1" value="365" /></label>' +
+        '<button class="btn-primary" style="width:auto;padding:10px 18px" onclick="createCustomPlan(this)">Add Plan</button>' +
+      "</div>" +
+      '<div class="form-row" id="newPlanBoardsRow" style="margin-top:10px;align-items:center">' +
+        '<label><span>Unlocks boards (CBT plans)</span><div style="display:flex;flex-wrap:wrap;gap:10px">' +
+        ["JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"].map(function (b) {
+          return '<label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" class="new-plan-board" value="' + b + '" ' + (b === "JAMB" ? "checked" : "") + "> " + b + "</label>";
+        }).join("") + "</div></label>" +
+      "</div>" +
+      '<p id="newPlanMsg" class="form-status" style="margin-top:8px"></p>' +
+    "</div>";
+  html += "<h3>CBT Packages</h3>";
   (data.cbt_plans || []).forEach(function (p) { html += planCard("cbt", p); });
   html += "<h3 style='margin-top:20px'>Live Class Plans</h3>";
   (data.live_class_plans || []).forEach(function (p) { html += planCard("live_class", p); });
   return html;
+}
+
+async function createCustomPlan(btn) {
+  var msg = document.getElementById("newPlanMsg");
+  var body = {
+    plan_group: (document.getElementById("newPlanGroup") || {}).value || "cbt",
+    plan_id: ((document.getElementById("newPlanId") || {}).value || "").trim(),
+    name: ((document.getElementById("newPlanName") || {}).value || "").trim(),
+    price: parseFloat((document.getElementById("newPlanPrice") || {}).value || "0"),
+    duration_days: parseInt((document.getElementById("newPlanDuration") || {}).value || "365", 10),
+    boards: [].slice.call(document.querySelectorAll(".new-plan-board:checked")).map(function (c) { return c.value; }),
+  };
+  if (!body.plan_id || !body.name) {
+    if (msg) { msg.className = "form-status err"; msg.textContent = "Plan id and display name are required."; }
+    return;
+  }
+  btn.disabled = true;
+  try {
+    var res = await adminApi("/api/v1/admin/plans/custom", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (msg) { msg.className = "form-status ok"; msg.textContent = res.message || "Plan added."; }
+    await loadPlansAdmin();
+  } catch (e) {
+    if (msg) { msg.className = "form-status err"; msg.textContent = e.message || "Could not add plan."; }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteCustomPlan(btn) {
+  var card = btn.closest("[data-plan-group]");
+  if (!card) return;
+  var group = card.getAttribute("data-plan-group");
+  var planId = card.getAttribute("data-plan-id");
+  if (!confirm("Delete plan '" + planId + "'? Students will no longer see it.")) return;
+  btn.disabled = true;
+  try {
+    await adminApi("/api/v1/admin/plans/" + group + "/" + encodeURIComponent(planId), { method: "DELETE" });
+    await loadPlansAdmin();
+  } catch (e) {
+    alert(e.message || "Could not delete plan.");
+    btn.disabled = false;
+  }
 }
 
 async function savePlanOverride(btn) {

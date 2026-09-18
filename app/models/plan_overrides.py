@@ -25,5 +25,12 @@ class PlanOverride(Base):
     duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Custom plans are created by admin (not in the built-in catalog) and can
+    # be deleted; built-in plans can only be overridden/hidden.
+    is_custom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # For custom CBT plans: which boards the plan unlocks (JSON list)
+    boards: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    # For custom live plans: session count / minutes per session
+    sessions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=naive_utc_now, onupdate=naive_utc_now)

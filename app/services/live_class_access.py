@@ -220,8 +220,22 @@ async def activate_live_plan(
     db: AsyncSession, student_id: str, plan_id: str
 ) -> dict:
     plan = get_plan(plan_id)
-    if not plan:
-        raise ValueError("Unknown plan")
+    if plan is not None:
+        plan_days = settings.LIVE_CLASS_MONTHLY_DAYS
+        plan_sessions = plan.sessions
+        plan_name = plan.name
+        plan_id_resolved = plan.id
+    else:
+        # Custom admin-created plan — details come from its catalog dict
+        from app.core.live_class_plans import get_plan_dict
+
+        custom = get_plan_dict(plan_id)
+        if not custom:
+            raise ValueError("Unknown plan")
+        plan_days = int(custom.get("duration_days") or settings.LIVE_CLASS_MONTHLY_DAYS)
+        plan_sessions = int(custom.get("sessions") or 4)
+        plan_name = custom.get("name") or plan_id
+        plan_id_resolved = custom["id"]
 
     profile = await _get_profile(db, student_id)
     if not profile:
@@ -230,16 +244,16 @@ async def activate_live_plan(
         await db.flush()
 
     now = naive_utc_now()
-    profile.live_plan_id = plan.id
-    profile.live_plan_expires_at = now + timedelta(days=settings.LIVE_CLASS_MONTHLY_DAYS)
+    profile.live_plan_id = plan_id_resolved
+    profile.live_plan_expires_at = now + timedelta(days=plan_days)
     profile.live_plan_sessions_used = 0
     profile.has_active_subscription = True
 
     return {
-        "plan_id": plan.id,
-        "plan_name": plan.name,
+        "plan_id": plan_id_resolved,
+        "plan_name": plan_name,
         "expires_at": profile.live_plan_expires_at,
-        "sessions": plan.sessions,
+        "sessions": plan_sessions,
     }
 
 

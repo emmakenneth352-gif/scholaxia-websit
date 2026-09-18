@@ -21,8 +21,8 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cbt_packages import all_cbt_packages_dict, get_cbt_package, refresh_cbt_overrides
-from app.core.live_class_plans import refresh_live_overrides
+from app.core.cbt_packages import all_cbt_packages_dict, get_cbt_package, get_cbt_plan_dict, refresh_cbt_overrides
+from app.core.live_class_plans import get_plan_dict, refresh_live_overrides
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.datetime_utils import naive_utc_now
@@ -151,23 +151,35 @@ async def _resolve_product(
     if product_type == PRODUCT_CBT_PACKAGE:
         await refresh_cbt_overrides(db)
         package = get_cbt_package(product_id)
-        if not package:
-            raise HTTPException(status_code=404, detail="CBT package not found")
-        # Renewals/extensions are allowed — never report as already owned.
-        return {"price_naira": float(package.price), "title": package.name, "already_owned": False, "extra": {"duration_days": package.duration_days}}
+        if package is not None:
+            # Renewals/extensions are allowed — never report as already owned.
+            return {"price_naira": float(package.price), "title": package.name, "already_owned": False, "extra": {"duration_days": package.duration_days}}
+        # Custom admin-created plan (not in the built-in catalog)
+        custom = get_cbt_plan_dict(product_id)
+        if custom:
+            return {"price_naira": float(custom["price"]), "title": custom["name"], "already_owned": False, "extra": {"duration_days": custom["duration_days"]}}
+        raise HTTPException(status_code=404, detail="CBT package not found")
 
     if product_type == PRODUCT_CLASS_PACKAGE:
         await refresh_live_overrides(db)
         plan = get_plan(product_id)
-        if not plan:
-            raise HTTPException(status_code=404, detail="Class package not found")
-        return {
-            "price_naira": float(plan.price),
-            "title": plan.name,
-            # Class bundles can be purchased again after their sessions are used.
-            "already_owned": False,
-            "extra": {"sessions": plan.sessions},
-        }
+        if plan is not None:
+            return {
+                "price_naira": float(plan.price),
+                "title": plan.name,
+                # Class bundles can be purchased again after their sessions are used.
+                "already_owned": False,
+                "extra": {"sessions": plan.sessions},
+            }
+        custom = get_plan_dict(product_id)
+        if custom:
+            return {
+                "price_naira": float(custom["price"]),
+                "title": custom["name"],
+                "already_owned": False,
+                "extra": {"sessions": custom["sessions"]},
+            }
+        raise HTTPException(status_code=404, detail="Class package not found")
 
     if product_type == PRODUCT_MARKETPLACE_BOOKING:
         try:
@@ -345,7 +357,12 @@ async def _grant_cbt_package(db: AsyncSession, payment: Payment) -> None:
     if existing.scalar_one_or_none() is not None:
         return
     package = get_cbt_package(payment.product_id or "")
-    duration = package.duration_days if package else 30
+    if package is None:
+        # Custom admin-created plan — duration comes from its catalog dict
+        custom = get_cbt_plan_dict(payment.product_id or "")
+        duration = int(custom["duration_days"]) if custom else 30
+    else:
+        duration = package.duration_days
     now = naive_utc_now()
     # Extend from the current active entitlement's expiry when renewing.
     active_res = await db.execute(

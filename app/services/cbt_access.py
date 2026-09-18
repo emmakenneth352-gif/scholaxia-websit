@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cbt_packages import get_cbt_package
+from app.core.cbt_packages import get_cbt_package, get_plan_meta
 from app.core.database import engine
 from app.core.datetime_utils import naive_utc_now
 from app.models.payment import StudentEntitlement
@@ -18,6 +18,9 @@ from app.models.user import StudentProfile
 logger = logging.getLogger(__name__)
 
 ENTITLEMENT_TYPE = "cbt_package"
+
+# Boards a custom plan grants when no explicit board list was saved.
+_CUSTOM_FALLBACK_BOARDS = ("JAMB",)
 
 
 def _as_uuid(value) -> uuid.UUID:
@@ -229,9 +232,18 @@ async def active_cbt_access(
     changed_boards: set[str] = set()
     active: list[dict[str, Any]] = []
     for entitlement_key, expires_at, details in entitlements_raw:
-        package = get_cbt_package(str(entitlement_key or ""))
-        if not package:
-            continue
+        key = str(entitlement_key or "")
+        package = get_cbt_package(key)
+        if package is not None:
+            plan_boards = list(package.boards)
+            plan_name = package.name
+        else:
+            # Custom admin-created plan (boards stored on the override row)
+            meta = get_plan_meta(key)
+            if not meta:
+                continue
+            plan_boards = meta["boards"] or list(_CUSTOM_FALLBACK_BOARDS)
+            plan_name = meta["name"]
         if isinstance(details, str):
             try:
                 import json as _json
@@ -240,7 +252,7 @@ async def active_cbt_access(
                 details = None
         valid_boards: list[str] = []
         invalid_boards: list[str] = []
-        for raw_board in package.boards:
+        for raw_board in plan_boards:
             board = normalize_board(raw_board)
             if _snapshot_matches(board, details, current):
                 boards.add(board)
@@ -250,14 +262,14 @@ async def active_cbt_access(
                 invalid_boards.append(board)
         # Always count package boards when details are unlocked/empty
         if not valid_boards and not details:
-            for raw_board in package.boards:
+            for raw_board in plan_boards:
                 boards.add(normalize_board(raw_board))
                 valid_boards.append(normalize_board(raw_board))
         active.append(
             {
-                "package_id": package.id,
-                "name": package.name,
-                "boards": list(package.boards),
+                "package_id": key,
+                "name": plan_name,
+                "boards": list(plan_boards),
                 "valid_boards": valid_boards,
                 "changed_boards": invalid_boards,
                 "expires_at": expires_at.isoformat() if getattr(expires_at, "isoformat", None) else (
@@ -286,8 +298,17 @@ async def grant_cbt_package(
 ) -> StudentEntitlement | dict:
     """Grant or extend a CBT package without requiring a live Paystack payment."""
     package = get_cbt_package(package_id)
-    if not package:
-        raise ValueError("Unknown CBT package")
+    if package is not None:
+        duration_days = package.duration_days
+    else:
+        # Custom admin-created plan
+        from app.core.cbt_packages import refresh_cbt_overrides
+
+        await refresh_cbt_overrides(db)
+        meta = get_plan_meta(package_id)
+        if not meta:
+            raise ValueError("Unknown CBT package")
+        duration_days = int(meta["duration_days"] or 365)
 
     await ensure_student_entitlements_schema()
 
@@ -325,7 +346,7 @@ async def grant_cbt_package(
     except Exception:
         logger.warning("grant_cbt_package: active lookup skipped", exc_info=True)
 
-    expires = start + timedelta(days=package.duration_days)
+    expires = start + timedelta(days=duration_days)
     new_id = uuid.uuid4()
 
     inserted = False

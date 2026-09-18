@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Admin overrides cache (refreshed from DB by refresh_live_overrides)
 _override_cache: dict[str, dict] = {}
+# Admin-created custom plans (not in the built-in catalog) live here
+_custom_cache: dict[str, dict] = {}
 
 
 async def refresh_live_overrides(db: Any) -> None:
@@ -31,13 +33,20 @@ async def refresh_live_overrides(db: Any) -> None:
             await db.execute(select(PlanOverride).where(PlanOverride.plan_group == "live_class"))
         ).scalars()
         _override_cache.clear()
+        _custom_cache.clear()
         for r in found:
-            _override_cache[r.plan_id] = {
+            entry = {
                 "price": None if r.price is None else float(r.price),
                 "duration_days": r.duration_days,
                 "name": r.name,
                 "is_active": bool(r.is_active),
+                "is_custom": bool(getattr(r, "is_custom", False)),
+                "sessions": getattr(r, "sessions", None),
             }
+            if getattr(r, "is_custom", False):
+                _custom_cache[r.plan_id] = entry
+            else:
+                _override_cache[r.plan_id] = entry
     except Exception as exc:  # table missing / fresh DB — defaults apply
         logger.debug("live class plan overrides unavailable, using defaults: %s", exc)
 
@@ -205,6 +214,33 @@ def get_plan(plan_id: str) -> Optional[LiveClassPlan]:
     return _apply_override_to(plan)
 
 
+def get_plan_dict(plan_id: str) -> Optional[dict]:
+    """Any live plan (built-in or custom) as its catalog dict — used by payment
+    init so custom plans can be charged too."""
+    plan = _PLAN_MAP.get(plan_id)
+    if plan is not None:
+        return plan_to_dict(plan)
+    entry = _custom_cache.get(plan_id)
+    if entry is not None and entry.get("is_active", True):
+        return {
+            "id": plan_id,
+            "category": "Custom Plan",
+            "name": entry.get("name") or plan_id,
+            "price": entry.get("price") or 0,
+            "currency": "NGN",
+            "sessions": entry.get("sessions") or 4,
+            "session_minutes": 60,
+            "max_subjects": "All core subjects",
+            "features": ["Live classes", "Recordings"],
+            "billing": "monthly",
+            "duration_days": entry.get("duration_days") or 30,
+            "is_active": True,
+            "is_custom": True,
+            "admin_editable": True,
+        }
+    return None
+
+
 def plan_to_dict(plan: LiveClassPlan) -> dict:
     plan = _apply_override_to(plan)
     return {
@@ -225,9 +261,28 @@ def plan_to_dict(plan: LiveClassPlan) -> dict:
 
 
 def all_plans_dict() -> list[dict]:
-    """Student-facing plans — inactive plans are hidden."""
+    """Student-facing plans — inactive plans are hidden, custom plans appended."""
     items = [plan_to_dict(p) for p in LIVE_CLASS_PLANS]
-    return [i for i in items if i.get("is_active", True)]
+    items = [i for i in items if i.get("is_active", True)]
+    for pid, entry in _custom_cache.items():
+        if entry.get("is_active", True):
+            items.append({
+                "id": pid,
+                "category": "Custom Plan",
+                "name": entry.get("name") or pid,
+                "price": entry.get("price") or 0,
+                "currency": "NGN",
+                "sessions": entry.get("sessions") or 4,
+                "session_minutes": 60,
+                "max_subjects": "All core subjects",
+                "features": ["Live classes", "Recordings"],
+                "billing": "monthly",
+                "duration_days": entry.get("duration_days") or 30,
+                "is_active": True,
+                "is_custom": True,
+                "admin_editable": True,
+            })
+    return items
 
 
 async def all_plans_dict_db(db: Any) -> list[dict]:

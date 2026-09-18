@@ -10,7 +10,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cbt_packages import get_cbt_package, all_cbt_packages_dict, refresh_cbt_overrides
+from app.core.cbt_packages import (
+    all_cbt_packages_dict,
+    get_cbt_package,
+    get_plan_meta,
+    refresh_cbt_overrides,
+)
 from app.core.database import get_db, engine
 from app.core.datetime_utils import naive_utc_now
 from app.core.deps import require_admin, require_student_or_kind
@@ -176,7 +181,8 @@ async def generate_coupons(
     db: AsyncSession = Depends(get_db),
 ):
     await _ensure_coupon_tables()
-    if not get_cbt_package(payload.package_id):
+    await refresh_cbt_overrides(db)
+    if not get_cbt_package(payload.package_id) and not get_plan_meta(payload.package_id):
         raise HTTPException(status_code=400, detail="Unknown CBT package")
     expires = None
     if payload.days_valid:
@@ -251,7 +257,8 @@ async def redeem_coupon(
         raise HTTPException(status_code=400, detail="This coupon has already been used up")
 
     package_id = (row.package_id or "").strip().lower()
-    if not get_cbt_package(package_id):
+    await refresh_cbt_overrides(db)
+    if not get_cbt_package(package_id) and not get_plan_meta(package_id):
         raise HTTPException(
             status_code=400,
             detail=f"Coupon package '{row.package_id}' is not valid. Ask admin to regenerate.",
@@ -292,7 +299,7 @@ async def redeem_coupon(
             "ok": True,
             "package_id": package_id,
             "message": "Coupon already applied. CBT access refreshed.",
-            "boards": list(get_cbt_package(package_id).boards) if get_cbt_package(package_id) else [],
+            "boards": _plan_boards(),
         }
 
     try:
@@ -306,6 +313,14 @@ async def redeem_coupon(
             status_code=503,
             detail=f"Could not unlock CBT package: {detail}",
         ) from exc
+
+    # Boards granted by this plan (built-in or custom)
+    def _plan_boards() -> list:
+        pkg = get_cbt_package(package_id)
+        if pkg is not None:
+            return list(pkg.boards)
+        meta = get_plan_meta(package_id)
+        return list(meta["boards"]) if meta else []
 
     try:
         db.add(CbtCouponRedemption(id=uuid.uuid4(), coupon_id=row.id, student_id=student_id))
@@ -323,7 +338,7 @@ async def redeem_coupon(
             "ok": True,
             "package_id": package_id,
             "message": "CBT access unlocked with coupon.",
-            "boards": list(get_cbt_package(package_id).boards) if get_cbt_package(package_id) else [],
+            "boards": _plan_boards(),
             "warning": f"Redeem note failed ({type(exc).__name__})",
         }
 
@@ -333,7 +348,7 @@ async def redeem_coupon(
         "ok": True,
         "package_id": package_id,
         "message": "CBT access unlocked with coupon.",
-        "boards": list(get_cbt_package(package_id).boards) if get_cbt_package(package_id) else [],
+        "boards": _plan_boards(),
     }
 
 

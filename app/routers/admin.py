@@ -2165,6 +2165,107 @@ class PlanOverrideUpdate(BaseModel):
     duration_days: Optional[int] = Field(None, ge=1, le=3650)
     name: Optional[str] = Field(None, max_length=120)
     is_active: Optional[bool] = None
+    boards: Optional[list[str]] = None
+    sessions: Optional[int] = Field(None, ge=1, le=1000)
+
+
+class CustomPlanCreate(BaseModel):
+    plan_group: str  # cbt | live_class
+    plan_id: str = Field(..., min_length=2, max_length=60)
+    name: str = Field(..., min_length=2, max_length=120)
+    price: float = Field(..., ge=0)
+    duration_days: int = Field(365, ge=1, le=3650)
+    boards: list[str] = Field(default_factory=list)  # CBT plans: JAMB/WAEC/NECO/JUNIOR_WAEC/COMMON_ENTRANCE
+    sessions: Optional[int] = Field(None, ge=1, le=1000)  # live plans
+
+
+@router.post("/plans/custom")
+async def admin_create_custom_plan(
+    payload: CustomPlanCreate,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a brand-new plan (not in the built-in catalog). Students see it
+    immediately in the unlock/payment lists on app, website and desktop."""
+    import re as _re
+
+    from app.models.plan_overrides import PlanOverride
+
+    group = (payload.plan_group or "").strip().lower()
+    if group not in {"cbt", "live_class"}:
+        raise HTTPException(status_code=400, detail="plan_group must be 'cbt' or 'live_class'")
+    plan_id = _re.sub(r"[^a-z0-9_]+", "_", (payload.plan_id or "").strip().lower()).strip("_")
+    if len(plan_id) < 2:
+        raise HTTPException(status_code=400, detail="Plan id must have at least 2 letters/numbers")
+
+    from app.core.cbt_packages import get_cbt_package
+    from app.core.live_class_plans import get_plan as get_live_plan
+    if group == "cbt" and get_cbt_package(plan_id) is not None:
+        raise HTTPException(status_code=409, detail=f"Plan id '{plan_id}' already exists")
+    if group == "live_class" and get_live_plan(plan_id) is not None:
+        raise HTTPException(status_code=409, detail=f"Plan id '{plan_id}' already exists")
+
+    existing = await db.get(PlanOverride, (group, plan_id))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=f"Plan id '{plan_id}' already exists")
+
+    valid_boards = []
+    if group == "cbt":
+        allowed = {"JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"}
+        from app.services.cbt_access import normalize_board
+        for b in payload.boards or []:
+            nb = normalize_board(b)
+            if nb in allowed:
+                valid_boards.append(nb)
+        if not valid_boards:
+            valid_boards = ["JAMB"]
+
+    row = PlanOverride(
+        plan_group=group,
+        plan_id=plan_id,
+        name=(payload.name or plan_id).strip()[:120],
+        price=payload.price,
+        duration_days=payload.duration_days,
+        is_active=True,
+        is_custom=True,
+        boards="|".join(valid_boards) if valid_boards else None,
+        sessions=payload.sessions,
+        updated_by=current_user.get("email") or "admin",
+    )
+    db.add(row)
+    await db.commit()
+    return {
+        "ok": True,
+        "plan_group": group,
+        "plan_id": plan_id,
+        "message": f"Plan '{row.name}' added. Students can buy it now.",
+    }
+
+
+@router.delete("/plans/{plan_group}/{plan_id}")
+async def admin_delete_custom_plan(
+    plan_group: str,
+    plan_id: str,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a custom plan. Built-in plans cannot be deleted (only hidden)."""
+    from app.models.plan_overrides import PlanOverride
+
+    group = (plan_group or "").strip().lower()
+    if group not in {"cbt", "live_class"}:
+        raise HTTPException(status_code=400, detail="plan_group must be 'cbt' or 'live_class'")
+    row = await db.get(PlanOverride, (group, plan_id))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    if not row.is_custom:
+        raise HTTPException(
+            status_code=400,
+            detail="Built-in plans cannot be deleted — untick 'Visible to students' to hide it instead.",
+        )
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True, "message": f"Plan '{plan_id}' deleted."}
 
 
 @router.get("/plans")
@@ -2185,15 +2286,24 @@ async def admin_list_all_plans(
             "duration_days": r.duration_days,
             "name": r.name,
             "is_active": bool(r.is_active),
+            "is_custom": bool(getattr(r, "is_custom", False)),
+            "boards": [b for b in (getattr(r, "boards", None) or "").split("|") if b],
         }
         for r in (await db.execute(select(PlanOverride))).scalars()
     }
     for item in cbt:
         item["group"] = "cbt"
-        item["saved_override"] = saved.get(("cbt", item["id"]))
+        ov = saved.get(("cbt", item["id"]))
+        item["saved_override"] = ov
+        if ov and ov.get("is_custom"):
+            item["is_custom"] = True
+            item["boards"] = ov.get("boards") or item.get("boards") or ["JAMB"]
     for item in live:
         item["group"] = "live_class"
-        item["saved_override"] = saved.get(("live_class", item["id"]))
+        ov = saved.get(("live_class", item["id"]))
+        item["saved_override"] = ov
+        if ov and ov.get("is_custom"):
+            item["is_custom"] = True
     return {"cbt_plans": cbt, "live_class_plans": live}
 
 
@@ -2231,6 +2341,19 @@ async def admin_update_plan(
         row.name = data["name"]
     if "is_active" in data:
         row.is_active = bool(data["is_active"])
+    if data.get("boards") is not None and getattr(row, "is_custom", False):
+        from app.services.cbt_access import normalize_board
+
+        allowed = {"JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"}
+        valid = []
+        for b in data["boards"]:
+            nb = normalize_board(b)
+            if nb in allowed and nb not in valid:
+                valid.append(nb)
+        if valid:
+            row.boards = "|".join(valid)
+    if data.get("sessions") is not None and getattr(row, "is_custom", False):
+        row.sessions = data["sessions"]
     row.updated_by = current_user.get("email") or "admin"
     row.updated_at = naive_utc_now()
     await db.commit()
