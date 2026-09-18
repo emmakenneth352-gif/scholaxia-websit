@@ -82,6 +82,9 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
   bool _thinking = false;
   bool _listening = false;
   String _heard = '';
+  // What Sia is saying RIGHT NOW — shown live under the board while the
+  // voice plays, so the student can read along.
+  String _caption = '';
   String _statusLine = 'Ask me anything — I will teach it step by step.';
 
   // Animations
@@ -207,12 +210,19 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
         _scrollBoardToBottom();
       }
 
-      // Speak this step's explanation while the board settles.
+      // Speak this step's explanation while the board settles. The caption
+      // shows exactly what is being said, following the voice.
       if (step.voice.isNotEmpty) {
-        setState(() => _speaking = true);
+        setState(() {
+          _speaking = true;
+          _caption = step.voice;
+        });
         await SiaVoiceService.instance.speak(step.voice);
         if (!mounted) return;
-        setState(() => _speaking = false);
+        setState(() {
+          _speaking = false;
+          _caption = '';
+        });
       }
 
       _lesson.add(step);
@@ -337,25 +347,23 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                 child: LayoutBuilder(
                   builder: (ctx, cons) {
-                    final wide = cons.maxWidth >= 640;
-                    // Keep the teacher compact so the photo is always fully
-                    // visible above the board (never cut off / overlapping).
-                    final teacherH = wide
-                        ? cons.maxHeight
-                        : math.min(cons.maxHeight * 0.34, 230.0);
-                    final teacher = _teacherPanel(teacherH);
-                    final board = Expanded(child: _board(context, accent));
-                    if (wide) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(width: 190, child: teacher),
-                          const SizedBox(width: 10),
-                          board,
-                        ],
-                      );
-                    }
-                    return Column(children: [teacher, const SizedBox(height: 8), board]);
+                    // One classroom: the teacher stands INSIDE the board
+                    // (bottom corner), like a real teacher at a blackboard.
+                    return Column(children: [
+                      Expanded(
+                        child: _board(
+                          context,
+                          accent,
+                          teacher: _teacherOverlay(
+                            height: math.min(cons.maxHeight * 0.62, 300.0),
+                          ),
+                        ),
+                      ),
+                      if (_caption.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        _speechCaption(context, accent),
+                      ],
+                    ]);
                   },
                 ),
               ),
@@ -405,7 +413,10 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
     );
   }
 
-  Widget _teacherPanel(double height) {
+  /// The teacher image, standing INSIDE the board at the bottom-right —
+  /// like a real teacher in front of the blackboard. Pinned to the overlay
+  /// bounds so it can never spill outside the board.
+  Widget _teacherOverlay({double height = 220}) {
     final pose = _currentPose();
     return AnimatedBuilder(
       animation: Listenable.merge([_breathe, _point, _write]),
@@ -414,29 +425,25 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
         final lift = pose.lift + math.sin(_breathe.value * math.pi * 2) * 2;
         return SizedBox(
           height: height,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(18),
-            // StackFit.expand pins the photo to the panel bounds, so the
-            // teacher image can never spill over the board or off-screen.
-            child: Stack(
-              alignment: Alignment.bottomCenter,
-              fit: StackFit.expand,
-              clipBehavior: Clip.hardEdge,
-              children: [
-                Transform.translate(
-                  offset: Offset(0, lift),
-                  child: Transform.rotate(
-                    angle: lean,
-                    child: Image.asset(
-                      'asset/images/sia_teacher.png',
-                      fit: BoxFit.contain,
-                      alignment: Alignment.bottomCenter,
-                      errorBuilder: (_, __, ___) => _teacherFallback(),
-                    ),
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            fit: StackFit.loose,
+            clipBehavior: Clip.hardEdge,
+            children: [
+              Transform.translate(
+                offset: Offset(0, lift),
+                child: Transform.rotate(
+                  angle: lean,
+                  child: Image.asset(
+                    'asset/images/sia_teacher.png',
+                    height: height,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomCenter,
+                    errorBuilder: (_, __, ___) => _teacherFallback(),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
@@ -478,7 +485,7 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
     return const _TeacherPose(0.0, 0);
   }
 
-  Widget _board(BuildContext context, Color accent) {
+  Widget _board(BuildContext context, Color accent, {Widget? teacher}) {
     final hlIndex = _currentHighlight();
     return Container(
       width: double.infinity,
@@ -487,7 +494,10 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: accent.withOpacity(0.4), width: 2),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // Board header
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -562,7 +572,12 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
                   },
                 ),
         ),
-      ]),
+          ]),
+          // The teacher stands in front of the board, bottom-right corner.
+          if (teacher != null)
+            Positioned(right: 0, bottom: 0, child: teacher),
+        ]),
+      ),
     );
   }
 
@@ -571,6 +586,35 @@ class _SiaVoiceTeachingScreenState extends State<SiaVoiceTeachingScreen>
       if (s.highlight != null) return s.highlight;
     }
     return null;
+  }
+
+  /// Live "Sia is saying" bubble under the board — reads along with the voice.
+  Widget _speechCaption(BuildContext context, Color accent) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: accent.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: accent.withOpacity(0.45)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.graphic_eq_rounded, color: accent, size: 18),
+        const SizedBox(width: 10),
+        Expanded(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: Text(
+              _caption,
+              key: ValueKey(_caption),
+              style: TextStyle(
+                  color: context.textColor, fontSize: 13.5, height: 1.45),
+            ),
+          ),
+        ),
+      ]),
+    );
   }
 
   Widget _statusBar(BuildContext context, Color accent) {
