@@ -20,6 +20,9 @@ CASUAL_PHRASES = [
     "am good", "i am good", "i'm good", "doing good", "doing well",
     "not bad", "all good", "i dey fine", "fine o", "i dey",
     "how are you", "how r u", "how are u", "how u doing",
+    "how are you doing", "how you doing", "how do you do", "how is it going",
+    "how's it going", "hows it going", "how is your day", "how was your day",
+    "are you there", "you there", "how was school", "i am tired", "am tired",
     "good morning", "good afternoon", "good evening", "good night",
     "what's up", "whats up", "how far", "how u dey", "how u day",
     "how e be", "how body", "how you dey", "bro how", "how una dey",
@@ -460,7 +463,15 @@ def build_sia_system_prompt(student_name: str, subject: str, education_level: st
     return (
         "You are the student's teacher. TEACH.\n"
         f"Student: {name_line}. Subject: {subject_line}. Level: {level_line}."
-        " Respond in the student's language."
+        " Respond in the student's language.\n\n"
+        "SMALL TALK: greetings and how-are-you are 100% allowed. When the student "
+        "just chats (hi, how are you doing, I'm bored), answer like a warm, funny, "
+        "caring human teacher — honestly and personally, 1-3 short sentences, plain "
+        "text (never markdown symbols like * or #). Ask how THEY are doing back and "
+        "gently offer to learn something together today. NEVER refuse, never say "
+        "\"I can only help with educational topics\", never answer small talk "
+        "robotically. The reply must come naturally from you, the model — no "
+        "canned or scripted responses.\n"
     )
 
 
@@ -470,6 +481,19 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
                            subject: str = None,
                            tutor_mode: str = "smart") -> str:
     """Slim user message — system prompt carries teaching rules."""
+    # Small talk must reach the model CLEAN: no teach-mode injections, no
+    # level/subject scaffolding — just the student's words, so the reply
+    # comes naturally from the model itself.
+    kind = classify_input(question or "", has_history=bool(conversation_history))
+    msg_len = len((question or "").strip())
+    if kind in ("greeting", "casual") and msg_len <= 80:
+        return (
+            f'{student_name} says: "{question}"\n\n'
+            "Chat back like a warm, real human teacher — 1-3 short plain sentences, "
+            "no markdown symbols, no lesson structure. Then, only if it fits "
+            "naturally, ask what they feel like learning today. Sia:"
+        )
+
     history_block = ""
     # Conversation history is passed via the API (run_inference) — not duplicated here.
 
@@ -505,7 +529,6 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
 {student_name}: {question}
 
 Sia:"""
-
 
 # ── Main prompt ───────────────────────────────────────────────────────────────
 
