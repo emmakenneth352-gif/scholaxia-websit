@@ -313,7 +313,18 @@ function renderCbtHub() {
 function cbtHubOpenBoard(board) {
   cbtHubState.board = board;
   cbtHubState.view = "board";
-  cbtHubState.jambPicked = {};
+  // Prefill JAMB picks from the student's saved subject combination so they
+  // don't re-tick 4 subjects every time (START still validates the count).
+  if (board === "JAMB") {
+    cbtHubState.jambPicked = {};
+    var home = cbtHubState.home || {};
+    var saved = (home.profile && home.profile.jamb_subjects) || [];
+    saved.forEach(function (s) {
+      cbtHubState.jambPicked[s] = true;
+    });
+  } else {
+    cbtHubState.jambPicked = {};
+  }
   renderCbtHub();
 }
 

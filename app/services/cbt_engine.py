@@ -762,6 +762,20 @@ async def start_practice_attempt(
                 f"Your profile must have exactly {need} JAMB subjects before starting CBT. "
                 "Update Profile → Exam subjects, then try again."
             )
+        # Remember the chosen combination so the next session opens with it
+        # pre-selected (students kept re-ticking their subjects every time).
+        if profile is not None and {s.lower() for s in subjects_clean} != {
+            s.lower() for s in profile_jamb
+        }:
+            try:
+                profile.jamb_subjects = [str(s).strip() for s in subjects_clean]
+                await db.flush()
+            except Exception:
+                logger.warning("practice start: could not persist JAMB subjects", exc_info=True)
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
         duration = int(settings["jamb_duration_minutes"] or 60)
         # Fast open: create subject stubs now; build questions when student picks a subject
         sections = []
