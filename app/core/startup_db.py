@@ -82,6 +82,7 @@ _SCHEMA_STATEMENTS = (
     "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_id UUID NULL",
     "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'subject'",
     "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS join_code VARCHAR(32) NULL",
+    "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS started_notified_at TIMESTAMP NULL",
     "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS invited_student_ids TEXT NULL",
     "ALTER TABLE live_classes ADD COLUMN IF NOT EXISTS school_group_id UUID NULL",
     # marketplace

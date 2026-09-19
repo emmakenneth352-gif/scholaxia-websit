@@ -45,6 +45,9 @@ class LiveClass(Base):
     school_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("school_campuses.id"), nullable=True, index=True
     )
+    # Set the first time the scheduler announces "class is live" — prevents
+    # re-notifying every tick if the flag is healed/flipped afterwards.
+    started_notified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     attendances: Mapped[list["ClassAttendance"]] = relationship("ClassAttendance", back_populates="live_class")

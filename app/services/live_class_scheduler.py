@@ -145,10 +145,16 @@ async def _tick():
         )
         for live_class in start_res.scalars().all():
             live_class.is_live = True
-            try:
-                await _notify_class_audience(db, live_class)
-            except Exception:
-                pass
+            # Announce only the FIRST time the class starts. Re-announcing on
+            # every tick spam-fires the moment anything (e.g. the stale-flag
+            # healer) flips is_live back to false for an already-started class.
+            already_announced = bool(getattr(live_class, "started_notified_at", None))
+            if not already_announced:
+                try:
+                    live_class.started_notified_at = now
+                    await _notify_class_audience(db, live_class)
+                except Exception:
+                    pass
             try:
                 await ws_broadcast(
                     live_class.room_id,

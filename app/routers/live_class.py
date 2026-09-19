@@ -566,7 +566,7 @@ async def _heal_stale_live_flags(db: AsyncSession, now: datetime | None = None) 
                     WHERE COALESCE(is_live, false) = true
                       AND (
                         (end_time IS NOT NULL AND end_time <= :now)
-                        OR (start_time IS NOT NULL AND start_time <= :cutoff)
+                        OR (end_time IS NULL AND start_time IS NOT NULL AND start_time <= :cutoff)
                       )
                     """
                 ),
@@ -942,6 +942,16 @@ async def create_class(
         start = to_naive_utc(payload.start_time) if payload.start_time else now + timedelta(hours=1)
         end = to_naive_utc(payload.end_time) if payload.end_time else start + timedelta(minutes=duration)
         is_live = False
+        # Reject badly stale schedules (e.g. a datepicker default left on an old
+        # month) — otherwise the class looks "past" forever and never shows in
+        # Live Now even after the teacher manually starts it.
+        if start < now - timedelta(hours=1):
+            raise HTTPException(
+                status_code=400,
+                detail="Start time is in the past. Pick a future time or use Go Live Now.",
+            )
+        if end <= start:
+            end = start + timedelta(minutes=duration)
 
     live_class = LiveClass(
         teacher_id=current_user["sub"],
@@ -1847,9 +1857,31 @@ async def list_live_classes(
                         continue
                 if notified_class_ids:
                     visible_ids = {str(c.id) for c in classes}
-                    for c in classes_src:
-                        if str(c.id) not in visible_ids and str(c.id) in notified_class_ids:
-                            classes.append(c)
+                    missing_ids = [
+                        cid for cid in notified_class_ids if cid not in visible_ids
+                    ]
+                    if missing_ids:
+                        try:
+                            uuid_ids = []
+                            for cid in missing_ids:
+                                try:
+                                    uuid_ids.append(parse_uuid(cid))
+                                except Exception:
+                                    pass
+                            if uuid_ids:
+                                # Re-query directly: the notified class may have
+                                # been excluded by the status/limit SQL filters,
+                                # so it can never be rescued from classes_src.
+                                extra_res = await db.execute(
+                                    select(LiveClass).where(LiveClass.id.in_(uuid_ids))
+                                )
+                                for c in extra_res.scalars().all():
+                                    # Only surface classes still current — never
+                                    # resurrect old history into Live Now.
+                                    if _class_is_active(c, now):
+                                        classes.append(c)
+                        except Exception:
+                            pass
             except Exception:
                 pass
         except Exception:
@@ -1896,9 +1928,15 @@ async def list_live_classes(
     for c in classes:
         # Coerce response only — DB heal is best-effort above (savepoint).
         live_flag = bool(c.is_live)
-        stale_end = bool(c.end_time and c.end_time <= now)
-        stale_long = bool(c.start_time and c.start_time <= (now - timedelta(hours=4)))
-        if stale_end or stale_long:
+        ended = bool(c.end_time and c.end_time <= now)
+        # Only a class whose end has passed — or an open-ended one that started
+        # very long ago — counts as stuck. A class still inside its window
+        # (start <= now < end) stays live no matter how old its start is,
+        # otherwise the healer and the auto-starter fight over the flag.
+        stuck_open = c.end_time is None and bool(
+            c.start_time and c.start_time <= (now - timedelta(hours=4))
+        )
+        if ended or stuck_open:
             live_flag = False
         status_label = "live" if live_flag else (
             "past" if (c.end_time and c.end_time <= now) else "upcoming"
