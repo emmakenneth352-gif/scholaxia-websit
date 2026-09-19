@@ -1824,8 +1824,17 @@
 
   function confirmSubmitExam() {
     if (!Exam.current) return;
-    var answered = Object.keys(Exam.current.answers).length;
-    var total = Exam.current.questions.length;
+    var st = Exam.current;
+    var answered = Object.keys(st.answers || {}).length;
+    var total = 0;
+    if (st._jwAllView) {
+      // All-questions view: count across every subject section
+      total = (st.sections || []).reduce(function (n, sec) {
+        return n + (Number(sec && sec.total) || (sec && sec.questions || []).length || 0);
+      }, 0);
+    } else {
+      total = st.questions.length;
+    }
     if (answered < total) {
       if (!confirm("You have answered " + answered + " of " + total + " questions. Submit anyway?")) return;
     }
@@ -2583,6 +2592,109 @@
     );
   }
 
+  /* =====================================================================
+     JUNIOR WAEC — unlock → select subjects (up to 9) → START builds one
+     combined attempt with a question section for every selected subject.
+     ===================================================================== */
+  var cbtJwPicked = [];
+
+  function renderJuniorWaecBoard(cfg) {
+    var body = cfg.body;
+    var hint = cfg.hint;
+    var profile = cfg.profile || {};
+    var settings = cfg.settings || {};
+    var unlocked = !!cfg.unlocked;
+    var dur = Number(settings.jw_duration_minutes) || 60;
+    var per = Number(settings.jw_questions_per_subject) || 60;
+
+    if (hint) {
+      hint.textContent = unlocked
+        ? "Select your subjects (up to 9), then start — every subject's questions load in one exam."
+        : "Preview first. Pay or enter a coupon when you tap START.";
+    }
+
+    if (!unlocked) {
+      body.innerHTML =
+        '<div class="empty-state"><strong>Junior WAEC is locked</strong>' +
+        "<p>Use a coupon or pay for the Junior WAEC package — then pick your subjects and start.</p>" +
+        '<button type="button" class="btn btn-primary" id="cbtJwUnlock">Unlock with coupon or pay</button></div>';
+      var ub = document.getElementById("cbtJwUnlock");
+      if (ub) {
+        ub.onclick = function () {
+          openCbtUnlockModal(function () {
+            markBoardUnlockedLocally("JUNIOR_WAEC");
+            cbtJwPicked = [];
+            openCbtBoard("JUNIOR_WAEC", { skipUnlockModal: true });
+          });
+        };
+      }
+      return;
+    }
+
+    var choices = (profile.junior_subjects || []).filter(Boolean);
+    if (!choices.length) {
+      choices = SUBJECT_CHANGE_CHOICES.slice();
+    }
+    if (!cbtJwPicked.length) {
+      var localJw = readLocalJson("sia_junior_subjects", null) || [];
+      if (Array.isArray(localJw) && localJw.length) cbtJwPicked = localJw.filter(Boolean).slice(0, 9);
+    }
+    cbtJwPicked = cbtJwPicked.filter(function (s) { return choices.indexOf(s) >= 0; });
+
+    body.innerHTML =
+      '<p class="muted" style="margin:0 0 0.85rem">Select your subjects (up to 9) · ' +
+      esc(String(per)) + " questions per subject · " + esc(String(dur)) + " min total</p>" +
+      '<div style="display:flex;flex-wrap:wrap;gap:0.45rem" id="cbtJwChips">' +
+      choices
+        .map(function (s) {
+          var on = cbtJwPicked.indexOf(s) >= 0;
+          return (
+            '<button type="button" data-jw-pick="' + esc(s) +
+            '" style="padding:0.45rem 0.9rem;border-radius:999px;border:1px solid " + (on ? "#7c3aed" : "#e2e8f0") + ";background:" + (on ? "#f3e8ff" : "#fff") + ";font-size:0.88rem;cursor:pointer">' +
+            esc(s) +
+            "</button>"
+          );
+        })
+        .join("") +
+      "</div>" +
+      '<p style="margin:0.8rem 0" class="muted"><span id="cbtJwCount">' + cbtJwPicked.length +
+      "</span> subject(s) selected</p>" +
+      '<button type="button" class="btn btn-primary" id="cbtJwStart" ' + (cbtJwPicked.length ? "" : "disabled") + ">START JUNIOR WAEC</button>" +
+      '<p id="cbtJwMsg" class="form-status" style="margin-top:0.75rem"></p>';
+
+    var startBtn = document.getElementById("cbtJwStart");
+    if (startBtn) {
+      startBtn.onclick = function () {
+        if (!cbtJwPicked.length) return;
+        var picked = cbtJwPicked.slice();
+        startBtn.disabled = true;
+        startBtn.textContent = "Saving subjects…";
+        api
+          .api("/api/v1/cbt/practice/register-subjects", {
+            method: "POST",
+            body: { exam_type: "JUNIOR_WAEC", subjects: picked },
+            timeout: 30000,
+            retries: 0,
+            preferXhr: true,
+          })
+          .then(function () {
+            writeLocalJson("sia_junior_subjects", picked);
+            startBtn.textContent = "Starting…";
+            startPracticeAttempt("JUNIOR_WAEC", picked, startBtn);
+          })
+          .catch(function (err) {
+            startBtn.disabled = false;
+            startBtn.textContent = "START JUNIOR WAEC";
+            var msg = document.getElementById("cbtJwMsg");
+            if (msg) {
+              msg.className = "form-status err";
+              msg.textContent = errMsg(err) || "Could not save subjects. Try again.";
+            }
+          });
+      };
+    }
+  }
+
   function ensureBoardUnlockedThen(board, run) {
     if (boardHasAccess(board)) {
       run();
@@ -2735,6 +2847,19 @@
     // WAEC / NECO — before first start the student picks their own subjects
     // (up to 9). After the first start the subjects are locked and each
     // registered subject becomes a one-tap card.
+    /* Junior WAEC has its own flow: unlock → pick subjects (up to 9) →
+       one combined attempt with a section (and questions) per subject. */
+    if (board === "JUNIOR_WAEC") {
+      renderJuniorWaecBoard({
+        body: body,
+        hint: hint,
+        profile: profile,
+        settings: settings,
+        unlocked: unlocked,
+      });
+      return;
+    }
+
     var registered = (profile.ssce_subjects || []).filter(Boolean);
     var ssceStarted = !!profile.ssce_started;
     var isRegistered = registered.length > 0 && ssceStarted;
@@ -3138,7 +3263,171 @@
     // No chooser popup — load the selected top subject (or first) immediately
     var chooser = $("examSectionChooser");
     if (chooser) chooser.hidden = true;
+    // Junior WAEC opens the ALL-QUESTIONS view: every selected subject's
+    // questions listed one after another on a single page.
+    if (String(attempt.exam_type || "").toUpperCase() === "JUNIOR_WAEC" && sections.length > 1) {
+      openPracticeAllQuestions(0);
+      return;
+    }
     enterPracticeSection(idx, true);
+  }
+
+  /* Junior WAEC all-questions page: every subject section rendered on one
+     scrolling page, grouped under subject headings. Questions are fetched
+     per section the first time they are shown. */
+  var _jwAllLoading = false;
+
+  function openPracticeAllQuestions(startIndex) {
+    var st = Exam.current;
+    if (!st || !st.isPractice) return;
+    st.awaitingSectionPick = false;
+    st.sectionIndex = parseInt(startIndex, 10) || 0;
+    st._jwAllView = true;
+
+    var bar = $("examSectionBar");
+    var chooser = $("examSectionChooser");
+    var body = $("examBody");
+    if (bar) bar.hidden = false;
+    if (chooser) chooser.hidden = true;
+    renderPracticeSectionTabs();
+
+    var title = $("examTitle");
+    if (title) title.textContent = (st.examType || "CBT") + " · All subjects";
+    if ($("examSub")) {
+      $("examSub").textContent =
+        (st.examType || "CBT") + " · " + (st.sections || []).length + " subjects · all questions in one page";
+    }
+
+    if (body) {
+      body.innerHTML =
+        '<div style="max-width:860px;margin:0 auto;padding:1rem" id="jwAllWrap">' +
+        '<p class="muted">Loading your subjects…</p></div>';
+    }
+    loadNextJwSection(0);
+  }
+
+  function loadNextJwSection(i) {
+    var st = Exam.current;
+    if (!st || !st.isPractice) return;
+    var sections = st.sections || [];
+    if (i >= sections.length) {
+      wireJwAllSubmit();
+      return;
+    }
+    var sec = sections[i];
+    if (sec && sec.questions && sec.questions.length) {
+      appendJwSection(i);
+      loadNextJwSection(i + 1);
+      return;
+    }
+    api
+      .api(
+        "/api/v1/cbt/practice/attempts/" + encodeURIComponent(st.practiceAttemptId) +
+          "/sections/" + i,
+        { timeout: 60000, retries: 1, preferXhr: true }
+      )
+      .then(function (data) {
+        var norm = normalizeQuestions((data && data.questions) || []);
+        sections[i].questions = norm;
+        sections[i].total = Number(data && data.total) || norm.length;
+        appendJwSection(i);
+        loadNextJwSection(i + 1);
+      })
+      .catch(function () {
+        appendJwSection(i, "Could not load " + ((sec && sec.subject) || "this subject") + " — tap its tab to retry.");
+        loadNextJwSection(i + 1);
+      });
+  }
+
+  function appendJwSection(i, errText) {
+    var st = Exam.current;
+    var wrap = document.getElementById("jwAllWrap");
+    if (!st || !wrap) return;
+    var sec = (st.sections || [])[i] || {};
+    var qs = sec.questions || [];
+    var answers = st.answers || {};
+    var html =
+      '<div class="jw-all-section" style="margin:0 0 1.5rem" data-jw-all-section="' + i + '">' +
+      '<div style="display:flex;align-items:center;gap:0.6rem;margin:0 0 0.6rem">' +
+      '<span style="width:1.75rem;height:1.75rem;border-radius:999px;background:#ede9fe;color:#5b21b6;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.85rem">' +
+      (i + 1) + "</span>" +
+      '<h3 style="margin:0;font-size:1.05rem">' + esc(sec.subject || "Subject " + (i + 1)) + "</h3>" +
+      '<span class="muted" style="font-size:0.85rem">' + (qs.length ? qs.length + " questions" : "") + "</span>" +
+      "</div>";
+    if (errText) {
+      html += '<p class="form-status err">' + esc(errText) + "</p></div>";
+      wrap.insertAdjacentHTML("beforeend", html);
+      return;
+    }
+    if (!qs.length) {
+      html += '<p class="muted">No questions available for this subject yet.</p></div>';
+      wrap.insertAdjacentHTML("beforeend", html);
+      return;
+    }
+    html += qs
+      .map(function (q, qi) {
+        var picked = answers[String(q.id)] || "";
+        return (
+          '<div class="jw-all-q" style="padding:0.9rem;border:1px solid #e2e8f0;border-radius:12px;margin:0 0 0.6rem;background:#fff" data-qid="' +
+          esc(String(q.id)) + '">' +
+          '<p style="margin:0 0 0.5rem;font-weight:600">' + (qi + 1) + ". " + esc(q.question || "") + "</p>" +
+          (q.options || [])
+            .map(function (opt, oi) {
+              var label = String.fromCharCode(65 + oi);
+              var on = picked === label;
+              return (
+                '<button type="button" data-jw-answer="' + esc(String(q.id)) + '" data-val="' + label + '" style="display:block;width:100%;text-align:left;padding:0.5rem 0.7rem;margin:0 0 0.35rem;border-radius:10px;border:1px solid ' +
+                (on ? "#7c3aed;background:#f3e8ff" : "#e2e8f0;background:#fff") +
+                ';font-size:0.92rem;cursor:pointer"><strong>' + label + ".</strong> " + esc(opt) + "</button>"
+              );
+            })
+            .join("") +
+          "</div>"
+        );
+      })
+      .join("") +
+      "</div>";
+    wrap.insertAdjacentHTML("beforeend", html);
+  }
+
+  /* Answer taps inside the Junior WAEC all-questions page */
+  document.addEventListener("click", function (e) {
+    var ansBtn = e.target.closest("[data-jw-answer]");
+    if (!ansBtn) return;
+    var st = Exam.current;
+    if (!st || !st.isPractice) return;
+    var qid = ansBtn.getAttribute("data-jw-answer");
+    var val = ansBtn.getAttribute("data-val") || "";
+    st.answers[qid] = val;
+    var qDiv = ansBtn.closest("[data-qid]");
+    if (qDiv) {
+      qDiv.querySelectorAll("[data-jw-answer]").forEach(function (b) {
+        var on = b === ansBtn;
+        b.style.border = "1px solid " + (on ? "#7c3aed" : "#e2e8f0");
+        b.style.background = on ? "#f3e8ff" : "#fff";
+      });
+    }
+    renderPracticeSectionTabs();
+    savePracticeAnswers();
+  });
+
+  function wireJwAllSubmit() {
+    var wrap = document.getElementById("jwAllWrap");
+    if (!wrap) return;
+    var old = document.getElementById("jwAllSubmitRow");
+    if (old) old.remove();
+    var row = document.createElement("div");
+    row.id = "jwAllSubmitRow";
+    row.style.cssText = "display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin:1rem 0";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-primary";
+    btn.textContent = "Submit exam";
+    btn.onclick = function () {
+      confirmSubmitExam();
+    };
+    row.appendChild(btn);
+    wrap.appendChild(row);
   }
 
   function setPracticeQuestionView(showQuestions) {
@@ -3328,6 +3617,32 @@
   }
 
   function switchPracticeSection(nextIndex) {
+    var st = Exam.current;
+    // In the Junior WAEC all-questions view the subject tabs scroll to that
+    // subject's block instead of switching the single-question view.
+    if (st && st._jwAllView) {
+      var target = document.querySelector('[data-jw-all-section="' + parseInt(nextIndex, 10) + '"]');
+      if (target) {
+        try {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        } catch (eScroll) {
+          target.scrollIntoView();
+        }
+      } else {
+        // Sections still loading — nudge and retry shortly
+        var wrap = document.getElementById("jwAllWrap");
+        if (wrap) {
+          var note = document.createElement("p");
+          note.className = "muted";
+          note.textContent = "Subjects are still loading…";
+          wrap.insertBefore(note, wrap.firstChild);
+          setTimeout(function () {
+            if (note.parentNode) note.parentNode.removeChild(note);
+          }, 1500);
+        }
+      }
+      return;
+    }
     enterPracticeSection(nextIndex, false);
   }
 
@@ -3434,6 +3749,22 @@
       ensureBoardUnlockedThen(board, function () {
         startPracticeAttempt(board, [subject], subBtn);
       });
+      return;
+    }
+    /* Junior WAEC: tick the subjects you want (up to 9), then one START */
+    var jwChip = e.target.closest("[data-jw-pick]");
+    if (jwChip) {
+      var s = jwChip.getAttribute("data-jw-pick");
+      var i = cbtJwPicked.indexOf(s);
+      if (i >= 0) cbtJwPicked.splice(i, 1);
+      else if (cbtJwPicked.length < 9) cbtJwPicked.push(s);
+      else alert("Maximum 9 subjects.");
+      jwChip.style.border = "1px solid " + (cbtJwPicked.indexOf(s) >= 0 ? "#7c3aed" : "#e2e8f0");
+      jwChip.style.background = cbtJwPicked.indexOf(s) >= 0 ? "#f3e8ff" : "#fff";
+      var count = document.getElementById("cbtJwCount");
+      if (count) count.textContent = String(cbtJwPicked.length);
+      var go = document.getElementById("cbtJwStart");
+      if (go) go.disabled = !cbtJwPicked.length;
       return;
     }
     var chgBtn = e.target.closest("[data-cbt-subject-change]");

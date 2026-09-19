@@ -834,16 +834,12 @@ async def start_practice_attempt(
                     await db.rollback()
                 except Exception:
                     pass
-        if not subjects_clean and len(profile_ssce) == 1:
-            subjects_clean = [str(profile_ssce[0]).strip()]
         if not subjects_clean:
-            raise ValueError(f"Select one {board} subject to practice.")
+            raise ValueError(f"Select your {board} subject(s) to practice.")
 
         # First-time SSCE start: persist the chosen subject(s) to the profile and
         # lock them — afterwards subjects can only change via an approved
         # admin subject-change request (see routers/cbt_subject_change.py).
-        # The app may send the full registered list (1–9); the first entry is
-        # the subject practised in this attempt.
         if not profile_ssce and profile is not None:
             try:
                 _save_board_subjects(profile, board, [str(s).strip() for s in subjects_clean])
@@ -868,22 +864,26 @@ async def start_practice_attempt(
                         f"{s} is not in your registered {board} subjects. "
                         "Send your admin a subject-change request to update them."
                     )
-        subjects_clean = [subjects_clean[0].strip()]
-        duration = int(
-            settings["waec_duration_minutes"]
-            if board == "WAEC"
-            else (settings.get("jw_duration_minutes") or 60)
-            if board == "JUNIOR_WAEC"
-            else settings["neco_duration_minutes"]
-        )
-        count = int(
-            settings["waec_questions_per_subject"]
-            if board == "WAEC"
-            else (settings.get("jw_questions_per_subject") or 60)
-            if board == "JUNIOR_WAEC"
-            else settings["neco_questions_per_subject"]
-        )
-        sections = [section_stub(subjects_clean[0], count)]
+        # Junior WAEC runs all selected subjects in ONE attempt — one section
+        # per subject so the student practises every subject in one sitting.
+        if board == "JUNIOR_WAEC":
+            subjects_clean = [str(s).strip() for s in subjects_clean if str(s).strip()]
+            duration = int(settings.get("jw_duration_minutes") or 60)
+            count = int(settings.get("jw_questions_per_subject") or 60)
+            sections = [section_stub(s, count) for s in subjects_clean]
+        else:
+            subjects_clean = [subjects_clean[0].strip()]
+            duration = int(
+                settings["waec_duration_minutes"]
+                if board == "WAEC"
+                else settings["neco_duration_minutes"]
+            )
+            count = int(
+                settings["waec_questions_per_subject"]
+                if board == "WAEC"
+                else settings["neco_questions_per_subject"]
+            )
+            sections = [section_stub(subjects_clean[0], count)]
 
     now = naive_utc_now()
     attempt = CbtPracticeAttempt(
