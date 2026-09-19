@@ -189,6 +189,7 @@
     <div id="exam-screen" class="exam-screen hidden">
       <div id="exam-lock-banner" class="exam-lock-banner hidden">
         <span>&#128274; Exam in progress — all other tabs are locked until you submit.</span>
+        <button type="button" id="exam-exit-practice-btn" class="btn-secondary btn-sm hidden" onclick="exitPracticeExam()">Exit practice</button>
         <button type="button" class="btn-submit-exam exam-lock-submit" onclick="submitExam()">Submit exam</button>
       </div>
       <div class="exam-header">
@@ -558,7 +559,7 @@
       <div class="sx-page-hero sx-page-hero-row">
         <div>
           <h2>&#128221; CBT Practice</h2>
-          <p>Choose <strong>JAMB</strong>, <strong>WAEC</strong>, or <strong>NECO</strong>. Questions are drawn from the bank using admin CBT Settings.</p>
+          <p>Choose <strong>JAMB</strong>, <strong>WAEC</strong>, <strong>NECO</strong>, or <strong>Junior WAEC</strong>. Questions are drawn from the bank using admin CBT Settings.</p>
         </div>
         <button type="button" class="btn-secondary sx-hero-btn" onclick="loadCbtHubPage()">Refresh</button>
       </div>

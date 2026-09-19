@@ -74,19 +74,54 @@ async def _notify_class_audience(db, live_class) -> None:
             except Exception:
                 pass
     elif vis == LiveClassVisibility.class_level.value:
-        # Class-level classes have no per-subject student roster — notify everyone
-        # so the push always matches who can see the class on screen.
-        await send_all_students_notification(
-            db=db,
-            title="Live class starting now",
-            body=f"\u00ab{live_class.title}\u00bb ({live_class.academic_class or live_class.subject}) is live — join from Live Class.",
-            notification_type="live_class",
-            data=data,
-        )
+        # Notify exactly the students whose education level matches the class
+        # level — the same rule the Live Class list uses to show the class.
+        from app.models.user import StudentProfile
+
+        want = (live_class.academic_class or "").replace(" ", "").upper()
+        if not want:
+            return
+        profiles = (await db.execute(select(StudentProfile))).scalars().all()
+        for p in profiles:
+            have = (p.education_level or "").replace(" ", "").upper()
+            if not have or not (want == have or have.startswith(want) or want.startswith(have)):
+                continue
+            try:
+                await send_user_notification(
+                    db,
+                    str(p.user_id),
+                    "Live class starting now",
+                    f"\u00ab{live_class.title}\u00bb ({live_class.academic_class}) is live — join from Live Class.",
+                    "live_class",
+                    data,
+                )
+            except Exception:
+                pass
+    elif vis == LiveClassVisibility.school_group.value and live_class.school_group_id:
+        # Notify the group's members — same audience the list shows the class to.
+        from app.models.school_group import SchoolGroup
+
+        group = (
+            await db.execute(
+                select(SchoolGroup).where(SchoolGroup.id == live_class.school_group_id)
+            )
+        ).scalar_one_or_none()
+        if not group:
+            return
+        for sid in group.member_ids():
+            try:
+                await send_user_notification(
+                    db,
+                    str(sid),
+                    f"{group.school_name} — class is live",
+                    f"\u00ab{live_class.title}\u00bb is live — code {live_class.join_code} in Access Code tab.",
+                    "live_class",
+                    data,
+                )
+            except Exception:
+                pass
     else:
-        # subject + school_group keep subject-matched notifications; school-group
-        # members are subject-matched in practice and subject classes are
-        # discovered by subject, so the on-screen list agrees with the push.
+        # subject visibility: discovered by subject — subject-matched students.
         await send_subject_notification(
             db=db,
             subject=live_class.subject,

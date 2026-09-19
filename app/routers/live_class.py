@@ -1782,6 +1782,7 @@ async def list_live_classes(
         import logging
         logging.getLogger(__name__).exception("list_live_classes query failed")
         return []
+    classes_src = list(classes)
 
     # Students: filter by visibility / access rules
     if role == "student":
@@ -1823,6 +1824,34 @@ async def list_live_classes(
                 if ok:
                     visible.append(c)
             classes = visible
+            # A student notified about a class must always see it — send the
+            # notification rows whose class_id matches a live/hidden class back
+            # into the visible list (notifications ARE the invite).
+            try:
+                from app.models.notification import Notification
+
+                notif_res = await db.execute(
+                    select(Notification).where(
+                        Notification.user_id == parse_uuid(current_user["sub"]),
+                        Notification.type == "live_class",
+                    )
+                )
+                notified_class_ids = set()
+                for n in notif_res.scalars().all():
+                    try:
+                        nd = json.loads(n.data or "{}")
+                        cid = str(nd.get("class_id") or "")
+                        if cid:
+                            notified_class_ids.add(cid)
+                    except Exception:
+                        continue
+                if notified_class_ids:
+                    visible_ids = {str(c.id) for c in classes}
+                    for c in classes_src:
+                        if str(c.id) not in visible_ids and str(c.id) in notified_class_ids:
+                            classes.append(c)
+            except Exception:
+                pass
         except Exception:
             classes = [
                 c for c in classes

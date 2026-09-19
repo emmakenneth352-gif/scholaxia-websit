@@ -108,12 +108,142 @@ async function loadCbtHubPage() {
     cbtHubState.home = data || {};
     renderCbtHub();
   } catch (e) {
-    grid.innerHTML =
-      '<div class="empty-state-premium"><h3>Could not load CBT</h3><p>' +
-      cbtEsc(e.message) +
-      '</p><button type="button" class="btn-action" onclick="loadCbtHubPage()">Retry</button></div>';
+    // Offline (or server unreachable): never leave the screen empty — show
+    // every downloaded exam so practice continues without data.
+    renderCbtHubOffline(e);
   }
 }
+
+function cbtHubDownloadedPacks() {
+  var out = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (!key || key.indexOf("sia_cbt_pack_") !== 0) continue;
+      var pack = null;
+      try { pack = JSON.parse(localStorage.getItem(key)); } catch (e2) { pack = null; }
+      var exam = pack && (pack.exam || pack);
+      var qs = (exam && exam.questions) || pack && pack.questions || [];
+      if (pack && qs && qs.length) {
+        out.push({
+          examId: pack.examId || key.replace("sia_cbt_pack_", "").replace(/_[^_]*$/, ""),
+          year: pack.year || "",
+          title: (exam && exam.title) || "Downloaded exam",
+          subject: (exam && exam.subject) || "",
+          count: qs.length,
+          cachedAt: pack.cached_at || 0,
+        });
+      }
+    }
+  } catch (e3) { /* ignore */ }
+  return out.sort(function (a, b) { return (b.cachedAt || 0) - (a.cachedAt || 0); });
+}
+
+/* Downloaded exams strip — shows on the hub so offline practice is obvious. */
+function renderCbtHubDownloadedHtml() {
+  var packs = cbtHubDownloadedPacks();
+  if (!packs.length) return "";
+  var html = '<div class="cbt-hub-note" style="margin-top:10px"><strong>Ready offline</strong> — downloaded exams you can practice without data:</div>';
+  html += '<div class="cbt-subject-grid" style="margin-bottom:18px">';
+  html += packs
+    .map(function (p) {
+      return (
+        '<div class="cbt-type-card cbt-type-subject" onclick="startOfflinePack(\'' +
+        cbtEsc(p.examId).replace(/'/g, "\\'") + "','" +
+        cbtEsc(p.year).replace(/'/g, "\\'") +
+        "')\">" +
+        '<div class="cbt-type-icon">&#11014;</div>' +
+        '<div class="cbt-type-body"><h3>' + cbtEsc(p.title) + "</h3>" +
+        '<p class="cbt-type-sub">' + cbtEsc(p.subject || "Downloaded") + " · " + p.count + " questions</p></div>" +
+        '<span class="cbt-type-arrow">&#9654;</span></div>'
+      );
+    })
+    .join("");
+  html += "</div>";
+  return html;
+}
+
+function renderCbtHubOffline(err) {
+  var grid = document.getElementById("cbt-grid");
+  if (!grid) return;
+  var offline = typeof navigator !== "undefined" && !navigator.onLine;
+  var packs = cbtHubDownloadedPacks();
+  var html = '<div class="cbt-hub-wrap">';
+  html +=
+    '<div class="empty-state-premium"><h3>' +
+    (offline ? "You are offline" : "Could not load CBT") +
+    "</h3><p>" +
+    cbtEsc((err && err.message) || "") +
+    "</p>";
+  if (packs.length) {
+    html += "<p><strong>You have " + packs.length + " downloaded exam(s) — practice them without data:</strong></p></div>";
+    html += '<div class="cbt-subject-grid">';
+    html += packs
+      .map(function (p) {
+        return (
+          '<div class="cbt-type-card cbt-type-subject" onclick="startOfflinePack(\'' +
+          cbtEsc(p.examId).replace(/'/g, "\\'") + "','" +
+          cbtEsc(p.year).replace(/'/g, "\\'") +
+          "')\">" +
+          '<div class="cbt-type-icon">&#11014;</div>' +
+          '<div class="cbt-type-body"><h3>' + cbtEsc(p.title) + "</h3>" +
+          '<p class="cbt-type-sub">' + cbtEsc(p.subject || "Downloaded") + " · " + p.count + " questions · ready offline</p></div>" +
+          '<span class="cbt-type-arrow">&#9654;</span></div>'
+        );
+      })
+      .join("");
+    html += "</div>";
+  } else {
+    html +=
+      "</div><p class=\"cbt-hub-note\">Connect once with data and tap a year on any exam — Scholaxia saves it, then you can practice it offline anytime.</p>";
+  }
+  html += '</div>';
+  grid.innerHTML = html;
+}
+
+async function startOfflinePack(examId, year) {
+  try {
+    if (typeof launchPortalExamFromCache === "function") {
+      await launchPortalExamFromCache(examId, year);
+      return;
+    }
+    throw new Error("Offline exam player unavailable.");
+  } catch (e) {
+    alert((e && e.message) || "Could not open the downloaded exam.");
+  }
+}
+window.startOfflinePack = startOfflinePack;
+
+function exitPracticeExam() {
+  if (
+    !currentSession ||
+    !currentSession.is_practice ||
+    !confirm("Leave this practice exam? Your answers so far are kept and you can resume when the teacher's timer allows.")
+  ) {
+    return;
+  }
+  stopCbtTimer();
+  hideSubjectStartPicker();
+  setExamLockMode(false);
+  try {
+    if (currentSession && currentSession.practice_attempt_id && Object.keys(answers || {}).length) {
+      var map = {};
+      (currentExam.questions || []).forEach(function (q, i) {
+        if (q && answers[i]) map[q.id] = answers[i];
+      });
+      api("/api/v1/cbt/practice/attempts/" + currentSession.practice_attempt_id + "/answers", {
+        method: "POST",
+        body: JSON.stringify({ answers: map }),
+      }).catch(function () {});
+    }
+  } catch (e) { /* best effort */ }
+  currentExam = null;
+  currentSession = null;
+  answers = {};
+  showCbtListView();
+  if (typeof loadCbtHubPage === "function") loadCbtHubPage();
+}
+window.exitPracticeExam = exitPracticeExam;
 
 function renderCbtHub() {
   var grid = document.getElementById("cbt-grid");
@@ -135,6 +265,7 @@ function renderCbtHub() {
   }
   grid.innerHTML = '<div class="cbt-hub-wrap">' +
     '<p class="cbt-hub-note">Choose <strong>JAMB</strong>, <strong>WAEC</strong>, <strong>NECO</strong>, or <strong>Junior WAEC</strong>. Question counts and timers come from admin CBT Settings.</p>' +
+    renderCbtHubDownloadedHtml() +
     '<div class="cbt-type-grid">' +
     types
       .map(function (t) {

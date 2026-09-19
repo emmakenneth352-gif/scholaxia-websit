@@ -766,6 +766,11 @@ function setExamLockMode(on) {
   if (logoutBtn) logoutBtn.disabled = !!on;
   const lockBanner = document.getElementById("exam-lock-banner");
   if (lockBanner) lockBanner.classList.toggle("hidden", !on);
+  // Practice attempts can be exited; real exams stay locked until submit.
+  const exitBtn = document.getElementById("exam-exit-practice-btn");
+  if (exitBtn) {
+    exitBtn.classList.toggle("hidden", !(on && currentSession && currentSession.is_practice));
+  }
   const fab = document.getElementById("community-fab");
   if (fab) fab.style.display = on ? "none" : (currentPage === "community" ? "flex" : "none");
   const headBar = document.querySelector(".app-topbar");
@@ -991,6 +996,11 @@ function showPage(page, opts) {
     return;
   }
   currentPage = page;
+  // Navigating away from a finished exam clears the result card
+  if (!isCbtExamActive()) {
+    const resultScreen = document.getElementById("result-screen");
+    if (resultScreen) resultScreen.classList.add("hidden");
+  }
   document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
   document.querySelectorAll(".topnav-btn").forEach((n) => n.classList.remove("active"));
   document.getElementById(`page-${page}`).classList.add("active");
@@ -1606,6 +1616,28 @@ function renderCbtGrid(opts) {
   }
 }
 
+/* Launch a downloaded (offline-capable) portal exam pack — used when the
+   student taps Start with no internet, and by the hub's offline section. */
+async function launchPortalExamFromCache(examId, year) {
+  const portal = await startPortalExamCached(examId, { year: year || "" });
+  currentSession = portal.session;
+  currentExam = portal.exam;
+  answers = {};
+  currentQ = 0;
+  secondsLeft = resolveExamDurationSeconds(portal.exam, portal);
+
+  showCbtExamView();
+  applyExamYearLabel(year, portal);
+  buildSubjectTabs();
+  if (currentExam.sections && currentExam.sections.length > 1) {
+    showSubjectStartPicker();
+  }
+  buildQNav();
+  renderQuestion();
+  startTimer();
+}
+window.launchPortalExamFromCache = launchPortalExamFromCache;
+
 async function beginExam(examId, isSchool, utmeYear) {
   if (!examId) {
     alert("Exam not found. Refresh the page and try again.");
@@ -1941,6 +1973,21 @@ function showResult(result) {
   hideSubjectStartPicker();
   hideCbtLoadingOverlay();
   document.getElementById("exam-screen").classList.add("hidden");
+  // Show the result inside its own tab — never floating over Live Class etc.
+  var resultPage = currentSession && currentSession.is_internal
+    ? "school-portal"
+    : currentSession && currentSession.is_school_exam
+    ? "school"
+    : "cbt";
+  currentPage = resultPage;
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  const resultPg = document.getElementById("page-" + resultPage);
+  if (resultPg) resultPg.classList.add("active");
+  document.querySelectorAll(".topnav-btn").forEach((n) => n.classList.remove("active"));
+  const resultNav = document.querySelector('.topnav-btn[data-page="' + resultPage + '"]');
+  if (resultNav) resultNav.classList.add("active");
+  const titleEl2 = document.getElementById("page-title");
+  if (titleEl2) titleEl2.textContent = PAGE_TITLES[resultPage] || resultPage;
   const resultEl = document.getElementById("result-screen");
   resultEl.classList.remove("hidden");
   const closeBtn = document.getElementById("exam-result-close-btn");
