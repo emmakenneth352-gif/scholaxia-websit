@@ -1772,7 +1772,11 @@ function buildQNav() {
 function renderQuestion() {
   if (!currentExam || !currentExam.questions) return;
   const q = currentExam.questions[currentQ];
-  if (!q) return;
+  if (!q) {
+    // Practice attempts ship section stubs — fetch this subject's questions on demand.
+    if (typeof maybeFetchPracticeSection === "function") maybeFetchPracticeSection(currentQ);
+    return;
+  }
   document.getElementById("q-num").textContent =
     `Question ${currentQ + 1} of ${currentExam.questions.length}${q.topic ? " · " + subjectLabelFromTopic(q.topic) : ""}`;
   document.getElementById("q-text").textContent = q.question_text;
@@ -1826,6 +1830,11 @@ async function submitExam(force) {
   stopCbtTimer();
   hideSubjectStartPicker();
 
+  const answerMap = {};
+  (currentExam.questions || []).forEach((q, i) => {
+    if (q && answers[i]) answerMap[q.id] = answers[i];
+  });
+
   if (currentSession && currentSession.practice_attempt_id) {
     try {
       const result = await api("/api/v1/cbt/practice/attempts/" + currentSession.practice_attempt_id + "/submit", {
@@ -1850,11 +1859,6 @@ async function submitExam(force) {
     showResult(scorePortalExam(currentExam, answers));
     return;
   }
-
-  const answerMap = {};
-  currentExam.questions.forEach((q, i) => {
-    if (answers[i]) answerMap[q.id] = answers[i];
-  });
 
   if (currentSession && currentSession.is_internal) {
     try {

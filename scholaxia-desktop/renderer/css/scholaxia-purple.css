@@ -1107,6 +1107,7 @@ html[data-app-theme="dark"] .btn-secondary {
 .cbt-type-jamb { --cbt-accent: #7c3aed; }
 .cbt-type-waec { --cbt-accent: #0ea5e9; }
 .cbt-type-neco { --cbt-accent: #059669; }
+.cbt-type-junior { --cbt-accent: #d97706; }
 .cbt-type-subject { --cbt-accent: #7c3aed; }
 .cbt-type-icon {
   width: 52px;

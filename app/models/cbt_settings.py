@@ -31,6 +31,10 @@ class CbtGlobalSettings(Base):
     neco_questions_per_subject: Mapped[int] = mapped_column(Integer, default=50)
     neco_duration_minutes: Mapped[int] = mapped_column(Integer, default=60)
 
+    # Junior WAEC (BECE) — one subject at a time, like WAEC/NECO
+    jw_questions_per_subject: Mapped[int] = mapped_column(Integer, default=60)
+    jw_duration_minutes: Mapped[int] = mapped_column(Integer, default=60)
+
     # Common Entrance — independent from JAMB
     ce_questions_per_subject: Mapped[int] = mapped_column(Integer, default=40)
     ce_duration_minutes: Mapped[int] = mapped_column(Integer, default=60)

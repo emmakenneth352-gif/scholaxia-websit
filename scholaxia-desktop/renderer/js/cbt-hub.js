@@ -1,4 +1,4 @@
-/** CBT Practice hub — exam-type packages (JAMB / WAEC / NECO) via practice attempts. */
+/** CBT Practice hub — exam-type packages (JAMB / WAEC / NECO / Junior WAEC) via practice attempts. */
 
 var cbtHubState = {
   home: null,
@@ -18,6 +18,23 @@ var DEFAULT_SSCE_SUBJECTS = [
   "Economics", "Government", "Literature in English", "Geography",
   "Agricultural Science", "Further Mathematics", "Commerce", "Financial Accounting",
 ];
+var DEFAULT_JUNIOR_SUBJECTS = [
+  "English Studies", "Mathematics", "Basic Science", "Basic Technology",
+  "Social Studies", "Business Studies", "Civic Education",
+  "Computer Studies/ICT", "Agricultural Science",
+];
+
+var CBT_BOARD_LABELS = {
+  JAMB: "JAMB",
+  WAEC: "WAEC",
+  NECO: "NECO",
+  JUNIOR_WAEC: "Junior WAEC",
+  COMMON_ENTRANCE: "Common Entrance",
+};
+
+function cbtBoardLabel(board) {
+  return CBT_BOARD_LABELS[board] || board || "CBT";
+}
 
 function cbtEsc(s) {
   var d = document.createElement("div");
@@ -30,6 +47,9 @@ function cbtAttemptToPack(attempt) {
   var sections = [];
   (attempt.sections || []).forEach(function (sec) {
     var start = allQuestions.length;
+    // Light payloads ship section stubs (no questions). Pad with placeholders so
+    // flat question indices stay aligned with each section's start.
+    var total = parseInt(sec.total || (sec.questions || []).length || 0, 10) || 0;
     (sec.questions || []).forEach(function (q) {
       var row = {
         id: q.id,
@@ -43,15 +63,16 @@ function cbtAttemptToPack(attempt) {
       });
       allQuestions.push(row);
     });
+    for (var i = (sec.questions || []).length; i < total; i++) allQuestions.push(null);
     sections.push({
       subject: sec.subject || "Subject",
       start: start,
-      count: (sec.questions || []).length,
+      count: total,
       completed: !!sec.completed,
     });
   });
   return {
-    title: (attempt.exam_type || "CBT") + " Practice",
+    title: cbtBoardLabel(attempt.exam_type) + " Practice",
     subject: (attempt.subjects || []).join(" · "),
     duration_minutes: attempt.duration_minutes || 60,
     questions: allQuestions,
@@ -113,23 +134,37 @@ function renderCbtHub() {
     return;
   }
   grid.innerHTML = '<div class="cbt-hub-wrap">' +
-    '<p class="cbt-hub-note">Choose <strong>JAMB</strong>, <strong>WAEC</strong>, or <strong>NECO</strong>. Question counts and timers come from admin CBT Settings.</p>' +
+    '<p class="cbt-hub-note">Choose <strong>JAMB</strong>, <strong>WAEC</strong>, <strong>NECO</strong>, or <strong>Junior WAEC</strong>. Question counts and timers come from admin CBT Settings.</p>' +
     '<div class="cbt-type-grid">' +
     types
       .map(function (t) {
         var locked = !t.has_access;
-        var logo = t.exam_type === "JAMB" ? "img/jamb-logo.svg" : t.exam_type === "WAEC" ? "img/waec-logo.svg" : "img/neco-logo.svg";
-        var accent = t.exam_type === "JAMB" ? "cbt-type-jamb" : t.exam_type === "WAEC" ? "cbt-type-waec" : "cbt-type-neco";
+        var logo =
+          t.exam_type === "JAMB" ? "img/jamb-logo.svg"
+          : t.exam_type === "WAEC" ? "img/waec-logo.svg"
+          : t.exam_type === "NECO" ? "img/neco-logo.svg"
+          : "";
+        var accent =
+          t.exam_type === "JAMB" ? "cbt-type-jamb"
+          : t.exam_type === "WAEC" ? "cbt-type-waec"
+          : t.exam_type === "NECO" ? "cbt-type-neco"
+          : "cbt-type-junior";
+        var label = cbtBoardLabel(t.exam_type);
+        var logoHtml = logo
+          ? '<img src="' + logo + '" alt="' + cbtEsc(label) + '" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'cbt-logo-fallback\');this.parentNode.innerHTML=\'&#127979;\'" />'
+          : '&#127979;';
         return (
           '<div class="cbt-type-card ' + accent + '" onclick="cbtHubOpenBoard(\'' +
           cbtEsc(t.exam_type) +
           "')\">" +
-          '<div class="cbt-type-logo"><img src="' + logo + '" alt="' + cbtEsc(t.exam_type) + '" onerror="this.style.display=\'none\';this.parentNode.classList.add(\'cbt-logo-fallback\');this.parentNode.innerHTML=\'&#127919;\'" /></div>' +
+          '<div class="cbt-type-logo">' + logoHtml + "</div>" +
           '<div class="cbt-type-body">' +
-          "<h3>" + cbtEsc(t.exam_type) + "</h3>" +
+          "<h3>" + cbtEsc(label) + "</h3>" +
           '<p class="cbt-type-sub">' +
           (t.exam_type === "JAMB"
             ? "Combined package · pick " + (settings.jamb_subjects_required || 4) + " subjects"
+            : t.exam_type === "JUNIOR_WAEC"
+            ? "BECE practice · pick your 9 subjects"
             : "Subject practice from your registered list") +
           "</p>" +
           '<span class="cbt-type-badge ' + (locked ? "is-locked" : "is-open") + '">' +
@@ -163,16 +198,16 @@ function renderCbtBoard(grid) {
   var html = '<div class="cbt-hub-wrap">' +
     '<p class="cbt-hub-note"><button type="button" class="btn-secondary btn-sm" onclick="loadCbtHubPage()">← Exam types</button></p>' +
     "<h3 style=\"margin:8px 0\">" +
-    cbtEsc(board) +
+    cbtEsc(cbtBoardLabel(board)) +
     " CBT</h3>";
 
   if (!info.has_access) {
     html +=
       '<div class="empty-state-premium"><h3>Package required</h3><p>Unlock ' +
-      cbtEsc(board) +
+      cbtEsc(cbtBoardLabel(board)) +
       " with Paystack or a coupon.</p>" +
       '<button type="button" class="btn-join" onclick="cbtHubUnlockBoard()">Unlock ' +
-      cbtEsc(board) +
+      cbtEsc(cbtBoardLabel(board)) +
       "</button></div>";
     grid.innerHTML = html;
     return;
@@ -213,18 +248,24 @@ function renderCbtBoard(grid) {
   }
 
   var registered =
-    profile.ssce_subjects && profile.ssce_subjects.length
-      ? profile.ssce_subjects
-      : DEFAULT_SSCE_SUBJECTS;
-  var ssceStarted = !!profile.ssce_started;
-  var isRegistered = ssceStarted && profile.ssce_subjects && profile.ssce_subjects.length;
+    board === "JUNIOR_WAEC"
+      ? (profile.junior_subjects && profile.junior_subjects.length
+          ? profile.junior_subjects
+          : DEFAULT_JUNIOR_SUBJECTS)
+      : (profile.ssce_subjects && profile.ssce_subjects.length
+          ? profile.ssce_subjects
+          : DEFAULT_SSCE_SUBJECTS);
+  var ssceStarted = board === "JUNIOR_WAEC" ? !!profile.junior_started : !!profile.ssce_started;
+  var isRegistered = ssceStarted && registered && registered.length;
 
   if (!isRegistered) {
-    // First-time WAEC/NECO: pick your own subjects (up to 9). Locks on first start.
+    // First-time WAEC/NECO/Junior WAEC: pick your own subjects (up to 9). Locks on first start.
     var picked = (cbtHubState.sscePicked = cbtHubState.sscePicked || []).slice();
-    var allChoices = registered.concat(DEFAULT_SSCE_SUBJECTS).filter(function (s, i, a) {
-      return a.indexOf(s) === i;
-    });
+    var allChoices = registered
+      .concat(board === "JUNIOR_WAEC" ? DEFAULT_JUNIOR_SUBJECTS : DEFAULT_SSCE_SUBJECTS)
+      .filter(function (s, i, a) {
+        return a.indexOf(s) === i;
+      });
     html +=
       '<p class="cbt-hub-note">Select your subjects (up to 9), then CONTINUE to save them. They lock after that — changes then need admin approval.</p>';
     html += '<div class="cbt-subject-grid">';
@@ -280,7 +321,7 @@ function renderCbtBoard(grid) {
         "')\">" +
         '<div class="cbt-type-icon">&#128221;</div>' +
         '<div class="cbt-type-body"><h3>' + cbtEsc(s) + '</h3>' +
-        '<p class="cbt-type-sub">' + cbtEsc(board) + " practice</p></div>" +
+        '<p class="cbt-type-sub">' + cbtEsc(cbtBoardLabel(board)) + " practice</p></div>" +
         '<span class="cbt-type-arrow">&#9654;</span></div>'
       );
     })
@@ -297,8 +338,13 @@ function renderCbtBoard(grid) {
 async function cbtHubRequestSubjectChange(board) {
   var home = cbtHubState.home || {};
   var profile = home.profile || {};
-  var current = (board === "JAMB" ? profile.jamb_subjects : profile.ssce_subjects) || [];
-  var picked = current.slice();
+  var current =
+    board === "JAMB"
+      ? profile.jamb_subjects
+      : board === "JUNIOR_WAEC"
+      ? profile.junior_subjects
+      : profile.ssce_subjects;
+  current = current || [];
   var choices = [
     "English Language", "Mathematics", "Biology", "Chemistry", "Physics",
     "Economics", "Government", "Literature-in-English", "CRS", "IRS",
@@ -367,7 +413,75 @@ async function cbtHubStartSubject(subject) {
   await cbtHubStartPractice(cbtHubState.board, [subject]);
 }
 
-/* CONTINUE: save (and lock) WAEC/NECO subjects without starting an exam.
+/* Section loader: practice attempts ship subject stubs; questions load on demand.
+   currentQ lies inside a section whose questions have not been fetched yet. */
+var _cbtSectionsFetched = {};
+var _cbtSectionFetchBusy = false;
+
+function _cbtSectionForIndex(index) {
+  if (!currentExam || !currentExam.sections) return null;
+  return currentExam.sections.find(function (s) {
+    return index >= s.start && index < s.start + (s.count || 0);
+  }) || null;
+}
+
+async function maybeFetchPracticeSection(questionIndex) {
+  if (!currentSession || !currentSession.practice_attempt_id) return;
+  var sec = _cbtSectionForIndex(questionIndex);
+  if (!sec || sec.questions_loaded) return;
+  var key = currentSession.practice_attempt_id + ":" + sec.start;
+  if (_cbtSectionsFetched[key]) return;
+  _cbtSectionsFetched[key] = true;
+  try {
+    var built = await api(
+      "/api/v1/cbt/practice/attempts/" + currentSession.practice_attempt_id +
+      "/sections/" + currentExam.sections.indexOf(sec)
+    );
+    if (!currentExam || !currentExam.sections) return;
+    var fresh = _cbtSectionForIndex(questionIndex) || sec;
+    var start = fresh.start;
+    var qs = (built && built.questions) || [];
+    if (!qs.length) {
+      _cbtSectionsFetched[key] = false;
+      alert(
+        "No questions in the bank yet for " + (fresh.subject || "this subject") +
+        ". Ask admin to upload " + cbtBoardLabel(currentExam.exam_type) + " questions for it."
+      );
+      return;
+    }
+    // Fill rows IN PLACE — indices of every section stay stable, so already
+    // loaded sections are never disturbed. Unused padding slots stay null and
+    // are skipped by the question nav.
+    qs.forEach(function (q, i) {
+      var row = {
+        id: q.id,
+        question_text: q.question_text || "",
+        topic: q.topic,
+        image_url: q.image_url,
+      };
+      (q.options || []).forEach(function (opt) {
+        var k = String(opt.key || "").toUpperCase();
+        if (k) row["option_" + k.toLowerCase()] = opt.text || "";
+      });
+      currentExam.questions[start + i] = row;
+      var saved = (currentExam.answers || {})[row.id];
+      if (saved && !answers[start + i]) answers[start + i] = saved;
+    });
+    fresh.count = qs.length; // real question count (bank may be smaller than the stub)
+    fresh.questions_loaded = true;
+    currentQ = start + Math.min(Math.max(questionIndex - start, 0), qs.length - 1);
+    if (typeof buildSubjectTabs === "function") buildSubjectTabs();
+    if (typeof buildQNav === "function") buildQNav();
+    if (typeof renderQuestion === "function") renderQuestion();
+  } catch (e) {
+    _cbtSectionsFetched[key] = false;
+    alert((e && e.message) || "Could not load this subject's questions.");
+  } finally {
+    _cbtSectionFetchBusy = false;
+  }
+}
+
+/* CONTINUE: save (and lock) WAEC/NECO/Junior WAEC subjects without starting an exam.
    After registration the hub reloads and shows one card per subject. */
 async function cbtHubRegisterSubjects(board, subjects, btn) {
   if (cbtHubState.busy) return;
@@ -428,8 +542,13 @@ async function cbtHubStartPractice(examType, subjects) {
 
 function launchPracticeAttempt(attempt) {
   var pack = cbtAttemptToPack(attempt);
-  if (!pack.questions.length) {
-    alert("No questions generated. Ask admin to upload bank questions for these subjects.");
+  // Sections arrive as stubs (questions load per subject on demand). Only fail
+  // when the attempt has no sections at all.
+  if (!pack.sections.length) {
+    alert(
+      "This " + cbtBoardLabel(attempt.exam_type) +
+      " attempt has no subjects. Ask admin to check CBT Settings."
+    );
     return;
   }
   currentExam = pack;
@@ -448,15 +567,16 @@ function launchPracticeAttempt(attempt) {
     var sec = pack.sections[pack.section_index];
     if (sec) currentQ = sec.start || 0;
   }
+  var totalCount = pack.sections.reduce(function (n, s) { return n + (s.count || 0); }, 0);
   secondsLeft =
     typeof pack.seconds_left === "number" ? pack.seconds_left : (pack.duration_minutes || 60) * 60;
 
   if (typeof showCbtExamView === "function") showCbtExamView();
   document.getElementById("exam-title").textContent = pack.title;
   document.getElementById("exam-meta").textContent =
-    (pack.subject || examTypeLabel(attempt.exam_type)) +
+    (pack.subject || cbtBoardLabel(attempt.exam_type)) +
     " · " +
-    pack.questions.length +
+    totalCount +
     " questions · Settings timer";
   if (typeof buildSubjectTabs === "function") buildSubjectTabs();
   if (typeof buildQNav === "function") buildQNav();

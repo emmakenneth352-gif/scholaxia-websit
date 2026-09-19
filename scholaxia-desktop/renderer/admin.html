@@ -348,6 +348,13 @@
           <label><span>Duration (minutes)</span><input id="cbt-set-neco-dur" type="number" min="5" max="480" /></label>
         </div>
       </div>
+      <div class="panel" style="margin-bottom:16px">
+        <h3>Junior WAEC (BECE)</h3>
+        <div class="form-grid">
+          <label><span>Questions per subject</span><input id="cbt-set-jw-q" type="number" min="1" max="200" /></label>
+          <label><span>Duration (minutes)</span><input id="cbt-set-jw-dur" type="number" min="5" max="480" /></label>
+        </div>
+      </div>
       <div class="panel">
         <h3>Question bank totals</h3>
         <p class="cbt-hint small">Published practice questions available to draw from (by exam type + subject).</p>
@@ -369,6 +376,7 @@
         <button type="button" class="btn-sm cbt-bank-tab is-active" data-bank="JAMB" onclick="setCbtBank('JAMB')">JAMB</button>
         <button type="button" class="btn-sm cbt-bank-tab" data-bank="WAEC" onclick="setCbtBank('WAEC')">WAEC</button>
         <button type="button" class="btn-sm cbt-bank-tab" data-bank="NECO" onclick="setCbtBank('NECO')">NECO</button>
+        <button type="button" class="btn-sm cbt-bank-tab" data-bank="JUNIOR_WAEC" onclick="setCbtBank('JUNIOR_WAEC')">Junior WAEC</button>
         <button type="button" class="btn-sm cbt-bank-tab" data-bank="COMMON_ENTRANCE" onclick="setCbtBank('COMMON_ENTRANCE')">Common Entrance</button>
       </div>
       <div id="cbt-bank-summary" class="panel" style="margin-bottom:16px;padding:12px 14px">
@@ -465,6 +473,7 @@
               <option>JAMB</option>
               <option>WAEC</option>
               <option>NECO</option>
+              <option>JUNIOR_WAEC</option>
               <option>COMMON_ENTRANCE</option>
             </select>
           </label>
@@ -570,6 +579,7 @@
               <option>JAMB</option>
               <option>WAEC</option>
               <option>NECO</option>
+              <option>JUNIOR_WAEC</option>
               <option>COMMON_ENTRANCE</option>
             </select>
           </label>

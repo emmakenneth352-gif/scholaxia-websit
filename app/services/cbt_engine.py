@@ -31,6 +31,8 @@ DEFAULT_SETTINGS = {
     "waec_duration_minutes": 60,
     "neco_questions_per_subject": 50,
     "neco_duration_minutes": 60,
+    "jw_questions_per_subject": 60,
+    "jw_duration_minutes": 60,
     "ce_questions_per_subject": 40,
     "ce_duration_minutes": 60,
     "ce_subjects": [
@@ -87,6 +89,8 @@ async def ensure_cbt_settings_schema() -> None:
             waec_duration_minutes INTEGER DEFAULT 60,
             neco_questions_per_subject INTEGER DEFAULT 50,
             neco_duration_minutes INTEGER DEFAULT 60,
+            jw_questions_per_subject INTEGER DEFAULT 60,
+            jw_duration_minutes INTEGER DEFAULT 60,
             ce_questions_per_subject INTEGER DEFAULT 40,
             ce_duration_minutes INTEGER DEFAULT 60,
             ce_subjects JSON DEFAULT NULL,
@@ -97,6 +101,8 @@ async def ensure_cbt_settings_schema() -> None:
             updated_at TIMESTAMP DEFAULT NOW()
         )
         """,
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS jw_questions_per_subject INTEGER DEFAULT 60",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS jw_duration_minutes INTEGER DEFAULT 60",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_questions_per_subject INTEGER DEFAULT 40",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_duration_minutes INTEGER DEFAULT 60",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_subjects JSON DEFAULT NULL",
@@ -178,6 +184,8 @@ def settings_to_dict(row: CbtGlobalSettings | None) -> dict[str, Any]:
         "waec_duration_minutes": int(row.waec_duration_minutes or 60),
         "neco_questions_per_subject": int(row.neco_questions_per_subject or 50),
         "neco_duration_minutes": int(row.neco_duration_minutes or 60),
+        "jw_questions_per_subject": int(getattr(row, "jw_questions_per_subject", None) or 60),
+        "jw_duration_minutes": int(getattr(row, "jw_duration_minutes", None) or 60),
         "ce_questions_per_subject": int(getattr(row, "ce_questions_per_subject", None) or 40),
         "ce_duration_minutes": int(getattr(row, "ce_duration_minutes", None) or 60),
         "ce_subjects": _normalize_ce_subjects(getattr(row, "ce_subjects", None)),
@@ -510,6 +518,8 @@ async def ensure_section_built(
         )
     elif board == "COMMON_ENTRANCE":
         count = int(settings.get("ce_questions_per_subject") or 40)
+    elif board == "JUNIOR_WAEC":
+        count = int(settings.get("jw_questions_per_subject") or 60)
     elif board == "WAEC":
         count = int(settings["waec_questions_per_subject"] or 50)
     else:
@@ -553,6 +563,10 @@ def _board_registered_subjects(profile, board: str) -> list[str]:
         own = list(getattr(profile, "neco_subjects", None) or [])
         if own:
             return [str(s).strip() for s in own if str(s).strip()]
+    elif board == "JUNIOR_WAEC":
+        own = list(getattr(profile, "junior_subjects", None) or [])
+        if own:
+            return [str(s).strip() for s in own if str(s).strip()]
     if (getattr(profile, "ssce_exam_type", None) or "").upper() == board:
         return [str(s).strip() for s in (profile.ssce_subjects or []) if str(s).strip()]
     return []
@@ -564,6 +578,8 @@ def _save_board_subjects(profile, board: str, subjects: list[str]) -> None:
         profile.waec_subjects = clean
     elif board == "NECO":
         profile.neco_subjects = clean
+    elif board == "JUNIOR_WAEC":
+        profile.junior_subjects = clean
     profile.ssce_subjects = clean
     profile.ssce_exam_type = board
 
@@ -581,8 +597,8 @@ async def register_board_subjects(
     from app.models.user import StudentProfile
 
     board = normalize_board(exam_type)
-    if board not in {"JAMB", "WAEC", "NECO", "COMMON_ENTRANCE"}:
-        raise ValueError("Exam type must be JAMB, WAEC, NECO, or COMMON_ENTRANCE")
+    if board not in {"JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"}:
+        raise ValueError("Exam type must be JAMB, WAEC, NECO, Junior WAEC, or COMMON_ENTRANCE")
     sid = uuid.UUID(str(student_id))
     clean = []
     for s in subjects:
@@ -601,10 +617,14 @@ async def register_board_subjects(
     # per-board columns) or once a WAEC/NECO attempt has started. Legacy rows
     # whose only record is the pre-polluted ssce_subjects list can still be
     # re-registered once before the first exam.
-    if board in {"WAEC", "NECO"}:
+    if board in {"WAEC", "NECO", "JUNIOR_WAEC"}:
         existing = _board_registered_subjects(profile, board)
         own_col = list(
-            getattr(profile, "waec_subjects" if board == "WAEC" else "neco_subjects", None)
+            getattr(
+                profile,
+                "waec_subjects" if board == "WAEC" else "neco_subjects" if board == "NECO" else "junior_subjects",
+                None,
+            )
             or []
         )
         if existing:
@@ -614,7 +634,11 @@ async def register_board_subjects(
                         select(CbtPracticeAttempt.id)
                         .where(
                             CbtPracticeAttempt.student_id == sid,
-                            CbtPracticeAttempt.exam_type.in_(["WAEC", "NECO"]),
+                            CbtPracticeAttempt.exam_type.in_(
+                                ["WAEC", "NECO"]
+                                if board != "JUNIOR_WAEC"
+                                else ["JUNIOR_WAEC"]
+                            ),
                         )
                         .limit(1)
                     )
@@ -640,7 +664,7 @@ async def register_board_subjects(
     if not clean:
         raise ValueError("Select at least one subject")
 
-    if board in {"WAEC", "NECO"}:
+    if board in {"WAEC", "NECO", "JUNIOR_WAEC"}:
         _save_board_subjects(profile, board, clean)
     elif board == "JAMB":
         profile.jamb_subjects = clean
@@ -649,7 +673,11 @@ async def register_board_subjects(
         profile.locked_at = naive_utc_now()
     await db.flush()
     await db.commit()
-    stored = _board_registered_subjects(profile, board) if board in {"WAEC", "NECO"} else list(clean)
+    stored = (
+        _board_registered_subjects(profile, board)
+        if board in {"WAEC", "NECO", "JUNIOR_WAEC"}
+        else list(clean)
+    )
     return {"ok": True, "board": board, "subjects": stored, "locked": True}
 
 
@@ -663,8 +691,8 @@ async def start_practice_attempt(
     from app.models.user import StudentProfile
 
     board = normalize_board(exam_type)
-    if board not in {"JAMB", "WAEC", "NECO", "COMMON_ENTRANCE"}:
-        raise ValueError("Exam type must be JAMB, WAEC, NECO, or COMMON_ENTRANCE")
+    if board not in {"JAMB", "WAEC", "NECO", "JUNIOR_WAEC", "COMMON_ENTRANCE"}:
+        raise ValueError("Exam type must be JAMB, WAEC, NECO, Junior WAEC, or COMMON_ENTRANCE")
 
     sid = uuid.UUID(str(student_id))
 
@@ -766,9 +794,9 @@ async def start_practice_attempt(
         sections = [section_stub(sub, per) for sub in subjects_clean]
     else:
         profile_ssce = _board_registered_subjects(profile, board)
-        # If the student NEVER started WAEC/NECO before, ignore any pre-filled
+        # If the student NEVER started this SSCE board before, ignore any pre-filled
         # 4-subject list (copied from JAMB at signup) so they can pick their own
-        # subjects. Once a WAEC/NECO attempt exists, subjects are locked.
+        # subjects. Once an attempt exists, subjects are locked.
         if profile is not None:
             try:
                 any_ssce = (
@@ -776,7 +804,11 @@ async def start_practice_attempt(
                         select(CbtPracticeAttempt.id)
                         .where(
                             CbtPracticeAttempt.student_id == sid,
-                            CbtPracticeAttempt.exam_type.in_(["WAEC", "NECO"]),
+                            CbtPracticeAttempt.exam_type.in_(
+                                ["JUNIOR_WAEC"]
+                                if board == "JUNIOR_WAEC"
+                                else ["WAEC", "NECO"]
+                            ),
                         )
                         .limit(1)
                     )
@@ -824,11 +856,17 @@ async def start_practice_attempt(
                     )
         subjects_clean = [subjects_clean[0].strip()]
         duration = int(
-            settings["waec_duration_minutes"] if board == "WAEC" else settings["neco_duration_minutes"]
+            settings["waec_duration_minutes"]
+            if board == "WAEC"
+            else (settings.get("jw_duration_minutes") or 60)
+            if board == "JUNIOR_WAEC"
+            else settings["neco_duration_minutes"]
         )
         count = int(
             settings["waec_questions_per_subject"]
             if board == "WAEC"
+            else (settings.get("jw_questions_per_subject") or 60)
+            if board == "JUNIOR_WAEC"
             else settings["neco_questions_per_subject"]
         )
         sections = [section_stub(subjects_clean[0], count)]

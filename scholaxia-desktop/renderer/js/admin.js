@@ -946,6 +946,26 @@ var CBT_CE_SUBJECTS = [
   "Islamic Religious Studies",
   "Creative Arts",
 ];
+var CBT_JUNIOR_SUBJECTS = [
+  "English Studies",
+  "Mathematics",
+  "Basic Science",
+  "Basic Technology",
+  "Social Studies",
+  "Business Studies",
+  "Civic Education",
+  "Computer Studies/ICT",
+  "Agricultural Science",
+  "Home Economics",
+  "Physical and Health Education",
+  "Christian Religious Studies",
+  "Islamic Religious Studies",
+  "French",
+  "Yoruba",
+  "Igbo",
+  "Hausa",
+  "Cultural and Creative Art",
+];
 
 function setCbtBank(bank) {
   cbtActiveBank = bank || "JAMB";
@@ -965,10 +985,14 @@ function syncCbtSubjectOptionsForBank() {
   var filter = document.getElementById("cbt-filter-subject");
   var importSub = document.getElementById("cbt-import-subject");
   var createSub = document.getElementById("cbt-subject");
-  function ensureCeOptions(sel) {
+  function ensureBoardOptions(sel) {
     if (!sel) return;
-    if (cbtActiveBank !== "COMMON_ENTRANCE") return;
-    CBT_CE_SUBJECTS.forEach(function (name) {
+    var extras =
+      cbtActiveBank === "COMMON_ENTRANCE" ? CBT_CE_SUBJECTS
+      : cbtActiveBank === "JUNIOR_WAEC" ? CBT_JUNIOR_SUBJECTS
+      : null;
+    if (!extras) return;
+    extras.forEach(function (name) {
       var exists = Array.prototype.some.call(sel.options, function (o) {
         return o.value === name || o.textContent === name;
       });
@@ -980,13 +1004,17 @@ function syncCbtSubjectOptionsForBank() {
       }
     });
   }
-  ensureCeOptions(importSub);
-  ensureCeOptions(createSub);
+  ensureBoardOptions(importSub);
+  ensureBoardOptions(createSub);
   if (filter) {
     var current = filter.value;
     var opts = ['<option value="">All subjects</option>'];
     if (cbtActiveBank === "COMMON_ENTRANCE") {
       CBT_CE_SUBJECTS.forEach(function (s) {
+        opts.push('<option value="' + escHtml(s) + '">' + escHtml(s) + "</option>");
+      });
+    } else if (cbtActiveBank === "JUNIOR_WAEC") {
+      CBT_JUNIOR_SUBJECTS.forEach(function (s) {
         opts.push('<option value="' + escHtml(s) + '">' + escHtml(s) + "</option>");
       });
     } else if (importSub) {
@@ -1444,6 +1472,8 @@ async function loadCbtSettings() {
     setNum("cbt-set-waec-dur", s.waec_duration_minutes);
     setNum("cbt-set-neco-q", s.neco_questions_per_subject);
     setNum("cbt-set-neco-dur", s.neco_duration_minutes);
+    setNum("cbt-set-jw-q", s.jw_questions_per_subject);
+    setNum("cbt-set-jw-dur", s.jw_duration_minutes);
     var bank = (data && data.question_bank) || [];
     if (bankEl) {
       if (!bank.length) {
@@ -1488,6 +1518,8 @@ async function saveCbtSettings() {
         waec_duration_minutes: numVal("cbt-set-waec-dur"),
         neco_questions_per_subject: numVal("cbt-set-neco-q"),
         neco_duration_minutes: numVal("cbt-set-neco-dur"),
+        jw_questions_per_subject: numVal("cbt-set-jw-q"),
+        jw_duration_minutes: numVal("cbt-set-jw-dur"),
       }),
     });
     if (msg) msg.textContent = "Settings saved.";

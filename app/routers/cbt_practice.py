@@ -32,6 +32,8 @@ class CbtSettingsUpdate(BaseModel):
     waec_duration_minutes: Optional[int] = Field(None, ge=5, le=480)
     neco_questions_per_subject: Optional[int] = Field(None, ge=1, le=200)
     neco_duration_minutes: Optional[int] = Field(None, ge=5, le=480)
+    jw_questions_per_subject: Optional[int] = Field(None, ge=1, le=200)
+    jw_duration_minutes: Optional[int] = Field(None, ge=5, le=480)
     ce_questions_per_subject: Optional[int] = Field(None, ge=1, le=200)
     ce_duration_minutes: Optional[int] = Field(None, ge=5, le=480)
     ce_subjects: Optional[list[str]] = None
@@ -132,6 +134,7 @@ async def practice_home(
     ssce_exam = "WAEC"
     waec_subjects: list = []
     neco_subjects: list = []
+    junior_subjects: list = []
     try:
         profile = (
             await db.execute(select(StudentProfile).where(StudentProfile.user_id == sid))
@@ -146,11 +149,14 @@ async def practice_home(
             ssce_exam = getattr(profile, "ssce_exam_type", None) or "WAEC"
             waec_subjects = list(getattr(profile, "waec_subjects", None) or [])
             neco_subjects = list(getattr(profile, "neco_subjects", None) or [])
+            junior_subjects = list(getattr(profile, "junior_subjects", None) or [])
             # Legacy rows: fall back to ssce_subjects only when the board matches
             if not waec_subjects and (ssce_exam or "").upper() == "WAEC":
                 waec_subjects = list(ssce_subjects)
             if not neco_subjects and (ssce_exam or "").upper() == "NECO":
                 neco_subjects = list(ssce_subjects)
+            if not junior_subjects and (ssce_exam or "").upper() == "JUNIOR_WAEC":
+                junior_subjects = list(ssce_subjects)
     except Exception:
         try:
             await db.rollback()
@@ -158,6 +164,7 @@ async def practice_home(
             pass
 
     ssce_started = False
+    junior_started = False
     try:
         from app.models.cbt_settings import CbtPracticeAttempt
 
@@ -172,12 +179,24 @@ async def practice_home(
             )
         ).first()
         ssce_started = row is not None
+        jrow = (
+            await db.execute(
+                select(CbtPracticeAttempt.id)
+                .where(
+                    CbtPracticeAttempt.student_id == sid,
+                    CbtPracticeAttempt.exam_type == "JUNIOR_WAEC",
+                )
+                .limit(1)
+            )
+        ).first()
+        junior_started = jrow is not None
     except Exception:
         try:
             await db.rollback()
         except Exception:
             pass
         ssce_started = False
+        junior_started = False
 
     async def board_block(board: str) -> dict:
         has = False
@@ -200,6 +219,8 @@ async def practice_home(
             "jamb_english_questions": int(settings.get("jamb_english_questions") or 40),
             "waec_duration_minutes": int(settings.get("waec_duration_minutes") or 60),
             "neco_duration_minutes": int(settings.get("neco_duration_minutes") or 60),
+            "jw_duration_minutes": int(settings.get("jw_duration_minutes") or 60),
+            "jw_questions_per_subject": int(settings.get("jw_questions_per_subject") or 60),
             "ce_duration_minutes": int(settings.get("ce_duration_minutes") or 60),
             "ce_questions_per_subject": int(settings.get("ce_questions_per_subject") or 40),
             "ce_subjects": list(settings.get("ce_subjects") or []),
@@ -208,7 +229,7 @@ async def practice_home(
             await board_block("JAMB"),
             await board_block("WAEC"),
             await board_block("NECO"),
-            await board_block("COMMON_ENTRANCE"),
+            await board_block("JUNIOR_WAEC"),
         ],
         "profile": {
             "jamb_subjects": jamb_subjects,
@@ -217,6 +238,8 @@ async def practice_home(
             "ssce_started": ssce_started,
             "waec_subjects": waec_subjects,
             "neco_subjects": neco_subjects,
+            "junior_subjects": junior_subjects,
+            "junior_started": junior_started,
         },
     }
 
@@ -239,6 +262,8 @@ async def practice_settings_public(
             "waec_questions_per_subject": int(settings.get("waec_questions_per_subject") or 50),
             "neco_duration_minutes": int(settings.get("neco_duration_minutes") or 60),
             "neco_questions_per_subject": int(settings.get("neco_questions_per_subject") or 50),
+            "jw_duration_minutes": int(settings.get("jw_duration_minutes") or 60),
+            "jw_questions_per_subject": int(settings.get("jw_questions_per_subject") or 60),
             "ce_duration_minutes": int(settings.get("ce_duration_minutes") or 60),
             "ce_questions_per_subject": int(settings.get("ce_questions_per_subject") or 40),
             "ce_subjects": list(settings.get("ce_subjects") or []),

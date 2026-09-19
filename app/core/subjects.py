@@ -25,6 +25,19 @@ AVAILABLE_SUBJECTS = [
     "Data Processing",
 ]
 
+# Junior WAEC (BECE) — nine core Junior Secondary subjects, one paper at a time.
+JUNIOR_WAEC_SUBJECTS = [
+    "English Studies",
+    "Mathematics",
+    "Basic Science",
+    "Basic Technology",
+    "Social Studies",
+    "Business Studies",
+    "Civic Education",
+    "Computer Studies/ICT",
+    "Agricultural Science",
+]
+
 # Common Entrance CBT — three papers taken together (like JAMB).
 COMMON_ENTRANCE_SUBJECTS = [
     "Mathematics / Quantitative Reasoning",

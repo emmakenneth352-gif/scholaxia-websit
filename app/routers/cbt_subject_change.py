@@ -103,8 +103,8 @@ async def create_subject_change_request(
     from app.models.user import StudentProfile
 
     board = (payload.board or "").upper().strip()
-    if board not in {"WAEC", "NECO", "JAMB"}:
-        raise HTTPException(status_code=400, detail="Board must be WAEC, NECO or JAMB")
+    if board not in {"WAEC", "NECO", "JAMB", "JUNIOR_WAEC"}:
+        raise HTTPException(status_code=400, detail="Board must be WAEC, NECO, JUNIOR_WAEC or JAMB")
 
     new_subjects = [s.strip() for s in (payload.new_subjects or []) if s and s.strip()]
     if not new_subjects:
@@ -124,6 +124,8 @@ async def create_subject_change_request(
     # Current subjects for the chosen board
     if board == "JAMB":
         old_subjects = list(profile.jamb_subjects or [])
+    elif board == "JUNIOR_WAEC":
+        old_subjects = list(getattr(profile, "junior_subjects", None) or profile.ssce_subjects or [])
     else:
         old_subjects = list(profile.ssce_subjects or [])
         if profile.ssce_exam_type and (profile.ssce_exam_type or "").upper() != board:
@@ -343,12 +345,14 @@ async def admin_review_subject_change_request(
     if board == "JAMB":
         profile.jamb_subjects = new_subjects
     else:
-        # Per-board columns first (WAEC and NECO each keep their own list);
+        # Per-board columns first (WAEC/NECO/JUNIOR each keep their own list);
         # the shared ssce_* columns mirror the latest registration.
         if board == "WAEC":
             profile.waec_subjects = new_subjects
         elif board == "NECO":
             profile.neco_subjects = new_subjects
+        elif board == "JUNIOR_WAEC":
+            profile.junior_subjects = new_subjects
         profile.ssce_subjects = new_subjects
         profile.ssce_exam_type = board
     profile.cbt_subjects_locked = True

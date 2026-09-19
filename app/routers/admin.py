@@ -1575,6 +1575,8 @@ async def append_bank_questions(
         duration = int(settings.get("waec_duration_minutes") or 60)
     elif board == "NECO":
         duration = int(settings.get("neco_duration_minutes") or 60)
+    elif board == "JUNIOR_WAEC":
+        duration = int(settings.get("jw_duration_minutes") or 60)
     elif board == "COMMON_ENTRANCE":
         duration = int(settings.get("ce_duration_minutes") or 60)
     else:
