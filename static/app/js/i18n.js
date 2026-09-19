@@ -536,7 +536,10 @@
     });
   }
 
+  /* Compact floating EN/FR/PT/AR pills removed (2026-09-19) — the header
+     language picker (#langWrap) is the single language control now. */
   function ensureCompactLanguagePicker() {
+    return;
     if (document.getElementById('langWrap') || document.getElementById('sxPageLang')) return;
     const picker = document.createElement('div');
     picker.id = 'sxPageLang';
@@ -757,7 +760,6 @@
   applyLang(currentLang);
   applyCurrency(currentCurrency);
 
-  ensureCompactLanguagePicker();
   applyLang(currentLang);
 
   /* Translate content created later by dashboard and marketplace scripts. */
