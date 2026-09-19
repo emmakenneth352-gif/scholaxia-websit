@@ -11,7 +11,34 @@ var vcState = {
   history: [],
   imagePreview: null,   // data URL of an attached photo
   imageFile: null,
+  mode: "chat",          // "chat" (normal) | "class" (board classroom)
+  chatLog: [],           // rendered chat bubbles [{role, content, image}]
 };
+
+function vcSetMode(mode) {
+  vcState.mode = mode === "class" ? "class" : "chat";
+  try { localStorage.setItem("sia_vc_mode", vcState.mode); } catch (e) { /* ignore */ }
+  var chatPanel = document.getElementById("vc-chat-panel");
+  var classPanel = document.getElementById("vc-class-panel");
+  var classActions = document.getElementById("vc-class-actions");
+  var hint = document.getElementById("vc-mode-hint");
+  var bChat = document.getElementById("vc-mode-chat");
+  var bClass = document.getElementById("vc-mode-class");
+  if (bChat) bChat.classList.toggle("is-on", vcState.mode === "chat");
+  if (bClass) bClass.classList.toggle("is-on", vcState.mode === "class");
+  var isChat = vcState.mode === "chat";
+  if (chatPanel) chatPanel.classList.toggle("hidden", !isChat);
+  if (classPanel) classPanel.classList.toggle("hidden", isChat);
+  if (classActions) classActions.classList.toggle("hidden", isChat);
+  if (hint) {
+    hint.textContent = isChat
+      ? "Normal chat — full answers with code, no board."
+      : "Classroom — Sia speaks while key points fill the board.";
+  }
+  var inp = document.getElementById("vc-input");
+  if (inp) inp.placeholder = isChat ? "Message the AI teacher…" : "Ask the AI teacher anything…";
+  if (isChat) vcRenderChat();
+}
 
 var VC_SUBJECTS = [
   "General", "Mathematics", "English Language", "Physics", "Chemistry",
@@ -54,7 +81,63 @@ function loadVoiceClassroom() {
   } else {
     vcRenderWelcome();
   }
+  var savedMode = "chat";
+  try { savedMode = localStorage.getItem("sia_vc_mode") || "chat"; } catch (e) { /* ignore */ }
+  vcSetMode(savedMode);
   vcSyncButtons();
+}
+
+/* ── Normal chat view (mode = chat) ─────────────────────────────────────── */
+function vcBubble(role, content, image) {
+  vcState.chatLog.push({ role: role, content: content, image: image || null });
+  vcRenderChat();
+}
+
+function vcRenderChat() {
+  var el = document.getElementById("vc-chat");
+  if (!el) return;
+  if (!vcState.chatLog.length) {
+    var name = (localStorage.getItem("sia_name") || "Student").split(" ")[0];
+    el.innerHTML =
+      '<div class="vc-chat-welcome">👋 Hi ' + vcEsc(name) +
+      '! Chat normally — ask anything, send a photo, or use the mic. ' +
+      "Tap 🔊 on a reply to hear it.</div>";
+    return;
+  }
+  el.innerHTML = vcState.chatLog.map(function (m, i) {
+    var img = m.image ? '<img class="vc-msg-image" src="' + m.image + '" alt="" />' : "";
+    var speak = m.role === "assistant"
+      ? '<button type="button" class="vc-speak-btn" onclick="vcSpeakMsg(' + i + ')" title="Read aloud">🔊</button>'
+      : "";
+    return (
+      '<div class="vc-msg ' + (m.role === "user" ? "vc-msg-user" : "vc-msg-sia") + '">' +
+      '<div class="vc-msg-avatar">' + (m.role === "user" ? vcEsc(name[0] || "S") : "S") + "</div>" +
+      '<div class="vc-msg-bubble">' + img + vcFormat(m.content) + speak + "</div>" +
+      "</div>"
+    );
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+function vcSpeakMsg(i) {
+  var m = vcState.chatLog[i];
+  if (m && typeof siaSpeak === "function") {
+    siaVoiceEnabled = true;
+    siaSpeak(m.content);
+  }
+}
+
+function vcFormat(text) {
+  var s = vcEsc(text);
+  // fenced code blocks
+  s = s.replace(/```(\w+)?\n?([\s\S]*?)```/g, function (_, lang, code) {
+    return '<pre class="vc-code-block">' + code + "</pre>";
+  });
+  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/^###?\s*(.+)$/gm, "<strong>$1</strong>");
+  s = s.replace(/\n/g, "<br />");
+  return s;
 }
 
 function vcRenderWelcome() {
@@ -210,10 +293,16 @@ async function vcAsk() {
   }
 
   vcState.busy = true;
-  vcStatus("Sia is thinking…");
+  vcStatus(vcState.mode === "chat" ? "Sia is typing…" : "Sia is thinking…");
   vcSyncButtons();
   if (inp) inp.value = "";
+  var imagePreview = vcState.imagePreview;
   var board = [{ type: "heading", content: q || "📷 Photo question" }];
+
+  if (vcState.mode === "chat") {
+    vcBubble("user", q || "📷 Photo", imagePreview);
+    vcClearImage();
+  }
 
   // Sia speaks — same voice service as the rest of the app.
   function speakAnswer(text) {
@@ -242,7 +331,7 @@ async function vcAsk() {
       var data = await res.json().catch(function () { return {}; });
       if (!res.ok) throw new Error(data.detail || "Could not read the image.");
       answer = data.sia || data.answer || "";
-      vcClearImage();
+      if (vcState.mode !== "chat") vcClearImage();
     } else {
       var hist = vcState.history.slice(-8).map(function (m) {
         return { role: m.role, content: m.content };
@@ -281,9 +370,15 @@ async function vcAsk() {
 
     vcState.history.push({ role: "user", content: q || "📷 photo" });
     vcState.history.push({ role: "assistant", content: answer });
-    vcRenderBoard(board);
+    if (vcState.mode === "chat") {
+      // Normal chat: full answer inline. Speak only if Voice is ON.
+      vcBubble("assistant", answer);
+      if (typeof siaVoiceEnabled !== "undefined" && siaVoiceEnabled) speakAnswer(answer);
+    } else {
+      vcRenderBoard(board);
+      speakAnswer(answer);
+    }
     vcStatus("");
-    speakAnswer(answer);
   } catch (e) {
     vcStatus(e.message || "Something went wrong. Try again.");
   } finally {

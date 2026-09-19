@@ -614,7 +614,14 @@
 
     <section id="page-voice-classroom" class="page">
       <div class="vc-layout">
-        <div class="vc-board-panel">
+        <div class="vc-mode-bar">
+          <div class="vc-mode-switch" role="tablist">
+            <button type="button" id="vc-mode-chat" class="vc-mode-btn" onclick="vcSetMode('chat')">💬 Chat</button>
+            <button type="button" id="vc-mode-class" class="vc-mode-btn" onclick="vcSetMode('class')">🎓 Classroom</button>
+          </div>
+          <span class="vc-mode-hint" id="vc-mode-hint">Normal chat — full answers, no board.</span>
+        </div>
+        <div class="vc-board-panel" id="vc-class-panel">
           <div class="vc-board-head">
             <h2>&#127891; Sia Voice Classroom</h2>
             <select id="vc-subject" class="vc-subject-select" aria-label="Subject"></select>
@@ -622,6 +629,9 @@
           </div>
           <div id="vc-board" class="vc-board"></div>
           <p id="vc-status" class="vc-status"></p>
+        </div>
+        <div class="vc-chat-panel hidden" id="vc-chat-panel">
+          <div id="vc-chat" class="vc-chat"></div>
         </div>
         <div class="vc-compose">
           <img id="vc-image-preview" class="vc-image-preview" alt="" style="display:none" onclick="vcClearImage()" title="Tap to remove" />
@@ -631,7 +641,7 @@
             <input type="file" id="vc-image-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="vcImageSelected(this)" />
             <button type="button" id="vc-mic-btn" class="btn-action vc-mic" onclick="vcToggleMic()"><span>Hold to ask</span></button>
           </div>
-          <div class="vc-compose-row2">
+          <div class="vc-compose-row2" id="vc-class-actions">
             <button type="button" id="vc-ask-btn" class="btn-action" onclick="vcAsk()">Teach me &#8594;</button>
             <button type="button" class="btn-secondary btn-sm" onclick="loadVoiceClassroom()">New board</button>
           </div>
