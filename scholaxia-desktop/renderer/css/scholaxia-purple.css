@@ -1030,6 +1030,7 @@ html[data-app-theme="dark"] .btn-secondary {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   animation: pq-pop 0.3s ease backwards;
 }
+.pq-card:has(.pq-card-cover) { padding: 0; gap: 12px; overflow: hidden; }
 .pq-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(124, 58, 237, 0.12); }
 @keyframes pq-pop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .pq-card-tag {
@@ -1045,13 +1046,20 @@ html[data-app-theme="dark"] .btn-secondary {
 }
 .pq-card-cover {
   position: relative;
-  margin: -16px -16px 0;
-  height: 120px;
-  border-radius: 16px 16px 0 0;
+  margin: 0;
+  width: 100%;
+  height: 150px;
+  border-radius: 0;
   overflow: hidden;
   background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(59, 130, 246, 0.08));
 }
 .pq-card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pq-card-cover + .pq-card-tag,
+.pq-card-cover + h4 { margin-left: 16px; }
+.pq-card-cover ~ .pq-card-foot { margin: 0 16px 0; }
+.pq-card-cover ~ .pq-card-desc { margin-left: 16px; margin-right: 16px; }
+.pq-card > .pq-card-tag:first-child,
+.pq-card > h4:first-child { align-self: flex-start; }
 .pq-card-cover.pq-cover-fallback::after {
   content: "📄";
   position: absolute;

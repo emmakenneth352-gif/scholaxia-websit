@@ -1,29 +1,19 @@
 """
-Sia Kind AI Service — enhanced inference for young learners.
-Uses custom system prompt + multi-model fallback for maximum intelligence.
+Sia Kind AI Service — raw DeepSeek passthrough for young learners.
+Decision: no system prompt, no preamble wrapper — send the child's message to
+DeepSeek as-is and return its reply untouched (minus output sanitisation).
 """
 
-from app.ai.kind_prompt_builder import (
-    KIND_MASTER_SYSTEM,
-    build_kind_chat_prompt,
-    build_kind_lesson_prompt,
-    build_kind_quiz_prompt,
-    build_kind_homework_prompt,
-)
 from app.ai.model_backend import run_inference
-from app.ai.safety_filter import is_educational, sanitize_output
-from app.ai.sia_conversation import analyze_conversation, build_conversation_intel
-from app.ai.weakness_analyzer import (
-    record_interaction,
-    get_weak_topics,
-    get_student_history,
-)
-from app.ai.sia_intelligence import extract_recent_topics
+from app.ai.safety_filter import sanitize_output
 
 
 async def _get_child_memory(user_id: str, subject: str) -> dict:
     """Child learning memory for prompt injection (same store as student Sia)."""
     try:
+        from app.ai.weakness_analyzer import get_weak_topics, get_student_history
+        from app.ai.sia_intelligence import extract_recent_topics
+
         weak = await get_weak_topics(user_id)
         history = await get_student_history(user_id)
         weak_list = weak.get(subject, []) if isinstance(weak, dict) else []
@@ -47,35 +37,13 @@ async def kind_chat(
     favorite_subjects: list = None,
     conversation_history: list = None,
 ) -> str:
-    safe, reason = is_educational(question)
-    if not safe:
-        return reason
-
-    child_memory = await _get_child_memory(user_id, subject)
-    prompt = build_kind_chat_prompt(
-        question=question,
-        subject=subject,
-        age_group=age_group,
-        grade_level=grade_level,
-        child_name=child_name,
-        language=language,
-        learning_goals=learning_goals,
-        favorite_subjects=favorite_subjects,
-        child_memory=child_memory,
-    )
-    conv_intel = build_conversation_intel(question, conversation_history, audience="kind")
-    conv = analyze_conversation(question, conversation_history)
-    system = KIND_MASTER_SYSTEM
-    if conv_intel:
-        system = f"{system}\n\n{conv_intel}"
-    temp = 0.38 if conv.get("is_follow_up") else 0.45
     try:
         raw = await run_inference(
-            prompt,
+            question,
             conversation_history=conversation_history,
-            system_prompt=system,
-            max_tokens=6144,
-            temperature=temp,
+            system_prompt="",
+            max_tokens=4096,
+            temperature=None,
         )
     except RuntimeError as e:
         return f"Sia Kind needs a moment — {str(e)[:100]}. Try again soon!"
@@ -84,9 +52,7 @@ async def kind_chat(
             f"Sorry {child_name}, I couldn't answer that properly. "
             "Can you ask again in different words?"
         )
-    answer = sanitize_output(raw)
-    await record_interaction(student_id=user_id, subject=subject, question=question, answer=answer)
-    return answer
+    return sanitize_output(raw)
 
 
 async def kind_lesson(
@@ -98,13 +64,8 @@ async def kind_lesson(
     grade_level: str = None,
     language: str = "english",
 ) -> str:
-    prompt = build_kind_lesson_prompt(
-        topic=topic, subject=subject, age_group=age_group,
-        grade_level=grade_level, child_name=child_name, language=language,
-    )
-    raw = await run_inference(prompt, system_prompt=KIND_MASTER_SYSTEM, max_tokens=4096, temperature=0.5)
+    raw = await run_inference(topic, system_prompt="", max_tokens=4096, temperature=None)
     answer = sanitize_output(raw)
-    await record_interaction(student_id=user_id, subject=subject, question=f"Lesson: {topic}", answer=answer)
     return answer
 
 
@@ -119,12 +80,16 @@ async def kind_quiz(
     import json
     import re
 
-    prompt = build_kind_quiz_prompt(
-        topic=topic, subject=subject, age_group=age_group,
-        num_questions=num_questions, child_name=child_name,
+    n = min(max(num_questions, 3), 10)
+    quiz_instruction = (
+        f"Create a fun multiple-choice quiz for {child_name} (age {age_group}) "
+        f"on the topic: {topic}. Return ONLY valid JSON in this exact shape: "
+        '{"intro": "One short friendly sentence.", "questions": [{"question": "...", '
+        '"options": {"A": "...", "B": "...", "C": "...", "D": "..."}, "correct": "A"}]}. '
+        f"Exactly {n} questions. No markdown fences, no extra text."
     )
     raw = await run_inference(
-        prompt, system_prompt=KIND_MASTER_SYSTEM, max_tokens=3000, temperature=0.5
+        quiz_instruction, system_prompt="", max_tokens=3000, temperature=None
     )
     text = sanitize_output(raw or "")
 
@@ -238,11 +203,6 @@ async def kind_homework_help(
     age_group: str = "6-8",
     child_attempt: str = None,
 ) -> str:
-    prompt = build_kind_homework_prompt(
-        question=question, subject=subject, age_group=age_group,
-        child_name=child_name, child_attempt=child_attempt,
-    )
-    raw = await run_inference(prompt, system_prompt=KIND_MASTER_SYSTEM, max_tokens=2048, temperature=0.45)
+    raw = await run_inference(question, system_prompt="", max_tokens=2048, temperature=None)
     answer = sanitize_output(raw)
-    await record_interaction(student_id=user_id, subject=subject, question=question, answer=answer)
     return answer

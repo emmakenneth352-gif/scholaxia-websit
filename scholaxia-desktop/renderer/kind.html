@@ -184,8 +184,6 @@
           <div id="kind-sia-messages" class="kind-sia-messages"></div>
           <div class="kind-sia-compose">
             <input type="text" id="kind-sia-input" placeholder="Ask Sia a question…" onkeydown="if(event.key==='Enter')kindSendSia()" />
-            <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('kind-sia-image-input').click()">📷</button>
-            <input type="file" id="kind-sia-image-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="kindSendImage(this)" />
             <button type="button" class="btn-action" onclick="kindSendSia()">Send</button>
           </div>
         </div>

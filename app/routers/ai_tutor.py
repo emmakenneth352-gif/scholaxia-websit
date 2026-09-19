@@ -261,23 +261,15 @@ async def ask_sia(
         if image_b64:
             if "," in image_b64[:64]:  # strip a data URL prefix if a client sends one
                 image_b64 = image_b64.split(",", 1)[1]
-            vision_prompt = (
-                f"The student {student_name} (class level {level}) sent a photo and asks: "
-                f'\"{payload.question}\"\n\n'
-                "1. Describe what you see in the image.\n"
-                "2. If it is a question or problem, solve it step by step.\n"
-                "3. If it is a diagram or graph, explain it clearly.\n"
-                f"4. Teach the idea at {level} level with Nigerian examples.\n"
-                "5. End with one short question to check understanding.\n"
-                "Answer as Sia — warm, clear, structured, with markdown."
-            )
+            vision_prompt = payload.question or "What is in this image? Explain it."
             try:
                 from app.ai.model_backend import run_inference as _vision_run
                 answer = await _vision_run(
                     vision_prompt,
                     image_base64=image_b64,
-                    system_prompt=None,
+                    system_prompt="",
                     max_tokens=2048,
+                    temperature=None,
                 )
                 try:
                     board = extract_board_content(answer)

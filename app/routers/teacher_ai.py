@@ -13,16 +13,8 @@ from typing import Literal, Optional, List
 import io
 
 from app.core.deps import require_teacher
-from app.ai.prompt_builder import (
-    build_teacher_prompt,
-    build_teacher_system_prompt,
-    TEACHER_TASK_PROFILES,
-    _is_casual_greeting,
-)
-from app.ai.sia_accuracy import detect_teacher_task
-from app.ai.sia_conversation import analyze_conversation, build_conversation_intel
+from app.ai.prompt_builder import TEACHER_TASK_PROFILES
 from app.ai.model_backend import run_inference
-from app.ai.safety_filter import sanitize_output
 
 router = APIRouter(prefix="/teacher-ai", tags=["Teacher AI"])
 
@@ -54,26 +46,7 @@ async def teacher_ask_ai(
     """
     try:
         task = payload.task if payload.task in VALID_TASKS else "general"
-        if task == "general":
-            detected = detect_teacher_task(payload.details)
-            if detected in VALID_TASKS:
-                task = detected
 
-        if task == "general" and _is_casual_greeting(payload.details):
-            return TeacherAIResponse(
-                result=(
-                    "Hello! I'm your Scholaxia teaching assistant. "
-                    "What would you like help with — a lesson plan, assignment, quiz, grading, or something else?"
-                ),
-                task=task,
-                subject=payload.subject,
-            )
-
-        system = build_teacher_system_prompt(
-            task=task,
-            subject=payload.subject,
-            education_level=payload.education_level,
-        )
         history = None
         if payload.conversation_history:
             history = []
@@ -90,28 +63,13 @@ async def teacher_ask_ai(
                     role = "user"
                 history.append({"role": role, "content": content[:4000]})
 
-        conv_intel = build_conversation_intel(
-            payload.details, history, audience="teacher",
-        )
-        if conv_intel:
-            system = f"{system}\n\n{conv_intel}"
-        prompt = build_teacher_prompt(
-            task=task,
-            subject=payload.subject,
-            education_level=payload.education_level,
-            details=payload.details,
-        )
-
-        conv = analyze_conversation(payload.details, history)
-        temp = 0.38 if conv.get("is_follow_up") else (0.42 if task in ("quiz", "lesson_plan", "grading") else 0.50)
-
         try:
             raw_result = await run_inference(
-                prompt,
-                system_prompt=system,
+                payload.details,
+                system_prompt="",
                 conversation_history=history,
                 max_tokens=8192,
-                temperature=temp,
+                temperature=None,
             )
         except RuntimeError as e:
             raise HTTPException(status_code=503, detail=str(e))
@@ -127,7 +85,7 @@ async def teacher_ask_ai(
                 detail="Teacher AI could not respond. Please try again.",
             )
 
-        result = sanitize_output(raw_result)
+        result = raw_result.strip()
 
         return TeacherAIResponse(
             result=result,
