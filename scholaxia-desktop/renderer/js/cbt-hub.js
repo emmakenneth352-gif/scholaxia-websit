@@ -106,11 +106,21 @@ async function loadCbtHubPage() {
   try {
     var data = await api("/api/v1/cbt/practice/home");
     cbtHubState.home = data || {};
+    cbtHubState.offlineMode = false;
+    try { localStorage.setItem("sia_cbt_hub_home", JSON.stringify(data || {})); } catch (eCache) {}
     renderCbtHub();
   } catch (e) {
-    // Offline (or server unreachable): never leave the screen empty — show
-    // every downloaded exam so practice continues without data.
-    renderCbtHubOffline(e);
+    // Offline (or server unreachable): never leave the screen empty. Reuse the
+    // last cached board list so the hub stays active without data.
+    var cachedHome = null;
+    try { cachedHome = JSON.parse(localStorage.getItem("sia_cbt_hub_home") || "null"); } catch (eParse) { cachedHome = null; }
+    if (cachedHome && cachedHome.exam_types && cachedHome.exam_types.length) {
+      cbtHubState.home = cachedHome;
+      cbtHubState.offlineMode = true;
+      renderCbtHub();
+    } else {
+      renderCbtHubOffline(e);
+    }
   }
 }
 
@@ -250,7 +260,10 @@ function renderCbtHub() {
   if (!grid) return;
   var home = cbtHubState.home || {};
   var settings = home.settings || {};
-  if (settings.cbt_enabled === false) {
+  var offlineBanner = cbtHubState.offlineMode
+    ? '<div class="cbt-hub-note" style="border:1px solid #f59e0b;background:rgba(245,158,11,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px">&#9888; <strong>Offline mode</strong> — starting a new CBT needs data, but your downloaded exams below work without it.</div>'
+    : "";
+  if (settings.cbt_enabled === false && !cbtHubState.offlineMode) {
     grid.innerHTML = '<div class="empty-state-premium"><h3>CBT disabled</h3><p>Admin has turned off CBT practice.</p></div>';
     return;
   }
@@ -264,6 +277,7 @@ function renderCbtHub() {
     return;
   }
   grid.innerHTML = '<div class="cbt-hub-wrap">' +
+    offlineBanner +
     '<p class="cbt-hub-note">Choose <strong>JAMB</strong>, <strong>WAEC</strong>, <strong>NECO</strong>, or <strong>Junior WAEC</strong>. Question counts and timers come from admin CBT Settings.</p>' +
     renderCbtHubDownloadedHtml() +
     '<div class="cbt-type-grid">' +
@@ -338,6 +352,9 @@ function renderCbtBoard(grid) {
   }) || { has_access: false };
 
   var html = '<div class="cbt-hub-wrap">' +
+    (cbtHubState.offlineMode
+      ? '<div class="cbt-hub-note" style="border:1px solid #f59e0b;background:rgba(245,158,11,.12);border-radius:10px;padding:10px 14px;margin-bottom:12px">&#9888; <strong>Offline mode</strong> — starting needs data. Reconnect and tap Refresh.</div>'
+      : "") +
     '<p class="cbt-hub-note"><button type="button" class="btn-secondary btn-sm" onclick="loadCbtHubPage()">← Exam types</button></p>' +
     "<h3 style=\"margin:8px 0\">" +
     cbtEsc(cbtBoardLabel(board)) +
@@ -657,6 +674,15 @@ async function cbtHubRegisterSubjects(board, subjects, btn) {
 
 async function cbtHubStartPractice(examType, subjects) {
   if (cbtHubState.busy) return;
+  // Starting a new practice needs the server — downloaded exams are the
+  // offline path (hub shows them in "Ready offline").
+  if (cbtHubState.offlineMode || (typeof navigator !== "undefined" && !navigator.onLine)) {
+    alert(
+      "You are offline — starting a new CBT needs data.\n\n" +
+      "Your downloaded exams still work: go back and tap one under \"Ready offline\"."
+    );
+    return;
+  }
   cbtHubState.busy = true;
   try {
     var attempt = await api("/api/v1/cbt/practice/start", {
