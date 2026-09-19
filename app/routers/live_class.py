@@ -811,7 +811,7 @@ async def _notify_for_class(
                     subject=live_class.subject,
                     title=f"Upcoming {live_class.subject} class",
                     body=f"Â«{live_class.title}Â» is scheduled for {when}.",
-                    notification_type="live_class_upcoming",
+                    notification_type="live_class",
                     data={
                         **data,
                         "start_time": (start or live_class.start_time).isoformat(),
@@ -1790,16 +1790,38 @@ async def list_live_classes(
                 select(StudentProfile).where(StudentProfile.user_id == current_user["sub"])
             )
             profile = prof_res.scalar_one_or_none()
+            # Students with an approved/scheduled session request assigned to this
+            # teacher are notified when the class goes live — the list must show
+            # those classes too, even when subject/visibility rules would hide them.
+            assigned_pairs = set()
+            try:
+                req_res = await db.execute(
+                    select(LiveSessionRequest).where(
+                        LiveSessionRequest.student_id == parse_uuid(current_user["sub"]),
+                        LiveSessionRequest.status.in_([
+                            LiveSessionRequestStatus.approved,
+                            LiveSessionRequestStatus.scheduled,
+                        ]),
+                    )
+                )
+                for req in req_res.scalars().all():
+                    if req.assigned_teacher_id:
+                        assigned_pairs.add(
+                            (str(req.assigned_teacher_id), (req.subject or "").strip().lower())
+                        )
+            except Exception:
+                assigned_pairs = set()
             visible = []
             for c in classes:
                 try:
                     ok, _ = await _student_can_access_class(db, current_user["sub"], c, profile)
-                    if ok:
-                        visible.append(c)
                 except Exception:
                     # Never fail the whole Live Now list because one class check blew up
-                    if is_free_live_class(getattr(c, "visibility", None)):
-                        visible.append(c)
+                    ok = is_free_live_class(getattr(c, "visibility", None))
+                if not ok and (str(c.teacher_id), (c.subject or "").strip().lower()) in assigned_pairs:
+                    ok = True
+                if ok:
+                    visible.append(c)
             classes = visible
         except Exception:
             classes = [

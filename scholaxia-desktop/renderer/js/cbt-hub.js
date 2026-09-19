@@ -558,9 +558,10 @@ function launchPracticeAttempt(attempt) {
     is_practice: true,
   };
   answers = {};
-  // Restore saved answers by question index
+  // Restore saved answers by question index (rows can be null placeholders
+  // for sections whose questions load on demand)
   (pack.questions || []).forEach(function (q, i) {
-    if (pack.answers && pack.answers[q.id]) answers[i] = pack.answers[q.id];
+    if (q && pack.answers && pack.answers[q.id]) answers[i] = pack.answers[q.id];
   });
   currentQ = 0;
   if (pack.sections && pack.sections.length > 1 && pack.section_index) {

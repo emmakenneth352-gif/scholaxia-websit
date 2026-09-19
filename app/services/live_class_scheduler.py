@@ -9,8 +9,16 @@ from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
 from app.core.datetime_utils import naive_utc_now
-from app.models.live_class import LiveClass, ClassAttendance
-from app.services.notification_service import send_subject_notification
+from app.models.live_class import (
+    ClassAttendance,
+    LiveClass,
+    LiveClassVisibility,
+)
+from app.services.notification_service import (
+    send_all_students_notification,
+    send_subject_notification,
+    send_user_notification,
+)
 from app.websockets.live_class_ws import broadcast as ws_broadcast
 
 _scheduler_task = None
@@ -23,6 +31,70 @@ async def run_live_class_scheduler():
         except Exception as exc:
             print(f"[live_class_scheduler] tick error: {exc}")
         await asyncio.sleep(60)
+
+
+async def _notify_class_audience(db, live_class) -> None:
+    """Notify exactly the students who can SEE this class, matching the
+    list-endpoint visibility rules — otherwise students get a push for a
+    class that never shows on their Live Class screen."""
+    vis = (live_class.visibility or LiveClassVisibility.subject.value).lower()
+    data = {
+        "class_id": str(live_class.id),
+        "room_id": live_class.room_id,
+        "join_code": live_class.join_code,
+        "visibility": vis,
+    }
+    if vis == LiveClassVisibility.public.value:
+        await send_all_students_notification(
+            db=db,
+            title="Live class starting now",
+            body=f"\u00ab{live_class.title}\u00bb is live — copy your code from the app popup.",
+            notification_type="live_class",
+            data=data,
+        )
+    elif vis == LiveClassVisibility.private.value:
+        import json as _json
+
+        invited = live_class.invited_student_ids
+        if isinstance(invited, str):
+            try:
+                invited = _json.loads(invited)
+            except Exception:
+                invited = []
+        for sid in invited or []:
+            try:
+                await send_user_notification(
+                    db,
+                    str(sid),
+                    "Private live class starting now",
+                    f"\u00ab{live_class.title}\u00bb — code {live_class.join_code} is in your Access Code tab.",
+                    "live_class",
+                    data,
+                )
+            except Exception:
+                pass
+    elif vis == LiveClassVisibility.class_level.value:
+        # Class-level classes have no per-subject student roster — notify everyone
+        # so the push always matches who can see the class on screen.
+        await send_all_students_notification(
+            db=db,
+            title="Live class starting now",
+            body=f"\u00ab{live_class.title}\u00bb ({live_class.academic_class or live_class.subject}) is live — join from Live Class.",
+            notification_type="live_class",
+            data=data,
+        )
+    else:
+        # subject + school_group keep subject-matched notifications; school-group
+        # members are subject-matched in practice and subject classes are
+        # discovered by subject, so the on-screen list agrees with the push.
+        await send_subject_notification(
+            db=db,
+            subject=live_class.subject,
+            title="Live class starting now",
+            body=f"Your {live_class.subject} class \u00ab{live_class.title}\u00bb is live. Join from your dashboard.",
+            notification_type="live_class",
+            data=data,
+        )
 
 
 async def _tick():
@@ -39,17 +111,7 @@ async def _tick():
         for live_class in start_res.scalars().all():
             live_class.is_live = True
             try:
-                await send_subject_notification(
-                    db=db,
-                    subject=live_class.subject,
-                    title="Live class starting now",
-                    body=f"Your {live_class.subject} class \"{live_class.title}\" is live — join now.",
-                    notification_type="live_class",
-                    data={
-                        "class_id": str(live_class.id),
-                        "room_id": live_class.room_id,
-                    },
-                )
+                await _notify_class_audience(db, live_class)
             except Exception:
                 pass
             try:
