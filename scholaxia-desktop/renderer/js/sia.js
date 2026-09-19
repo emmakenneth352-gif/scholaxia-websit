@@ -464,6 +464,7 @@ async function askSiaQuestion(question, alreadyShown) {
     var answer = (data && (data.sia || data.answer || data.result)) || "Sorry, I could not answer that.";
     revealSiaAnswer(thinking, answer, function () {
       siaHistory.push({ role: "sia", content: answer });
+      if (typeof siaSpeak === "function") siaSpeak(answer);
     });
   } catch (e) {
     thinking.remove();
@@ -471,6 +472,53 @@ async function askSiaQuestion(question, alreadyShown) {
     appendSiaMessage("sia", "Something went wrong. Please try again.", { scroll: false });
   }
 }
+
+/* Student sends a photo of a question/diagram — Sia vision explains it. */
+async function siaSendImage(inputEl) {
+  var err = document.getElementById("sia-error");
+  if (typeof isCbtExamActive === "function" && isCbtExamActive()) {
+    if (err) err.textContent = "Tutor AI is locked during an exam. Submit your exam first.";
+    return;
+  }
+  var file = inputEl && inputEl.files && inputEl.files[0];
+  if (inputEl) inputEl.value = "";
+  if (!file) return;
+  if (!getSiaLevel()) {
+    err.textContent = "Pick your class level first, then send the image.";
+    promptSiaLevel(false);
+    return;
+  }
+  err.textContent = "";
+  var thinking = createSiaMessageShell("sia");
+  thinking.querySelector(".sia-content").innerHTML = '<span class="sia-thinking">Reading your image…</span>';
+  try {
+    var fd = new FormData();
+    fd.append("image", file);
+    fd.append("question", "Explain this image and help me understand it");
+    fd.append("subject", siaSubject());
+    fd.append("language", "english");
+    var base = typeof API_BASE !== "undefined" ? API_BASE : "";
+    var res = await fetch(base + "/api/v1/sia/analyze-image", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + (typeof getToken === "function" ? getToken() : "") },
+      body: fd,
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.detail || "Could not analyze the image.");
+    var answer = data.sia || data.answer || "I could not read that image — try a clearer photo.";
+    appendSiaMessage("user", "📷 Sent an image");
+    thinking.remove();
+    var shell = createSiaMessageShell("sia");
+    revealSiaAnswer(shell, answer, function () {
+      siaHistory.push({ role: "sia", content: answer });
+      if (typeof siaSpeak === "function") siaSpeak(answer);
+    });
+  } catch (e2) {
+    thinking.remove();
+    err.textContent = e2.message || "Could not analyze the image.";
+  }
+}
+window.siaSendImage = siaSendImage;
 
 async function sendSiaMessage() {
   var input = document.getElementById("sia-input");
@@ -511,3 +559,15 @@ async function sendSiaMessage() {
 
   await askSiaQuestion(question);
 }
+
+/* Reflect the saved voice preference on the toggle button once loaded. */
+(function syncSiaVoiceBtn() {
+  function apply() {
+    var btn = document.getElementById("sia-voice-btn");
+    if (!btn) return;
+    btn.textContent = siaVoiceEnabled ? "🔊 Voice on" : "🔇 Voice off";
+    btn.setAttribute("aria-pressed", siaVoiceEnabled ? "true" : "false");
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", apply);
+  else apply();
+})();

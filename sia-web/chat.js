@@ -162,6 +162,7 @@ async function sendMessage() {
     removeTyping(typingId);
     await typeMessage("sia", answer);
     saveToChat("sia", answer);
+    if (typeof siaSpeak === "function") siaSpeak(answer);
 
   } catch (e) {
     removeTyping(typingId);

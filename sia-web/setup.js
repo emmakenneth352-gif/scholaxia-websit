@@ -6,7 +6,20 @@ let selectedSubjects = [];
 let subjectLimit = 4;
 let allSubjects = [];
 
-const LIMITS = { JAMB: 4, WAEC: 9, NECO: 9 };
+const LIMITS = { JAMB: 4, WAEC: 9, NECO: 9, JUNIOR_WAEC: 9 };
+
+// BECE subjects for Junior WAEC (matches backend JUNIOR_WAEC_SUBJECTS)
+const JUNIOR_WAEC_SUBJECTS = [
+  "English Studies",
+  "Mathematics",
+  "Basic Science",
+  "Basic Technology",
+  "Social Studies",
+  "Business Studies",
+  "Civic Education",
+  "Computer Studies/ICT",
+  "Agricultural Science",
+];
 
 window.onload = async () => {
   if (!token) { window.location.href = "auth.html"; return; }
@@ -46,6 +59,10 @@ function selectExamType(type) {
   const hint = document.getElementById("subject-hint");
   if (type === "JAMB") {
     hint.textContent = "Pick exactly 4 subjects for JAMB.";
+  } else if (type === "JUNIOR_WAEC") {
+    hint.textContent = "Pick up to 9 BECE subjects for Junior WAEC. Set your level to JSS3 below.";
+    const lvl = document.getElementById("education-level");
+    if (lvl) lvl.value = "JSS3";
   } else {
     hint.textContent = `Pick up to ${subjectLimit} subjects for ${type}.`;
   }
@@ -64,7 +81,8 @@ function goToType() {
 
 function renderSubjects() {
   const grid = document.getElementById("subject-grid");
-  grid.innerHTML = allSubjects.map(s => `
+  const pool = examType === "JUNIOR_WAEC" ? JUNIOR_WAEC_SUBJECTS : allSubjects;
+  grid.innerHTML = pool.map(s => `
     <button type="button" class="subject-chip" data-subject="${escAttr(s)}" onclick="toggleSubject('${escAttr(s)}')">
       ${escHtml(s)}
     </button>
@@ -109,6 +127,17 @@ async function saveSetup() {
   if (examType === "JAMB" && selectedSubjects.length !== 4) {
     err.textContent = "Please select exactly 4 subjects for JAMB.";
     return;
+  }
+  if (examType === "JUNIOR_WAEC") {
+    const lvl = document.getElementById("education-level").value;
+    if (!lvl.startsWith("JSS")) {
+      err.textContent = "Junior WAEC is for JSS students — pick a JSS level.";
+      return;
+    }
+    if (!selectedSubjects.length) {
+      err.textContent = "Select at least one BECE subject.";
+      return;
+    }
   }
   if (!selectedSubjects.length) {
     err.textContent = "Select at least one subject.";

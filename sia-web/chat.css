@@ -281,6 +281,15 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
   display: flex; align-items: center; transition: color 0.12s;
 }
 .icon-btn:hover { color: var(--text2); }
+.icon-btn.voice-toggle.voice-off { opacity: 0.55; }
+.icon-btn.is-recording {
+  color: #ef4444;
+  animation: mic-pulse 1.1s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
 
 .send-btn {
   width: 34px; height: 34px; border-radius: 9px;

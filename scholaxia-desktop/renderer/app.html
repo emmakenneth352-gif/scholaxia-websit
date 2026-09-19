@@ -584,6 +584,10 @@
 
           <div class="sia-compose-row">
             <input type="text" id="sia-input" placeholder="Ask Tutor AI anything…" onkeydown="if(event.key==='Enter')sendSiaMessage()" />
+            <button type="button" class="btn-secondary btn-sm sia-voice-toggle" id="sia-voice-btn" onclick="siaToggleVoice()" aria-pressed="true">🔊 Voice on</button>
+            <button type="button" class="btn-secondary btn-sm" id="sia-mic-btn" onclick="siaMicStart()">🎤 Speak</button>
+            <button type="button" class="btn-secondary btn-sm" id="sia-img-btn" onclick="document.getElementById('sia-image-input').click()">📷 Image</button>
+            <input type="file" id="sia-image-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="siaSendImage(this)" />
             <button class="btn-action" onclick="sendSiaMessage()">Send</button>
           </div>
           <p class="sia-level-bar">
@@ -1101,6 +1105,7 @@
 <script src="js/notifications-ui.js"></script>
 
 <script src="js/sia.js"></script>
+<script src="js/sia-voice.js"></script>
 
 <script src="js/voice-recorder.js"></script>
 <script src="js/community.js"></script>

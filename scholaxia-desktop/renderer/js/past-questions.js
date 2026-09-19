@@ -102,6 +102,11 @@ function renderPastQuestionsPage() {
       }
       return (
         '<article class="pq-card" style="animation-delay:' + Math.min(i, 14) * 0.05 + 's">' +
+        '<div class="pq-card-cover">' +
+        (it.cover_image_url
+          ? '<img src="' + pqEsc(it.cover_image_url) + '" alt="" loading="lazy" onerror="this.parentNode.classList.add(\'pq-cover-fallback\');this.remove()" />'
+          : "") +
+        '</div>' +
         '<span class="pq-card-tag">' + pqEsc(catTag) + "</span>" +
         "<h4>" + pqEsc(title) + "</h4>" +
         (desc ? '<p class="pq-card-desc">' + pqEsc(desc) + "</p>" : "") +

@@ -146,6 +146,16 @@
               </svg>
             </button>
             <input type="file" id="image-input" accept="image/*" style="display:none" onchange="handleImageSelect(event)" />
+            <button id="mic-btn" onclick="siaMicStart()" class="icon-btn" title="Speak your question">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/>
+              </svg>
+            </button>
+            <button id="voice-btn" onclick="siaToggleVoice()" class="icon-btn voice-toggle" title="Read answers aloud" aria-pressed="true">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+              </svg>
+            </button>
             <button id="send-btn" onclick="sendMessage()" class="send-btn" title="Send">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
             </button>
@@ -160,6 +170,7 @@
 <!-- Sidebar overlay for mobile -->
 <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar()"></div>
 
+<script src="sia-voice.js"></script>
 <script src="chat.js"></script>
 <script>
   if (!localStorage.getItem("sia_token")) window.location.href = "auth.html";

@@ -351,6 +351,36 @@ async function kindSendSia() {
   }
 }
 
+/* Child sends a photo — Sia Kind explains it in simple words, then reads it aloud. */
+async function kindSendImage(inputEl) {
+  var err = document.getElementById("kind-sia-error");
+  var file = inputEl && inputEl.files && inputEl.files[0];
+  if (inputEl) inputEl.value = "";
+  if (!file) return;
+  kindSiaHistory.push({ isAi: false, text: "📷 I sent a picture" });
+  renderKindSia();
+  try {
+    var fd = new FormData();
+    fd.append("image", file);
+    fd.append("question", "What is in this picture? Help me learn from it");
+    var base = typeof API_BASE !== "undefined" ? API_BASE : "";
+    var res = await fetch(base + "/api/v1/kind/sia/analyze-image", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + (typeof getToken === "function" ? getToken() : "") },
+      body: fd,
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.detail || "Sia can't see the picture right now.");
+    var reply = data.sia_kind || data.answer || "I couldn't look at that picture — show me again!";
+    kindSiaHistory.push({ isAi: true, text: reply });
+    renderKindSia();
+    if (typeof kindSpeak === "function") kindSpeak(reply);
+  } catch (e2) {
+    if (err) err.textContent = e2.message || "Sia is resting. Try again!";
+  }
+}
+window.kindSendImage = kindSendImage;
+
 async function loadKindLive() {
   var el = document.getElementById("kind-live-list");
   if (!el) return;

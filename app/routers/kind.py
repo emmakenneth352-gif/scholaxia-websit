@@ -3,7 +3,11 @@ Kind (young learner) API + Sia Kind AI.
 Role: student | teacher | kind
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+import base64
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, Field, EmailStr
@@ -186,6 +190,80 @@ async def sia_kind_chat(
             status_code=503,
             detail=f"Sia Kind could not respond right now. Please try again. ({type(e).__name__})",
         ) from e
+
+
+@router.post("/kind/sia/analyze-image")
+async def sia_kind_analyze_image(
+    image: UploadFile = File(...),
+    question: str = Form(default="What is in this picture? Help me learn from it"),
+    current_user: dict = Depends(require_kind),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    POST /api/v1/kind/sia/analyze-image
+    A child sends a photo of homework, a book page, or a drawing.
+    Sia Kind explains it in simple, child-friendly words.
+    """
+    if image.content_type not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, or GIF images are supported.")
+    image_bytes = await image.read()
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large. Maximum size is 10MB.")
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    name = await _get_child_name(current_user["sub"], db)
+    profile = await _get_kind_profile(current_user["sub"], db)
+    prompt = f"""You are Sia, a warm and friendly teacher for young children.
+
+Child's name: {name}
+Age group: {profile.age_group or "6-8"}
+Grade: {profile.grade_level or "Primary 2"}
+
+The child sent you a picture. It could be homework, a book page, a drawing,
+an animal, or anything they want to show you.
+
+What to do:
+1. Say something happy about the picture first.
+2. Explain what you see in very simple, short sentences.
+3. Teach one small thing from it (a word, a number, a colour, a fact).
+4. Ask the child one easy, fun question to keep them excited.
+
+Child's message: {question}
+
+Use simple words a {profile.age_group or "6-8"} year old understands. Keep it short and joyful.
+"""
+    try:
+        from app.ai.model_backend import run_inference
+        answer = await run_inference(prompt, image_base64=image_base64)
+        return {"sia_kind": answer, "image_analyzed": True}
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Sia can't look at pictures right now. Please try again later."
+        )
+
+
+@router.post("/kind/sia/speak")
+async def sia_kind_speak(
+    payload: dict,
+    current_user: dict = Depends(require_kind),
+):
+    """Read any Sia Kind reply aloud (same voice service as the student side)."""
+    text = str((payload or {}).get("text") or "").strip()[:1400]
+    if not text:
+        raise HTTPException(status_code=400, detail="Provide text to speak.")
+    from app.services.tts_service import text_to_speech
+
+    audio_bytes = await text_to_speech(text=text, language="english")
+    if not audio_bytes:
+        raise HTTPException(status_code=503, detail="Voice service unavailable.")
+    return StreamingResponse(
+        io.BytesIO(audio_bytes),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": "inline; filename=sia_kind.mp3", "Cache-Control": "no-store"},
+    )
 
 
 @router.post("/kind/sia/learn")

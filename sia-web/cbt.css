@@ -73,6 +73,8 @@ body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-ser
 .badge-WAEC { background: rgba(124,58,237,0.2); color: var(--accent2); }
 .badge-NECO { background: rgba(34,197,94,0.15); color: var(--green); }
 .badge-JAMB { background: rgba(245,158,11,0.15); color: var(--yellow); }
+.badge-JUNIOR_WAEC { background: rgba(249,115,22,0.18); color: #fb923c; }
+.badge-BECE { background: rgba(249,115,22,0.18); color: #fb923c; }
 .badge-SCHOOL { background: rgba(239,68,68,0.15); color: var(--red); }
 
 .exam-card h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
