@@ -7,14 +7,17 @@ import 'cbt_packages_screen.dart';
 import 'cbt_practice_runner_screen.dart';
 
 /// Board-first CBT practice (like the desktop app):
-/// - Tabs: JAMB | WAEC | NECO — each loads ONLY that board's question bank.
+/// - Tabs: JAMB | WAEC | NECO | JUNIOR WAEC — each loads ONLY that board's
+///   question bank.
 /// - WAEC/NECO: pick a subject → start. First start registers & locks the
 ///   subjects; later changes go to admin via a subject-change request.
+/// - Junior WAEC: unlock → pick up to 9 subjects → START opens ONE combined
+///   attempt whose sections cover every picked subject.
 /// - Locked boards open the coupon/pay dialog before anything else.
 /// - Questions auto-cache for offline; new questions sync when online.
 class CbtScreen extends StatefulWidget {
   const CbtScreen({super.key, this.initialTab});
-  final String? initialTab; // 'JAMB' | 'WAEC' | 'NECO'
+  final String? initialTab; // 'JAMB' | 'WAEC' | 'NECO' | 'JUNIOR_WAEC'
   @override
   State<CbtScreen> createState() => _CbtScreenState();
 }
@@ -106,7 +109,11 @@ class _CbtScreenState extends State<CbtScreen> {
   /// own list; older accounts fall back to the shared ssce_subjects column).
   List<String> _boardRegistered(String board) {
     final p = (_home?['profile'] as Map<String, dynamic>?) ?? const {};
-    final own = ((board == 'WAEC' ? p['waec_subjects'] : p['neco_subjects'])
+    final own = ((board == 'WAEC'
+            ? p['waec_subjects']
+            : board == 'NECO'
+                ? p['neco_subjects']
+                : p['junior_subjects'])
             as List?) ??
         const [];
     if (own.isNotEmpty) return own.map((e) => e.toString()).toList();
@@ -140,6 +147,7 @@ class _CbtScreenState extends State<CbtScreen> {
 
   bool _ssceStarted() {
     final p = (_home?['profile'] as Map<String, dynamic>?) ?? const {};
+    if (p['junior_started'] == true) return true;
     return p['ssce_started'] == true;
   }
 
@@ -213,6 +221,17 @@ class _CbtScreenState extends State<CbtScreen> {
             return;
           }
           subjects.addAll(_picked);
+        }
+      } else if (board == 'JUNIOR_WAEC') {
+        // One combined attempt — every picked subject becomes a section.
+        final registered = _boardRegistered(board);
+        if (registered.isNotEmpty) {
+          subjects.addAll(registered);
+        } else if (_picked.isNotEmpty) {
+          subjects.addAll(_picked);
+        } else {
+          _snack('Select your Junior WAEC subjects first.');
+          return;
         }
       } else {
         final registered = _boardRegistered(board);
@@ -302,6 +321,9 @@ class _CbtScreenState extends State<CbtScreen> {
       );
 
   Widget _boardTabs() {
+    const boards = ['JAMB', 'WAEC', 'NECO', 'JUNIOR_WAEC'];
+    String label(String b) =>
+        b == 'JUNIOR_WAEC' ? 'JUNIOR WAEC' : b;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -310,7 +332,7 @@ class _CbtScreenState extends State<CbtScreen> {
         border: Border.all(color: context.borderColor),
       ),
       child: Row(children: [
-        for (final board in const ['JAMB', 'WAEC', 'NECO'])
+        for (final board in boards)
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -325,17 +347,20 @@ class _CbtScreenState extends State<CbtScreen> {
                   color: _tab == board ? context.accentColor : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     _boardLogo(board, size: 20, plain: true),
-                    const SizedBox(width: 6),
-                    Text(
-                      board,
-                      style: TextStyle(
-                        color: _tab == board ? Colors.white : context.textColor,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 13,
+                    const SizedBox(height: 4),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label(board),
+                        style: TextStyle(
+                          color: _tab == board ? Colors.white : context.textColor,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -391,17 +416,19 @@ class _CbtScreenState extends State<CbtScreen> {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$_tab CBT',
+            children: [              Text(_tab == 'JUNIOR_WAEC' ? 'JUNIOR WAEC CBT' : '$_tab CBT',
                   style: const TextStyle(
                       color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
               const SizedBox(height: 2),
               Text(
+
                 locked
                     ? 'Locked — unlock with coupon or payment'
                     : _tab == 'JAMB'
                         ? 'One combined exam · all ${_settings['jamb_subjects_required'] ?? 4} subjects'
-                        : 'Subject practice from your registered subjects',
+                        : _tab == 'JUNIOR_WAEC'
+                            ? 'One combined exam · all your selected subjects'
+                            : 'Subject practice from your registered subjects',
                 style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
               ),
             ],
@@ -426,6 +453,7 @@ class _CbtScreenState extends State<CbtScreen> {
       return _lockedInfo(board);
     }
     if (board == 'JAMB') return _jambSubjects();
+    if (board == 'JUNIOR_WAEC') return _juniorWaecSubjects();
     return _ssceSubjects();
   }
 
@@ -513,6 +541,111 @@ class _CbtScreenState extends State<CbtScreen> {
       const SizedBox(height: 10),
       _changeRequestHint('JAMB', locked),
     ]);
+  }
+
+  /* Junior WAEC: unlock → pick subjects (up to 9) → START opens one
+     combined attempt with a question section for every picked subject. */
+  Widget _juniorWaecSubjects() {
+    const allSubjects = [
+      'English Language', 'Mathematics', 'Basic Science', 'Social Studies',
+      'Civic Education', 'Business Studies', 'Computer Studies', 'Agricultural Science',
+      'Home Economics', 'Physical & Health Education', 'CRS', 'IRS',
+      'French', 'Yoruba', 'Igbo', 'Hausa',
+    ];
+    final registered = _boardRegistered('JUNIOR_WAEC');
+    final subjects = registered.isNotEmpty ? registered : allSubjects;
+    final lockedToRegistered = registered.isNotEmpty;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(
+        lockedToRegistered
+            ? 'Your Junior WAEC subjects — START opens all their questions in one exam.'
+            : 'Select your subjects (up to 9), then START — every subject\'s questions load in one exam.',
+        style: TextStyle(color: context.greyColor, fontSize: 12),
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: subjects.map((s) {
+          final on = lockedToRegistered || _picked.contains(s);
+          return FilterChip(
+            selected: on,
+            onSelected: lockedToRegistered
+                ? null
+                : (_) {
+                    setState(() {
+                      if (_picked.contains(s)) {
+                        _picked.remove(s);
+                      } else if (_picked.length < 9) {
+                        _picked.add(s);
+                      } else {
+                        _snack('Maximum 9 subjects.');
+                      }
+                    });
+                  },
+            label: Text(s),
+            selectedColor: context.accentColor.withOpacity(0.25),
+            checkmarkColor: context.accentColor,
+          );
+        }).toList(),
+      ),
+      const SizedBox(height: 18),
+      SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: _starting ? null : _startJuniorWaec,
+          icon: _starting
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.play_arrow_rounded),
+          label: Text(_starting ? 'Opening…' : 'START JUNIOR WAEC'),
+        ),
+      ),
+      const SizedBox(height: 10),
+      if (lockedToRegistered) _changeRequestHint('JUNIOR_WAEC', true),
+    ]);
+  }
+
+  Future<void> _startJuniorWaec() async {
+    if (_starting) return;
+    setState(() => _starting = true);
+    try {
+      await _ensureUnlocked('JUNIOR_WAEC');
+      if (!_hasAccess('JUNIOR_WAEC')) return;
+
+      var subjects = _boardRegistered('JUNIOR_WAEC');
+      if (subjects.isEmpty) {
+        if (_picked.isEmpty) {
+          _snack('Select your Junior WAEC subjects first.');
+          return;
+        }
+        subjects = _picked.toList();
+        // Persist & lock the selection (older backends lock on start instead).
+        try {
+          await _api.cbtRegisterSubjects('JUNIOR_WAEC', subjects);
+        } on ApiException catch (e) {
+          if (e.statusCode != 404 && e.statusCode != 405) rethrow;
+        }
+      }
+
+      final attempt = await _api.cbtPracticeStart('JUNIOR_WAEC', subjects);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CbtPracticeRunnerScreen(attempt: attempt, board: 'JUNIOR_WAEC'),
+        ),
+      );
+      await _load();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _snack(e.message.isEmpty ? 'Could not start exam.' : e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _snack('Could not start exam: $e');
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
   }
 
   Widget _ssceSubjects() {
@@ -656,7 +789,9 @@ class _CbtScreenState extends State<CbtScreen> {
   }
 
   Future<void> _openChangeRequestDialog(String board) async {
-    final current = board == 'JAMB' ? _profileJamb() : _profileSsce();
+    final current = board == 'JAMB'
+        ? _profileJamb()
+        : (_boardRegistered(board).isNotEmpty ? _boardRegistered(board) : _profileSsce());
     final picked = Set<String>.from(current);
     final reasonCtrl = TextEditingController();
     final ok = await showModalBottomSheet<bool>(
@@ -767,6 +902,30 @@ class _BoardSealPainter extends CustomPainter {
       canvas.drawPath(book, fill);
       // torch star
       _star(canvas, Offset(c.dx, c.dy - r * 0.55), r * 0.22, fill);
+    } else if (board == 'JUNIOR_WAEC') {
+      canvas.drawCircle(c, r, ring);
+      // Junior: graduation cap over an open book
+      final cap = Path()
+        ..moveTo(c.dx - r * 0.62, c.dy - r * 0.18)
+        ..lineTo(c.dx, c.dy - r * 0.52)
+        ..lineTo(c.dx + r * 0.62, c.dy - r * 0.18)
+        ..lineTo(c.dx, c.dy + r * 0.08)
+        ..close();
+      canvas.drawPath(cap, fill);
+      final band = Path()
+        ..moveTo(c.dx + r * 0.38, c.dy + r * 0.02)
+        ..lineTo(c.dx + r * 0.38, c.dy + r * 0.3)
+        ..quadraticBezierTo(c.dx + r * 0.2, c.dy + r * 0.42, c.dx, c.dy + r * 0.34)
+        ..lineTo(c.dx, c.dy + r * 0.1)
+        ..close();
+      canvas.drawPath(band, fill);
+      final book = Path()
+        ..moveTo(c.dx - r * 0.42, c.dy + r * 0.38)
+        ..quadraticBezierTo(c.dx, c.dy + r * 0.24, c.dx + r * 0.42, c.dy + r * 0.38)
+        ..lineTo(c.dx + r * 0.42, c.dy + r * 0.52)
+        ..quadraticBezierTo(c.dx, c.dy + r * 0.38, c.dx - r * 0.42, c.dy + r * 0.52)
+        ..close();
+      canvas.drawPath(book, fill);
     } else if (board == 'WAEC') {
       canvas.drawCircle(c, r, ring);
       // Africa silhouette (simplified)
