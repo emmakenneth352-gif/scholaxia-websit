@@ -104,6 +104,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 19l1 2 1-2 2-1-2-1-1-2-1 2-2 1 2 1z"/></svg></span>
           <span class="nav-label">Tutor AI</span>
         </button>
+        <button type="button" class="nav-item topnav-btn" data-page="voice-classroom" onclick="showPage('voice-classroom')">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 9h6M7 12h4"/></svg></span>
+          <span class="nav-label">AI Teacher</span>
+        </button>
         <button type="button" class="nav-item topnav-btn" data-page="games" onclick="showPage('games')">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10v4M16 12h2"/></svg></span>
           <span class="nav-label">Games</span>
@@ -606,6 +610,36 @@
 
 
 
+    <!-- Sia Voice Classroom — AI teacher with the board -->
+
+    <section id="page-voice-classroom" class="page">
+      <div class="vc-layout">
+        <div class="vc-board-panel">
+          <div class="vc-board-head">
+            <h2>&#127891; Sia Voice Classroom</h2>
+            <select id="vc-subject" class="vc-subject-select" aria-label="Subject"></select>
+            <span id="vc-level-label" class="vc-level">Level: SS1</span>
+          </div>
+          <div id="vc-board" class="vc-board"></div>
+          <p id="vc-status" class="vc-status"></p>
+        </div>
+        <div class="vc-compose">
+          <img id="vc-image-preview" class="vc-image-preview" alt="" style="display:none" onclick="vcClearImage()" title="Tap to remove" />
+          <div class="vc-compose-row">
+            <input type="text" id="vc-input" placeholder="Ask the AI teacher anything…" onkeydown="if(event.key==='Enter')vcAsk()" />
+            <button type="button" class="btn-secondary btn-sm" onclick="vcPickImage()">📷</button>
+            <input type="file" id="vc-image-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="vcImageSelected(this)" />
+            <button type="button" id="vc-mic-btn" class="btn-action vc-mic" onclick="vcToggleMic()"><span>Hold to ask</span></button>
+          </div>
+          <div class="vc-compose-row2">
+            <button type="button" id="vc-ask-btn" class="btn-action" onclick="vcAsk()">Teach me &#8594;</button>
+            <button type="button" class="btn-secondary btn-sm" onclick="loadVoiceClassroom()">New board</button>
+          </div>
+          <p id="vc-error" class="error-msg"></p>
+        </div>
+      </div>
+    </section>
+
     <!-- Games — Brain Breakers -->
 
     <section id="page-games" class="page">
@@ -1106,6 +1140,7 @@
 
 <script src="js/sia.js"></script>
 <script src="js/sia-voice.js"></script>
+<script src="js/voice-classroom.js"></script>
 
 <script src="js/voice-recorder.js"></script>
 <script src="js/community.js"></script>

@@ -167,6 +167,39 @@ class AskRequest(BaseModel):
     education_level: Optional[str] = None
     conversation_history: Optional[list] = None  # last N messages for context
     tutor_mode: str = "smart"  # smart = ChatGPT-style structured answers with code fences
+    # Optional photo (base64, no data: prefix). When present, a vision model
+    # reads the image and answers alongside the text question.
+    image_base64: Optional[str] = None
+
+
+class ExtractBoardRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=20000)
+
+
+@router.post("/extract-board")
+async def sia_extract_board(
+    payload: ExtractBoardRequest,
+    current_user: dict = Depends(require_student),
+):
+    """
+    POST /api/v1/sia/extract-board
+    Turn any Sia text answer into board items (steps, formulas, headings,
+    code blocks) for the Voice Classroom board — no AI call, instant.
+    """
+    try:
+        board = extract_board_content(payload.text)
+    except Exception:
+        board = []
+    # Code fences → explicit code items so the classroom shows them properly.
+    try:
+        import re as _re
+        for m in _re.finditer(r"```(\w+)?\n([\s\S]*?)```", payload.text):
+            code = m.group(2).strip()
+            if code:
+                board.append({"type": "code", "content": code[:900]})
+    except Exception:
+        pass
+    return {"board": board[:18]}
 
 
 @router.get("/status")
@@ -222,6 +255,45 @@ async def ask_sia(
             profile_subjects,
         )
         history = _normalize_history(payload.conversation_history)
+
+        # Photo attached? Route through vision so Sia actually SEES it.
+        image_b64 = (payload.image_base64 or "").strip()
+        if image_b64:
+            if "," in image_b64[:64]:  # strip a data URL prefix if a client sends one
+                image_b64 = image_b64.split(",", 1)[1]
+            vision_prompt = (
+                f"The student {student_name} (class level {level}) sent a photo and asks: "
+                f'\"{payload.question}\"\n\n'
+                "1. Describe what you see in the image.\n"
+                "2. If it is a question or problem, solve it step by step.\n"
+                "3. If it is a diagram or graph, explain it clearly.\n"
+                f"4. Teach the idea at {level} level with Nigerian examples.\n"
+                "5. End with one short question to check understanding.\n"
+                "Answer as Sia — warm, clear, structured, with markdown."
+            )
+            try:
+                from app.ai.model_backend import run_inference as _vision_run
+                answer = await _vision_run(
+                    vision_prompt,
+                    image_base64=image_b64,
+                    system_prompt=None,
+                    max_tokens=2048,
+                )
+                try:
+                    board = extract_board_content(answer)
+                except Exception:
+                    board = []
+                return {
+                    "sia": answer,
+                    "board": board,
+                    "student": student_name,
+                    "level": level,
+                    "image_analyzed": True,
+                }
+            except Exception:
+                # Vision failed → fall through to a normal text answer below
+                # so the student still gets help instead of an error.
+                pass
 
         answer = await get_ai_response(
             question=payload.question,

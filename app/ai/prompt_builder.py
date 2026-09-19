@@ -488,7 +488,9 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
     # (with history, short messages would classify as conversation_turn).
     kind = classify_input(question or "", has_history=False)
     msg_len = len((question or "").strip())
-    if kind in ("greeting", "casual") and msg_len <= 80:
+    # Code/programming asks must NEVER be treated as small talk — otherwise
+    # "write me a login form" gets a chatty reply instead of code.
+    if kind in ("greeting", "casual") and msg_len <= 80 and not _needs_code_formatting(question):
         return (
             f'{student_name} says: "{question}"\n\n'
             "Chat back like a warm, real human teacher — 1-3 short plain sentences, "
@@ -509,7 +511,10 @@ def build_chat_user_prompt(question: str, student_name: str = "there",
         )
 
     code_block = ""
-    if tutor_mode == "smart" and _needs_code_formatting(question):
+    if tutor_mode == "smart":
+        # Always carry the code-teaching rules in smart mode — the student may
+        # ask to code at any point ("write me a python function…"), and the
+        # keyword gate regularly missed short asks like "code a login form".
         code_block = f"\n{SIA_CODE_FORMAT}\n"
 
     smart_block = ""

@@ -19,6 +19,7 @@ const PAGE_TITLES = {
   library: "Library",
   "saved-lives": "Saved Lives",
   sia: "Tutor AI",
+  "voice-classroom": "AI Teacher",
   games: "Games",
   community: "Community",
   "community-create": "New Post",
@@ -1116,6 +1117,10 @@ function refreshPage() {
   else if (currentPage === "library") { loadLibrary(); done(); }
   else if (currentPage === "saved-lives") { loadSavedLivesPage(); done(); }
   else if (currentPage === "sia") { loadSia(); done(); }
+  else if (currentPage === "voice-classroom") {
+    if (typeof loadVoiceClassroom === "function") loadVoiceClassroom();
+    done();
+  }
   else if (currentPage === "games") {
     if (typeof loadGamesPage === "function") loadGamesPage();
     done();

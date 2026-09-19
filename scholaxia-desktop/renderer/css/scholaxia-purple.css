@@ -1062,6 +1062,103 @@ html[data-app-theme="dark"] .btn-secondary {
   font-size: 2rem;
   opacity: 0.5;
 }
+
+/* ── Sia Voice Classroom (AI teacher with the board) ─────────────────── */
+.vc-layout {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vc-board-panel {
+  background: #10251b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 16px;
+  color: #eaf6ee;
+  box-shadow: 0 10px 30px rgba(16, 37, 27, 0.35);
+}
+.vc-board-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.vc-board-head h2 { margin: 0; font-size: 1.15rem; }
+.vc-subject-select {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eaf6ee;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.86rem;
+}
+.vc-subject-select option { color: #111; }
+.vc-level { margin-left: auto; font-size: 0.8rem; opacity: 0.75; }
+.vc-board {
+  min-height: 260px;
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+.vc-board-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.06);
+  border-left: 3px solid #7c3aed;
+  border-radius: 8px;
+  padding: 8px 12px;
+  animation: vc-in 0.25s ease backwards;
+}
+@keyframes vc-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+.vc-heading { border-left-color: #fbbf24; font-weight: 700; }
+.vc-step { border-left-color: #34d399; }
+.vc-formula, .vc-equation { border-left-color: #60a5fa; font-family: ui-monospace, monospace; }
+.vc-example { border-left-color: #f472b6; }
+.vc-diagram_hint { border-left-color: #f97316; }
+.vc-code { border-left-color: #22d3ee; flex-direction: column; }
+.vc-code pre {
+  margin: 6px 0 0;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 0.84rem;
+  color: #d1fae5;
+  white-space: pre;
+}
+.vc-item-icon { flex-shrink: 0; opacity: 0.9; }
+.vc-board-empty { opacity: 0.7; text-align: center; padding: 40px 0; }
+.vc-status { min-height: 1.2em; margin: 8px 0 0; font-size: 0.85rem; color: #fbbf24; }
+.vc-compose {
+  background: var(--sx-card, #fff);
+  border: 1px solid var(--sx-border, #eee);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.vc-compose-row { display: flex; gap: 8px; align-items: center; }
+.vc-compose-row input[type="text"] { flex: 1; }
+.vc-compose-row2 { display: flex; gap: 8px; align-items: center; }
+.vc-mic { min-width: 130px; }
+.vc-mic.is-recording { background: #ef4444; animation: vc-pulse 1.1s ease-in-out infinite; }
+@keyframes vc-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+.vc-image-preview {
+  max-height: 140px;
+  border-radius: 10px;
+  align-self: flex-start;
+  cursor: pointer;
+  border: 1px solid var(--sx-border, #ddd);
+}
 .pq-card h4 { margin: 0; font-size: 1rem; line-height: 1.35; }
 .pq-card-desc { margin: 0; font-size: 0.86rem; color: var(--sx-muted, #777); }
 .pq-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }

@@ -440,6 +440,9 @@ async def run_inference(prompt: str, conversation_history: list = None,
     Run inference using the configured backend only (no cross-provider fallback).
 
     Production default: DeepSeek when DEEPSEEK_API_KEY is set.
+    Vision: DeepSeek has NO image support — when an image is attached, route
+    to a vision-capable provider (Gemini → OpenAI → Groq) so the student's
+    photo is actually seen instead of silently ignored.
     """
     if not _any_api_key_configured():
         raise RuntimeError(
@@ -448,6 +451,19 @@ async def run_inference(prompt: str, conversation_history: list = None,
         )
 
     backend = _resolve_ai_backend()
+
+    # DeepSeek (and hosted/local) cannot read images. If a photo is attached,
+    # fall through to the best vision model available.
+    if image_base64 and backend in ("deepseek", "hosted", "local"):
+        vision_order = []
+        if settings.GEMINI_API_KEY:
+            vision_order.append("gemini")
+        if settings.OPENAI_API_KEY:
+            vision_order.append("openai")
+        if settings.GROQ_API_KEY:
+            vision_order.append("groq")
+        if vision_order:
+            backend = vision_order[0]
 
     backends = {
         "gemini": lambda: _infer_gemini(
