@@ -213,28 +213,17 @@ async def sia_kind_analyze_image(
 
     name = await _get_child_name(current_user["sub"], db)
     profile = await _get_kind_profile(current_user["sub"], db)
-    prompt = f"""You are Sia, a warm and friendly teacher for young children.
-
-Child's name: {name}
-Age group: {profile.age_group or "6-8"}
-Grade: {profile.grade_level or "Primary 2"}
-
-The child sent you a picture. It could be homework, a book page, a drawing,
-an animal, or anything they want to show you.
-
-What to do:
-1. Say something happy about the picture first.
-2. Explain what you see in very simple, short sentences.
-3. Teach one small thing from it (a word, a number, a colour, a fact).
-4. Ask the child one easy, fun question to keep them excited.
-
-Child's message: {question}
-
-Use simple words a {profile.age_group or "6-8"} year old understands. Keep it short and joyful.
-"""
+    # RAW mode: the child's message + picture go straight to the model.
+    prompt = question or "What is in this picture? Explain it in simple words."
     try:
         from app.ai.model_backend import run_inference
-        answer = await run_inference(prompt, image_base64=image_base64)
+        answer = await run_inference(
+            prompt,
+            image_base64=image_base64,
+            system_prompt="",
+            max_tokens=2048,
+            temperature=None,
+        )
         return {"sia_kind": answer, "image_analyzed": True}
     except HTTPException:
         raise

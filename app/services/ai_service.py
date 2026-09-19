@@ -8,7 +8,6 @@ returns the reply untouched (minus output sanitisation for child safety).
 """
 
 from app.ai.model_backend import run_inference
-from app.ai.safety_filter import sanitize_output
 from app.ai.weakness_analyzer import record_interaction, get_weak_topics
 
 SIA_MAX_TOKENS = 8192
@@ -50,14 +49,14 @@ async def get_ai_response(question: str, subject: str, education_level: str,
             f"I couldn't think that through properly, {student_name}. "
             "Please rephrase your question or try again in a moment."
         )
-    answer = sanitize_output(raw)
+    answer = raw.strip()
     await record_interaction(student_id=student_id, subject=subject, question=question, answer=answer)
     return answer
 
 
 async def sia_explain(topic: str, subject: str, education_level: str,
                       language: str, student_id: str, student_name: str) -> str:
-    return sanitize_output(await _run_sia_inference(topic))
+    return (await _run_sia_inference(topic))
 
 
 async def sia_solve(question: str, subject: str, education_level: str,
@@ -68,7 +67,7 @@ async def sia_solve(question: str, subject: str, education_level: str,
         if "429" in str(e) or "rate limit" in str(e).lower():
             return f"Too many requests right now, {student_name}. Please wait a moment and try again."
         raise
-    answer = sanitize_output(raw)
+    answer = raw.strip()
     await record_interaction(student_id=student_id, subject=subject, question=question, answer=answer)
     return answer
 
@@ -80,7 +79,7 @@ async def sia_evaluate(question: str, student_answer: str, subject: str,
         "Mark this student answer: say whether it is correct, give the mark, "
         "and explain any mistakes."
     )
-    return sanitize_output(await _run_sia_inference(evaluate_ask))
+    return (await _run_sia_inference(evaluate_ask))
 
 
 async def sia_generate_questions(topic: str, number: int, subject: str, education_level: str,
@@ -90,7 +89,7 @@ async def sia_generate_questions(topic: str, number: int, subject: str, educatio
         f"Generate {number} practice questions on the topic: {topic} "
         f"({curriculum} standard). Include answers."
     )
-    return sanitize_output(await _run_sia_inference(questions_ask))
+    return (await _run_sia_inference(questions_ask))
 
 
 async def sia_performance_feedback(weak_topics: list, subject: str, education_level: str,
@@ -100,7 +99,7 @@ async def sia_performance_feedback(weak_topics: list, subject: str, education_le
         f"A student is weak in these topics: {', '.join(str(t) for t in weak_topics)}. "
         "Give short motivating feedback and what to practise next."
     )
-    return sanitize_output(await _run_sia_inference(feedback_ask))
+    return (await _run_sia_inference(feedback_ask))
 
 
 async def sia_explain_wrong_answer(question: str, wrong_answer: str, correct_answer: str,
@@ -111,7 +110,7 @@ async def sia_explain_wrong_answer(question: str, wrong_answer: str, correct_ans
         f"Correct answer: {correct_answer}\n\n"
         "Explain why the student's answer is wrong and how to get it right."
     )
-    return sanitize_output(await _run_sia_inference(wrong_ask))
+    return (await _run_sia_inference(wrong_ask))
 
 
 async def sia_lesson(topic: str, subject: str, education_level: str, language: str,
@@ -121,7 +120,7 @@ async def sia_lesson(topic: str, subject: str, education_level: str, language: s
         f"Teach the topic: {topic} ({curriculum} standard)."
         + (f"\n\nContinue from this previous lesson part:\n{previous_response}" if previous_response else "")
     )
-    return sanitize_output(await _run_sia_inference(lesson_ask))
+    return (await _run_sia_inference(lesson_ask))
 
 
 async def sia_anti_cheat(question: str, submitted_answer: str,
@@ -130,7 +129,7 @@ async def sia_anti_cheat(question: str, submitted_answer: str,
         f"Question: {question}\nStudent submitted: {submitted_answer}\n\n"
         "Is this answer original work or copied/cheated? Answer briefly."
     )
-    return sanitize_output(await _run_sia_inference(cheat_ask))
+    return (await _run_sia_inference(cheat_ask))
 
 
 async def sia_debate(topic: str, student_position: str,
@@ -139,7 +138,7 @@ async def sia_debate(topic: str, student_position: str,
         f"Topic: {topic}\nStudent's position: {student_position}\n\n"
         "Debate this with the student — challenge their points respectfully."
     )
-    return sanitize_output(await _run_sia_inference(debate_ask))
+    return (await _run_sia_inference(debate_ask))
 
 
 async def sia_study_companion(student_name: str, last_subject: str,
@@ -148,7 +147,7 @@ async def sia_study_companion(student_name: str, last_subject: str,
         f"A student named {student_name} has been away for {days_inactive} days. "
         f"They last studied {last_subject} ({last_topic}). Write a short welcome-back nudge."
     )
-    return sanitize_output(await _run_sia_inference(companion_ask))
+    return (await _run_sia_inference(companion_ask))
 
 
 async def sia_process_pdf(pdf_content: str, output_type: str, subject: str,
@@ -157,7 +156,7 @@ async def sia_process_pdf(pdf_content: str, output_type: str, subject: str,
     pdf_ask = (
         f"Study this document and help with it ({output_type}):\n\n{pdf_content}"
     )
-    return sanitize_output(await _run_sia_inference(pdf_ask))
+    return (await _run_sia_inference(pdf_ask))
 
 
 async def sia_language_immersion(target_language: str, student_message: str,
@@ -167,7 +166,7 @@ async def sia_language_immersion(target_language: str, student_message: str,
         f"Reply to this message in {target_language} (student is {student_level}): "
         f"{student_message}"
     )
-    return sanitize_output(await _run_sia_inference(immerse_ask))
+    return (await _run_sia_inference(immerse_ask))
 
 
 async def sia_generate_study_plan(student_name: str, level: str, exam_target: str,
@@ -184,12 +183,12 @@ async def sia_generate_study_plan(student_name: str, level: str, exam_target: st
         f"Weak subjects: {weak_names}. Study time: {hours_per_day} h/day, "
         f"{days_until_exam} days until the exam."
     )
-    return sanitize_output(await _run_sia_inference(plan_ask))
+    return (await _run_sia_inference(plan_ask))
 
 
 async def sia_cambridge_teach(topic: str, subject: str, education_level: str,
                                student_id: str, student_name: str) -> str:
-    return sanitize_output(await _run_sia_inference(topic))
+    return (await _run_sia_inference(topic))
 
 
 async def sia_parent_report(student_name: str, level: str, profile_data: dict) -> str:
@@ -200,4 +199,4 @@ async def sia_parent_report(student_name: str, level: str, profile_data: dict) -
         f"streak: {profile_data.get('streak_days', 0)} days, "
         f"average score: {profile_data.get('avg_score', 0.0)}."
     )
-    return sanitize_output(await _run_sia_inference(report_ask))
+    return (await _run_sia_inference(report_ask))
