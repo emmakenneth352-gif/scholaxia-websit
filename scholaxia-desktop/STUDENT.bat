@@ -14,5 +14,10 @@ if exist "..\venv\Scripts\python.exe" (
   exit /b 0
 )
 
+if exist "..\.venv\Scripts\python.exe" (
+  "..\.venv\Scripts\python.exe" run_desktop.py
+  exit /b 0
+)
+
 python run_desktop.py
 exit /b %ERRORLEVEL%
