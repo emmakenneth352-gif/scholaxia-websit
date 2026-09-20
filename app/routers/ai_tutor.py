@@ -799,6 +799,36 @@ async def list_languages():
     }
 
 
+# ── Voice: Speech-to-Text (mic input for the AI Teacher) ───────────────────
+
+@router.post("/transcribe")
+async def sia_transcribe(
+    audio: UploadFile = File(...),
+    language: str = Form(default="en"),
+    current_user: dict = Depends(require_student_or_kind),
+):
+    """
+    Convert a recorded voice clip to text so students can talk to the AI
+    Teacher. Used by the desktop app (Electron) where the Web Speech API has
+    no engine. Providers: Groq Whisper → OpenAI Whisper (see stt_service).
+    """
+    from app.services.stt_service import transcribe_audio
+
+    audio_bytes = await audio.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="No audio received.")
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Recording too large. Speak in shorter bursts.")
+
+    text = await transcribe_audio(audio_bytes, filename=audio.filename or "clip.webm", language=language)
+    if not text:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice input is not available right now. Please type your question.",
+        )
+    return {"text": text}
+
+
 # ── Voice: Text-to-Speech ─────────────────────────────────────────────────────
 
 class SpeakRequest(BaseModel):

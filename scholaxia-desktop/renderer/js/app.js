@@ -18,7 +18,6 @@ const PAGE_TITLES = {
   contact: "Contact",
   library: "Library",
   "saved-lives": "Saved Lives",
-  sia: "Tutor AI",
   "voice-classroom": "AI Teacher",
   games: "Games",
   community: "Community",
@@ -585,7 +584,7 @@ function updateSidebarToggleBtn(btn, collapsed) {
 }
 
 function syncDashActionCards(page) {
-  var quickPages = ["live", "school", "subscription", "skills", "sia"];
+  var quickPages = ["live", "school", "subscription", "skills", "voice-classroom"];
   document.querySelectorAll(".dash-action-card[data-dash-page]").forEach(function (btn) {
     var pg = btn.getAttribute("data-dash-page");
     btn.classList.toggle("active", page === pg && quickPages.indexOf(page) >= 0);
@@ -1116,7 +1115,6 @@ function refreshPage() {
   else if (currentPage === "cbt") { loadCbtExams(); done(); }
   else if (currentPage === "library") { loadLibrary(); done(); }
   else if (currentPage === "saved-lives") { loadSavedLivesPage(); done(); }
-  else if (currentPage === "sia") { loadSia(); done(); }
   else if (currentPage === "voice-classroom") {
     if (typeof loadVoiceClassroom === "function") loadVoiceClassroom();
     done();

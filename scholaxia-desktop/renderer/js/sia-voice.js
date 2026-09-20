@@ -1,11 +1,8 @@
-/** Student Sia voice — reads Tutor AI replies aloud + mic speech-to-text.
- *  Mirrors the kids app voice (kind-voice.js) and the mobile SiaVoiceService. */
+/** Sia voice — reads the AI Teacher's replies aloud. */
 
 var siaVoiceEnabled = true;
 var siaVoiceAudio = null;
 var siaVoiceObjectUrl = null;
-var siaMicActive = false;
-var _siaRecognition = null;
 
 function siaVoiceClean(text) {
   return String(text || "")
@@ -107,56 +104,6 @@ function siaToggleVoice() {
   });
 }
 
-/* ── Mic: speech-to-text into the Sia input ─────────────────────────────── */
-
-function siaMicSupported() {
-  var SR = (window.SpeechRecognition || window.webkitSpeechRecognition);
-  return !!SR;
-}
-
-function siaMicStart() {
-  if (siaMicActive) return;
-  var SR = (window.SpeechRecognition || window.webkitSpeechRecognition);
-  if (!SR) {
-    alert("Voice input needs Chrome or Edge (or an updated app). Type your question instead — Sia can still read answers aloud.");
-    return;
-  }
-  var input = document.getElementById("sia-input");
-  try {
-    _siaRecognition = new SR();
-    _siaRecognition.lang = "en-US";
-    _siaRecognition.interimResults = false;
-    _siaRecognition.maxAlternatives = 1;
-    _siaRecognition.onstart = function () {
-      siaMicActive = true;
-      var btn = document.getElementById("sia-mic-btn");
-      if (btn) { btn.classList.add("is-recording"); btn.textContent = "🎤 Listening…"; }
-    };
-    _siaRecognition.onresult = function (ev) {
-      var said = (ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || "";
-      said = said.trim();
-      if (said && input) {
-        input.value = said;
-        if (typeof sendSiaMessage === "function") sendSiaMessage();
-      }
-    };
-    _siaRecognition.onerror = function () {
-      siaMicActive = false;
-      var btn = document.getElementById("sia-mic-btn");
-      if (btn) { btn.classList.remove("is-recording"); btn.textContent = "🎤 Speak"; }
-    };
-    _siaRecognition.onend = function () {
-      siaMicActive = false;
-      var btn = document.getElementById("sia-mic-btn");
-      if (btn) { btn.classList.remove("is-recording"); btn.textContent = "🎤 Speak"; }
-    };
-    _siaRecognition.start();
-  } catch (e) {
-    siaMicActive = false;
-    alert("Could not start the microphone. Check permission and try again.");
-  }
-}
-
 /* Init saved preference */
 try {
   if (localStorage.getItem("sia_voice_on") === "0") siaVoiceEnabled = false;
@@ -166,7 +113,6 @@ if (typeof window !== "undefined") {
   window.siaSpeak = siaSpeak;
   window.siaStopVoice = siaStopVoice;
   window.siaToggleVoice = siaToggleVoice;
-  window.siaMicStart = siaMicStart;
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = function () { /* preload voices */ };
   }

@@ -100,10 +100,6 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/><path d="M2 4h2l2 12h12l2-8H6"/></svg></span>
           <span class="nav-label">Marketplace</span>
         </button>
-        <button type="button" class="nav-item topnav-btn" data-page="sia" onclick="showPage('sia')">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 19l1 2 1-2 2-1-2-1-1-2-1 2-2 1 2 1z"/></svg></span>
-          <span class="nav-label">Tutor AI</span>
-        </button>
         <button type="button" class="nav-item topnav-btn" data-page="voice-classroom" onclick="showPage('voice-classroom')">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 9h6M7 12h4"/></svg></span>
           <span class="nav-label">AI Teacher</span>
@@ -322,10 +318,10 @@
           <strong>Skills</strong>
           <span>Training programs</span>
         </button>
-        <button type="button" class="dash-action-card dash-action-sia" data-dash-page="sia" onclick="quickDashAction('sia')">
+        <button type="button" class="dash-action-card dash-action-sia" data-dash-page="voice-classroom" onclick="quickDashAction('voice-classroom')">
           <span class="dash-action-icon">&#10024;</span>
-          <strong>Tutor AI</strong>
-          <span>AI study assistant</span>
+          <strong>AI Teacher</strong>
+          <span>Chat, ask by voice, classroom</span>
         </button>
         <button type="button" class="dash-action-card" data-dash-page="games" onclick="quickDashAction('games')">
           <span class="dash-action-icon">&#127918;</span>
@@ -574,41 +570,7 @@
 
 
 
-    <!-- Ask Tutor AI -->
-
-    <section id="page-sia" class="page">
-
-      <div class="info-banner success">&#10024; Tutor AI uses <strong>Smart tutor mode</strong> — structured answers with code blocks like ChatGPT, tuned for your class level.</div>
-
-      <div class="sia-chat-wrap">
-
-        <div id="sia-messages" class="sia-messages"></div>
-
-        <div class="sia-compose">
-
-          <div class="sia-compose-row">
-            <input type="text" id="sia-input" placeholder="Ask Tutor AI anything…" onkeydown="if(event.key==='Enter')sendSiaMessage()" />
-            <button type="button" class="btn-secondary btn-sm sia-voice-toggle" id="sia-voice-btn" onclick="siaToggleVoice()" aria-pressed="true">🔊 Voice on</button>
-            <button type="button" class="btn-secondary btn-sm" id="sia-mic-btn" onclick="siaMicStart()">🎤 Speak</button>
-            <button class="btn-action" onclick="sendSiaMessage()">Send</button>
-          </div>
-          <p class="sia-level-bar">
-            <span id="sia-level-label">Level: not set</span> ·
-            <button type="button" class="sia-level-change" onclick="changeSiaLevel()">Change</button> ·
-            <button type="button" class="sia-level-change sia-mode-toggle" id="sia-mode-label" onclick="toggleSiaSmartMode()">Smart tutor ON</button>
-          </p>
-
-        </div>
-
-        <p id="sia-error" class="error-msg"></p>
-
-      </div>
-
-    </section>
-
-
-
-    <!-- Sia Voice Classroom — AI teacher with the board -->
+    <!-- Ask the AI Teacher -->
 
     <section id="page-voice-classroom" class="page">
       <div class="vc-layout">
@@ -621,8 +583,9 @@
         </div>
         <div class="vc-board-panel" id="vc-class-panel">
           <div class="vc-board-head">
-            <h2>&#127891; Sia Voice Classroom</h2>
+            <h2>🎓 AI Teacher Classroom</h2>
             <select id="vc-subject" class="vc-subject-select" aria-label="Subject"></select>
+            <select id="vc-level-select" class="vc-subject-select" aria-label="Class level"></select>
             <span id="vc-level-label" class="vc-level">Level: SS1</span>
           </div>
           <div id="vc-board" class="vc-board"></div>
@@ -634,10 +597,10 @@
         <div class="vc-compose">
           <img id="vc-image-preview" class="vc-image-preview" alt="" style="display:none" onclick="vcClearImage()" title="Tap to remove" />
           <div class="vc-compose-row">
-            <input type="text" id="vc-input" placeholder="Ask the AI teacher anything…" onkeydown="if(event.key==='Enter')vcAsk()" />
-            <button type="button" class="btn-secondary btn-sm" onclick="vcPickImage()">📷</button>
+            <input type="text" id="vc-input" placeholder="Message the AI teacher…" onkeydown="if(event.key==='Enter')vcAsk()" />
+            <button type="button" class="btn-secondary btn-sm" onclick="vcPickImage()" title="Send a photo">📷</button>
             <input type="file" id="vc-image-input" accept="image/jpeg,image/png,image/webp,image/gif" style="display:none" onchange="vcImageSelected(this)" />
-            <button type="button" id="vc-mic-btn" class="btn-action vc-mic" onclick="vcToggleMic()"><span>Hold to ask</span></button>
+            <button type="button" id="vc-mic-btn" class="btn-action vc-mic" title="Hold to ask — hold, speak, release to send"><span>🎤 Hold to ask</span></button>
           </div>
           <div class="vc-compose-row2" id="vc-class-actions">
             <button type="button" id="vc-ask-btn" class="btn-action" onclick="vcAsk()">Teach me &#8594;</button>
@@ -755,7 +718,7 @@
       <div class="about-blocks">
         <div class="about-block">
           <h3>Everything you need in one app</h3>
-          <p>Library materials, saved live recordings, Tutor AI, Scholaxia Marketplace for books, and offline external school exams uploaded by admin.</p>
+          <p>Library materials, saved live recordings, the AI Teacher, Scholaxia Marketplace for books, and offline external school exams uploaded by admin.</p>
         </div>
         <div class="about-block">
           <h3>Built for real students, real results</h3>
@@ -1146,7 +1109,6 @@
 <script src="js/push.js"></script>
 <script src="js/notifications-ui.js"></script>
 
-<script src="js/sia.js"></script>
 <script src="js/sia-voice.js"></script>
 <script src="js/voice-classroom.js"></script>
 
