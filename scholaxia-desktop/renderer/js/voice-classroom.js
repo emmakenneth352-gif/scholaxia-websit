@@ -284,6 +284,8 @@ function vcSyncButtons() {
   }
   var ask = document.getElementById("vc-ask-btn");
   if (ask) ask.disabled = vcState.busy;
+  var send = document.querySelector(".vc-send");
+  if (send) send.disabled = vcState.busy;
 }
 
 /* ── Mic: tap to start, tap again to send ────────────────────────────────── */

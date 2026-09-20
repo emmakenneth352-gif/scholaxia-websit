@@ -433,6 +433,7 @@ html[data-app-theme="dark"] .info-banner.success {
 }
 
 /* AI Teacher (voice classroom) */
+html[data-app-theme="dark"] .vc-send { background: #7c3aed !important; color: #fff !important; }
 html[data-app-theme="dark"] .vc-mode-switch,
 html[data-app-theme="dark"] .vc-chat-panel,
 html[data-app-theme="dark"] .vc-compose {
@@ -450,7 +451,7 @@ html[data-app-theme="dark"] .vc-msg-bubble {
   background: #1e1f22 !important;
   color: #f2f3f5 !important;
 }
-html[data-app-theme="dark"] .vc-msg-user .vc-msg-bubble { background: #14352a !important; }
+html[data-app-theme="dark"] .vc-msg-user .vc-msg-bubble { background: #352f45 !important; }
 html[data-app-theme="dark"] .vc-msg-bubble strong,
 html[data-app-theme="dark"] .vc-msg-bubble code { color: #d9ccff !important; }
 html[data-app-theme="dark"] .vc-msg-bubble .vc-code-block {
@@ -547,11 +548,6 @@ html[data-app-theme="dark"] .q-btn {
   background: #1e1f22 !important;
   border-color: #4e5058 !important;
   color: #f2f3f5 !important;
-}
-html[data-app-theme="dark"] .q-btn.answered {
-  background: #14352a !important;
-  border-color: #2d7a4f !important;
-  color: #d1fae5 !important;
 }
 html[data-app-theme="dark"] .q-btn.current {
   background: #1a4d32 !important;
