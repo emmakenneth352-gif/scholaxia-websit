@@ -61,6 +61,11 @@ async def get_current_user(
     # Always prefer DB role and normalize (fixes UserRole.student / case mismatches → false 403s)
     payload["role"] = _norm_role(getattr(user, "role", None) or payload.get("role") or "student")
     payload["school_id"] = str(user.school_id) if getattr(user, "school_id", None) else None
+    # Sub-admin scope: None = main admin (full access); list = scoped sub-admin.
+    raw_perms = (getattr(user, "sub_admin_permissions", None) or "").strip()
+    payload["sub_admin_permissions"] = None if not raw_perms else [
+        p for p in (s.strip() for s in raw_perms.split(",")) if p
+    ]
     payload["_db"] = db
     return payload
 

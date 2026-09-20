@@ -18,6 +18,7 @@ from app.models.cbt_settings import CbtPracticeAttempt
 from app.models.user import StudentProfile
 from app.services.cbt_access import has_board_access, normalize_board
 from app.services import cbt_engine
+from app.services.cbt_engine import get_cbt_settings
 
 router = APIRouter(tags=["CBT settings & practice"])
 
@@ -37,6 +38,13 @@ class CbtSettingsUpdate(BaseModel):
     ce_questions_per_subject: Optional[int] = Field(None, ge=1, le=200)
     ce_duration_minutes: Optional[int] = Field(None, ge=5, le=480)
     ce_subjects: Optional[list[str]] = None
+    # Score scale (what scores are reported "over")
+    jamb_score_total: Optional[int] = Field(None, ge=10, le=2000)
+    waec_score_per_subject: Optional[int] = Field(None, ge=10, le=1000)
+    neco_score_per_subject: Optional[int] = Field(None, ge=10, le=1000)
+    jw_score_per_subject: Optional[int] = Field(None, ge=10, le=1000)
+    ce_score_per_subject: Optional[int] = Field(None, ge=10, le=1000)
+    score_messages: Optional[dict[str, str]] = None
     randomize_questions: Optional[bool] = None
     randomize_options: Optional[bool] = None
     allow_resume: Optional[bool] = None
@@ -471,13 +479,46 @@ async def submit_practice(
     attempt.status = "completed"
     attempt.submitted_at = naive_utc_now()
     await db.flush()
+
+    # ── Percentage-scale result (e.g. JAMB over 400, WAEC over 100/subject) ──
+    settings = await get_cbt_settings(db)
+    scale = cbt_engine.board_score_scale(attempt.exam_type, settings)
+    percent = round((score / max_score) * 100, 1) if max_score else 0
+    if scale["combined"]:
+        # One aggregated score over the configured total (JAMB: over 400).
+        scaled_score = round(score / max_score * scale["total"], 1) if max_score else 0
+        score_display = f"{scaled_score:g} / {scale['total']}"
+        per_subject_scores = {
+            sub: round(v["score"] / v["max"] * (scale["total"] / max(1, len(by_subject))), 1)
+            if v["max"]
+            else 0
+            for sub, v in by_subject.items()
+        }
+    else:
+        # Per-subject score over the configured maximum (e.g. 100).
+        over = scale["total"]
+        per_subject_scores = {
+            sub: round(v["score"] / v["max"] * over, 1) if v["max"] else 0
+            for sub, v in by_subject.items()
+        }
+        overall = round(sum(per_subject_scores.values()) / len(per_subject_scores), 1) if per_subject_scores else 0
+        scaled_score = overall
+        score_display = f"{overall:g} / {over} (average across subjects)"
+    label, message = cbt_engine.rating_message(percent, settings.get("score_messages"))
+
     full_review = cbt_engine.build_practice_full_review(attempt.sections or [], answers)
     review = [q for q in full_review if not q.get("is_correct")]
     return {
         "attempt_id": str(attempt.id),
         "score": attempt.score,
         "max_score": attempt.max_score,
-        "percent": round((score / max_score) * 100, 1) if max_score else 0,
+        "percent": percent,
+        "rating": label,
+        "rating_message": message,
+        "score_scale": scale,
+        "scaled_score": scaled_score,
+        "score_display": score_display,
+        "per_subject_scores": per_subject_scores,
         "result_summary": attempt.result_summary,
         "review": review,
         "full_review": full_review,
@@ -498,13 +539,20 @@ async def get_practice_review(
     answers = dict(attempt.answers or {})
     full_review = cbt_engine.build_practice_full_review(attempt.sections or [], answers)
     review = [q for q in full_review if not q.get("is_correct")]
+    settings = await get_cbt_settings(db)
+    scale = cbt_engine.board_score_scale(attempt.exam_type, settings)
+    percent = round((attempt.score / attempt.max_score) * 100, 1) if attempt.max_score else 0
+    label, message = cbt_engine.rating_message(percent, settings.get("score_messages"))
     return {
         "attempt_id": str(attempt.id),
         "exam_type": attempt.exam_type,
         "subjects": attempt.subjects or [],
         "score": attempt.score,
         "max_score": attempt.max_score,
-        "percent": round((attempt.score / attempt.max_score) * 100, 1) if attempt.max_score else 0,
+        "percent": percent,
+        "rating": label,
+        "rating_message": message,
+        "score_scale": scale,
         "full_review": full_review,
         "review": review,
         "wrong_count": len(review),

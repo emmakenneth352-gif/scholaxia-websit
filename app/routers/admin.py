@@ -9,6 +9,7 @@ import json
 import uuid
 from app.core.database import get_db
 from app.core.datetime_utils import naive_utc_now
+from app.core.config import settings
 from app.core.deps import require_admin
 from app.core.security import hash_password, create_access_token, create_refresh_token, issue_auth_tokens
 from app.models.user import User, UserRole, ExamType, TeacherProfile, StudentProfile, KindProfile, VendorProfile
@@ -37,12 +38,55 @@ from app.services.user_cleanup import purge_all_user_accounts, delete_teacher_us
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
 
-# ── Admin Self-Registration ───────────────────────────────────────────────────
+# ── Admin accounts — main admin + sub-admins ────────────────────────────────
+
+# Permissions a sub-admin can be granted. Main admins hold every key.
+SUB_ADMIN_PERMISSIONS = {
+    "questions",       # CBT question bank + exams
+    "students",        # view/manage students
+    "teachers",        # approve/manage teachers
+    "vendors",
+    "kind",
+    "library",
+    "marketplace",
+    "plans",
+    "coupons",
+    "community",
+    "requests",        # live session requests
+    "reports",         # dashboard + reports
+}
+
+
+def _admin_perms(user: User) -> list[str] | None:
+    """None = full (main) admin; list = scoped sub-admin."""
+    raw = (getattr(user, "sub_admin_permissions", None) or "").strip()
+    if not raw:
+        return None
+    return [p for p in (s.strip() for s in raw.split(",")) if p]
+
+
+def _is_main_admin(user: User) -> bool:
+    return _admin_perms(user) is None
+
+
+def _require_subadmin_permission(current_user: dict, key: str) -> None:
+    """Main admins pass always; sub-admins need the specific key."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Main Scholaxia admin only")
+    perms = current_user.get("sub_admin_permissions")
+    if perms is None or key in perms:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=f"Your admin account does not have the '{key}' permission.",
+    )
+
 
 class AdminRegisterRequest(BaseModel):
     email: EmailStr
     password: str
     full_name: str
+    setup_key: str = ""
 
 
 class TokenResponse(BaseModel):
@@ -54,9 +98,32 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Admin creates their own account."""
+    """Bootstrap the FIRST main admin only (setup key required, one-time).
+
+    Afterwards every further admin account — main or sub — is created by an
+    existing main admin from the dashboard. Nobody can self-register as admin.
+    """
     if len(payload.password) > 72:
         raise HTTPException(status_code=400, detail="Password must be 72 characters or less")
+    admins_res = await db.execute(select(User).where(User.role == UserRole.admin))
+    existing_admins = admins_res.scalars().all()
+    if any(_is_main_admin(a) for a in existing_admins):
+        raise HTTPException(
+            status_code=403,
+            detail="Admin self-registration is closed. Ask a main admin to create your account.",
+        )
+    expected_key = (getattr(settings, "ADMIN_SETUP_KEY", "") or "").strip()
+    given_key = (payload.setup_key or "").strip()
+    if not expected_key:
+        # No key configured — allow only while the platform has zero admins at all.
+        if existing_admins:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin self-registration is closed. Ask a main admin to create your account.",
+            )
+    elif given_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid setup key.")
+
     existing = await db.execute(select(User).where(User.email == payload.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -77,6 +144,133 @@ async def admin_register(payload: AdminRegisterRequest, db: AsyncSession = Depen
         refresh_token=refresh_token,
         role=role,
     )
+
+
+# ── Sub-admin management (main admin only) ──────────────────────────────────
+
+class CreateSubAdminRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: str
+    permissions: list[str] = []
+
+
+class UpdateSubAdminRequest(BaseModel):
+    permissions: list[str] | None = None
+    is_active: bool | None = None
+
+
+def _sub_admin_dict(u: User) -> dict:
+    return {
+        "id": str(u.id),
+        "email": u.email,
+        "full_name": u.full_name,
+        "is_active": u.is_active,
+        "permissions": _admin_perms(u) or [],
+        "is_main": _is_main_admin(u),
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    }
+
+
+@router.get("/sub-admins")
+async def list_sub_admins(
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Main admin lists every admin account with its scope."""
+    res = await db.execute(
+        select(User).where(User.role == UserRole.admin).order_by(User.created_at)
+    )
+    me_id = current_user.get("sub")
+    out = []
+    for u in res.scalars().all():
+        d = _sub_admin_dict(u)
+        d["is_me"] = str(u.id) == str(me_id)
+        out.append(d)
+    return {"available_permissions": sorted(SUB_ADMIN_PERMISSIONS), "admins": out}
+
+
+@router.post("/sub-admins", status_code=201)
+async def create_sub_admin(
+    payload: CreateSubAdminRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Main admin creates a sub-admin with an explicit permission scope."""
+    if not payload.permissions:
+        raise HTTPException(status_code=400, detail="Select at least one permission for this sub-admin.")
+    bad = [p for p in payload.permissions if p not in SUB_ADMIN_PERMISSIONS]
+    if bad:
+        raise HTTPException(status_code=400, detail=f"Unknown permissions: {', '.join(bad)}")
+    if len(payload.password) > 72:
+        raise HTTPException(status_code=400, detail="Password must be 72 characters or less")
+    existing = await db.execute(select(User).where(User.email == payload.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = User(
+        email=str(payload.email).lower(),
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name.strip(),
+        role=UserRole.admin,
+        is_active=True,
+        is_verified=True,
+        sub_admin_permissions=",".join(sorted(set(payload.permissions))),
+        created_by_admin_id=uuid.UUID(str(current_user["sub"])) if current_user.get("sub") else None,
+    )
+    db.add(user)
+    await db.flush()
+    return _sub_admin_dict(user)
+
+
+@router.patch("/sub-admins/{admin_id}")
+async def update_sub_admin(
+    admin_id: str,
+    payload: UpdateSubAdminRequest,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Main admin edits a sub-admin's permissions or active state."""
+    res = await db.execute(select(User).where(User.id == admin_id, User.role == UserRole.admin))
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    if _is_main_admin(user) and payload.permissions is not None:
+        raise HTTPException(status_code=403, detail="A main admin's scope cannot be changed.")
+    if payload.permissions is not None:
+        if not payload.permissions:
+            raise HTTPException(status_code=400, detail="Select at least one permission.")
+        bad = [p for p in payload.permissions if p not in SUB_ADMIN_PERMISSIONS]
+        if bad:
+            raise HTTPException(status_code=400, detail=f"Unknown permissions: {', '.join(bad)}")
+        user.sub_admin_permissions = ",".join(sorted(set(payload.permissions)))
+    if payload.is_active is not None:
+        if _is_main_admin(user) and payload.is_active is False:
+            raise HTTPException(status_code=403, detail="A main admin cannot be deactivated.")
+        user.is_active = payload.is_active
+    await db.flush()
+    d = _sub_admin_dict(user)
+    d["is_me"] = str(user.id) == str(current_user.get("sub"))
+    return d
+
+
+@router.delete("/sub-admins/{admin_id}", status_code=204)
+async def delete_sub_admin(
+    admin_id: str,
+    current_user: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Main admin removes a sub-admin (e.g. staff leaving). Main admins are
+    undeletable — that protects the owner account."""
+    res = await db.execute(select(User).where(User.id == admin_id, User.role == UserRole.admin))
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found")
+    if _is_main_admin(user):
+        raise HTTPException(status_code=403, detail="Main admins cannot be deleted.")
+    if str(user.id) == str(current_user.get("sub")):
+        raise HTTPException(status_code=400, detail="You cannot delete your own account.")
+    await db.delete(user)
+    await db.flush()
 
 
 # ── Teacher Management ────────────────────────────────────────────────────────

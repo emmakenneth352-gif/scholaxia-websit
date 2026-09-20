@@ -33,8 +33,10 @@ ELEVENLABS_SUPPORTED_LANGUAGES = {
 }
 
 # Clear female neural voices (Edge TTS — no key required).
+# English: Aria (en-US-AriaNeural) — clearer and more expressive than Jenny for
+# educational content; en-GB-SoniaNeural as an alternative crisp UK voice.
 _EDGE_VOICE_BY_LANG = {
-    "english": "en-US-JennyNeural",
+    "english": "en-US-AriaNeural",
     "french": "fr-FR-DeniseNeural",
     "spanish": "es-ES-ElviraNeural",
     "portuguese": "pt-BR-FranciscaNeural",
@@ -72,9 +74,24 @@ def prepare_speech_text(text: str, max_len: int = 3500) -> str:
         return ""
     t = re.sub(r"```[\s\S]*?```", " ", text)
     t = re.sub(r"`([^`]+)`", r"\1", t)
+    # LaTeX-ish delimiters confuse TTS ("one dollars") — unwrap them first.
+    t = re.sub(r"\$\$([^$]+?)\$\$", r"\1", t)
+    t = re.sub(r"\$([^$\n]{1,120}?)\$", r"\1", t)
+    # Lone "$" before/after words/digits: drop the symbol entirely.
+    t = t.replace("$", "")
+    t = re.sub(r"\\\((.+?)\\\)", r"\1", t)
+    t = re.sub(r"\\\[(.+?)\\\]", r"\1", t)
     t = re.sub(r"\*\*([^*]+)\*\*", r"\1", t)
     t = re.sub(r"\*([^*]+)\*", r"\1", t)
     t = re.sub(r"^#+\s*", "", t, flags=re.MULTILINE)
+    # Pronunciation: say symbols instead of skipping them.
+    t = re.sub(r"(?<=\d)\s*x\s*(?=\d)", " times ", t, flags=re.IGNORECASE)
+    t = t.replace("=", " equals ")
+    t = t.replace("/", " over ")
+    t = t.replace(">=", " is greater than or equal to ")
+    t = t.replace("<=", " is less than or equal to ")
+    t = re.sub(r"\s*>\s*", " is greater than ", t)
+    t = re.sub(r"\s*<\s*", " is less than ", t)
     t = re.sub(r"\s+", " ", t).strip()
     if len(t) > max_len:
         cut = t[:max_len].rsplit(" ", 1)[0]

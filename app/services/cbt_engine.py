@@ -40,6 +40,14 @@ DEFAULT_SETTINGS = {
         "English Language / Verbal Reasoning",
         "General Knowledge",
     ],
+    # Score scale — what each score is reported "over" (JAMB = combined 400;
+    # WAEC/NECO/JW/CE report each subject over 100).
+    "jamb_score_total": 400,
+    "waec_score_per_subject": 100,
+    "neco_score_per_subject": 100,
+    "jw_score_per_subject": 100,
+    "ce_score_per_subject": 100,
+    "score_messages": None,
     "randomize_questions": True,
     "randomize_options": True,
     "allow_resume": True,
@@ -94,6 +102,12 @@ async def ensure_cbt_settings_schema() -> None:
             ce_questions_per_subject INTEGER DEFAULT 40,
             ce_duration_minutes INTEGER DEFAULT 60,
             ce_subjects JSON DEFAULT NULL,
+            jamb_score_total INTEGER DEFAULT 400,
+            waec_score_per_subject INTEGER DEFAULT 100,
+            neco_score_per_subject INTEGER DEFAULT 100,
+            jw_score_per_subject INTEGER DEFAULT 100,
+            ce_score_per_subject INTEGER DEFAULT 100,
+            score_messages JSON DEFAULT NULL,
             randomize_questions BOOLEAN DEFAULT TRUE,
             randomize_options BOOLEAN DEFAULT TRUE,
             allow_resume BOOLEAN DEFAULT TRUE,
@@ -106,6 +120,12 @@ async def ensure_cbt_settings_schema() -> None:
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_questions_per_subject INTEGER DEFAULT 40",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_duration_minutes INTEGER DEFAULT 60",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_subjects JSON DEFAULT NULL",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS jamb_score_total INTEGER DEFAULT 400",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS waec_score_per_subject INTEGER DEFAULT 100",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS neco_score_per_subject INTEGER DEFAULT 100",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS jw_score_per_subject INTEGER DEFAULT 100",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_score_per_subject INTEGER DEFAULT 100",
+        "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS score_messages JSON DEFAULT NULL",
         """
         CREATE TABLE IF NOT EXISTS cbt_practice_attempts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -189,6 +209,12 @@ def settings_to_dict(row: CbtGlobalSettings | None) -> dict[str, Any]:
         "ce_questions_per_subject": int(getattr(row, "ce_questions_per_subject", None) or 40),
         "ce_duration_minutes": int(getattr(row, "ce_duration_minutes", None) or 60),
         "ce_subjects": _normalize_ce_subjects(getattr(row, "ce_subjects", None)),
+        "jamb_score_total": int(getattr(row, "jamb_score_total", None) or 400),
+        "waec_score_per_subject": int(getattr(row, "waec_score_per_subject", None) or 100),
+        "neco_score_per_subject": int(getattr(row, "neco_score_per_subject", None) or 100),
+        "jw_score_per_subject": int(getattr(row, "jw_score_per_subject", None) or 100),
+        "ce_score_per_subject": int(getattr(row, "ce_score_per_subject", None) or 100),
+        "score_messages": getattr(row, "score_messages", None) or None,
         "randomize_questions": bool(row.randomize_questions if row.randomize_questions is not None else True),
         "randomize_options": bool(row.randomize_options if row.randomize_options is not None else True),
         "allow_resume": bool(row.allow_resume if row.allow_resume is not None else True),
@@ -258,6 +284,18 @@ def _subject_keys(subject: str) -> set[str]:
         keys |= {"government", "govt"}
     if n in {"biology", "agric", "agricultural science"} and "agric" in n:
         keys |= {"agricultural science", "agric", "agriculture"}
+    # Civic Education ↔ JAMB's 2025 syllabus label "Citizenship and Heritage
+    # Studies (Civic)" — the bank stores the new syllabus name, while student
+    # profiles still say "Civic Education".
+    if "civic" in n or "citizenship" in n or "heritage" in n:
+        keys |= {
+            "civic education",
+            "civic",
+            "citizenship and heritage studies (civic)",
+            "citizenship and heritage studies",
+            "citizenship education",
+            "social studies",  # close junior-level equivalent
+        }
     return keys
 
 
@@ -317,6 +355,69 @@ async def _published_practice_exams(db: AsyncSession, exam_type: str) -> list[CB
     return out
 
 
+async def _bank_questions_cross_board(
+    db: AsyncSession,
+    exam_type: str,
+    subject: str,
+    own_exams: list[CBTExam],
+    limit: int | None,
+) -> list[CBTQuestion]:
+    """Same-subject questions from OTHER published boards, used when this
+    board's bank has no questions for the subject (e.g. Civic Education was
+    only uploaded under WAEC/NECO while the JAMB bank stores it as
+    'Citizenship and Heritage Studies (Civic)'). Subject knowledge is
+    board-independent, so this keeps locked subjects playable."""
+    from app.models.cbt import normalize_paper_kind
+
+    norm = _norm_subject(subject)
+    if not norm:
+        return []
+    own_ids = {ex.id for ex in (own_exams or [])}
+    board = normalize_board(exam_type)
+    try:
+        all_exams = (
+            await db.execute(
+                select(CBTExam).where(
+                    CBTExam.is_published.is_(True),
+                    CBTExam.is_school_exam.is_(False),
+                )
+            )
+        ).scalars().all()
+    except Exception:
+        return []
+    # One representative exam per distinct bank subject name.
+    pool: dict[str, CBTExam] = {}
+    for ex in all_exams:
+        if ex.id in own_ids or normalize_board(ex.exam_type) == board:
+            continue  # same-board misses were already checked; never cross within a board
+        if normalize_paper_kind(getattr(ex, "paper_kind", None)) == "past_questions":
+            continue
+        ex_norm = _norm_subject(ex.subject)
+        if ex_norm and ex_norm not in pool:
+            pool[ex_norm] = ex
+    exam_ids = [ex.id for name, ex in pool.items() if subjects_match(name, subject)]
+    if not exam_ids:
+        return []
+    id_cap = 600
+    if limit and limit > 0:
+        id_cap = min(max(int(limit) * 8, 120), 600)
+    id_rows = (
+        await db.execute(
+            select(CBTQuestion.id).where(CBTQuestion.exam_id.in_(exam_ids)).limit(id_cap)
+        )
+    ).scalars().all()
+    ids = list(id_rows)
+    if not ids:
+        return []
+    if limit and len(ids) > limit:
+        ids = random.sample(ids, int(limit))
+    rows = (
+        await db.execute(select(CBTQuestion).where(CBTQuestion.id.in_(ids)))
+    ).scalars().all()
+    clean = [q for q in rows if not _question_has_junk(q)]
+    return clean or list(rows)
+
+
 async def _bank_questions_for(
     db: AsyncSession,
     exam_type: str,
@@ -328,7 +429,7 @@ async def _bank_questions_for(
     exams = practice_exams if practice_exams is not None else await _published_practice_exams(db, exam_type)
     exam_ids = [ex.id for ex in exams if subjects_match(ex.subject, subject)]
     if not exam_ids:
-        return []
+        return await _bank_questions_cross_board(db, exam_type, subject, exams, limit)
 
     # Fast path: ids only, then sample in Python, then fetch rows
     id_cap = 600
@@ -349,7 +450,11 @@ async def _bank_questions_for(
     ).scalars().all()
     clean = [q for q in rows if not _question_has_junk(q)]
     # Prefer the clean set; fall back to everything only if the bank would empty.
-    return clean if clean else list(rows)
+    if clean:
+        return clean
+    if rows:
+        return list(rows)
+    return await _bank_questions_cross_board(db, exam_type, subject, exams, limit)
 
 
 async def build_section(
@@ -372,8 +477,8 @@ async def build_section(
     )
     if not bank:
         raise ValueError(
-            f"No questions in bank for {exam_type} / {subject}. "
-            "In Admin → CBT, upload/publish practice questions for this subject."
+            f"No practice questions available yet for {subject}. "
+            "It will appear here as soon as questions are published."
         )
     pick_n = min(need, len(bank))
     chosen = random.sample(bank, pick_n) if randomize_questions else bank[:pick_n]
@@ -423,6 +528,67 @@ def client_sections(sections: list[dict]) -> list[dict]:
             }
         )
     return out
+
+
+DEFAULT_SCORE_MESSAGES = {
+    "outstanding": "Outstanding! You are flying — keep it up! 🏆",
+    "excellent": "Excellent result! A top score — brilliant work. 🎉",
+    "very_good": "Very good! You are just a step from the top. 💪",
+    "good": "Good score! Keep practising to push it higher. 👍",
+    "fair": "Fair attempt — consistent practice will lift this fast. 📚",
+    "poor": "Don't give up — every practice makes you better. Keep going! 🚀",
+}
+
+
+def rating_message(percent: float, overrides: dict | None = None) -> tuple[str, str]:
+    """(rating_label, message) for a percentage — admin can override messages."""
+    p = float(percent or 0)
+    if p >= 90:
+        key, label = "outstanding", "Outstanding"
+    elif p >= 80:
+        key, label = "excellent", "Excellent"
+    elif p >= 70:
+        key, label = "very_good", "Very Good"
+    elif p >= 60:
+        key, label = "good", "Good"
+    elif p >= 45:
+        key, label = "fair", "Fair"
+    else:
+        key, label = "poor", "Keep Practising"
+    ov = overrides or {}
+    return label, str(ov.get(key) or DEFAULT_SCORE_MESSAGES.get(key, ""))
+
+
+def board_score_scale(board: str, settings: dict) -> dict[str, Any]:
+    """How a board's score is reported: combined total (JAMB) or per-subject
+    maximum (WAEC/NECO/etc.), derived from admin score-scale settings."""
+    board = normalize_board(board)
+    if board == "JAMB":
+        per = int(settings.get("jamb_questions_per_subject") or 40)
+        eng = int(settings.get("jamb_english_questions") or 60)
+        per_subject = {"english": eng, "default": per}
+        total = int(settings.get("jamb_score_total") or 400)
+    elif board == "WAEC":
+        per = int(settings.get("waec_questions_per_subject") or 50)
+        over = int(settings.get("waec_score_per_subject") or 100)
+        per_subject = {"default": per}
+        total = over
+    elif board == "NECO":
+        per = int(settings.get("neco_questions_per_subject") or 50)
+        over = int(settings.get("neco_score_per_subject") or 100)
+        per_subject = {"default": per}
+        total = over
+    elif board == "JUNIOR_WAEC":
+        per = int(settings.get("jw_questions_per_subject") or 60)
+        over = int(settings.get("jw_score_per_subject") or 100)
+        per_subject = {"default": per}
+        total = over
+    else:  # COMMON_ENTRANCE and anything else
+        per = int(settings.get("ce_questions_per_subject") or 40)
+        over = int(settings.get("ce_score_per_subject") or 100)
+        per_subject = {"default": per}
+        total = over
+    return {"combined": board == "JAMB", "total": total, "per_subject": per_subject}
 
 
 def build_practice_full_review(sections: list[dict], answers: dict) -> list[dict]:

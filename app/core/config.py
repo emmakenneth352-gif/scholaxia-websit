@@ -169,6 +169,9 @@ class Settings(BaseSettings):
     SEED_SAMPLE_CBT: bool = False
 
     ADMIN_EMAIL: str = "admin@scholaxia.com"
+    # One-time setup key for bootstrapping the FIRST main admin. Empty = allowed
+    # only while no admin exists. Set this in Render env to lock bootstrap down.
+    ADMIN_SETUP_KEY: str = ""
     ADMIN_PASSWORD: str = "changeme"
     ADMIN_INVITE_CODE: str = "SCHOLAXIA_ADMIN_2026"
 

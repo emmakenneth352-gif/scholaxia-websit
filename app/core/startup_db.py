@@ -41,6 +41,9 @@ _SCHEMA_STATEMENTS = (
     "CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone ON users (phone)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS school_id UUID NULL",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+    # sub-admin hierarchy
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS sub_admin_permissions VARCHAR(500) NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_admin_id UUID NULL",
     "ALTER TABLE users ALTER COLUMN profile_picture TYPE VARCHAR(1000)",
     # cbt_exams
     "ALTER TABLE cbt_exams ALTER COLUMN created_by DROP NOT NULL",
@@ -263,10 +266,15 @@ async def ensure_school_campus_schema() -> None:
 
 async def ensure_postgres_enums() -> None:
     """Commit each new enum label in its own transaction so it can be used immediately."""
+    from app.models.community import AssignmentFileType
     from app.models.user import ExamType, UserRole
 
     labels = [f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{e.value}'" for e in UserRole]
     labels += [f"ALTER TYPE examtype ADD VALUE IF NOT EXISTS '{e.value}'" for e in ExamType]
+    labels += [
+        f"ALTER TYPE assignmentfiletype ADD VALUE IF NOT EXISTS '{e.value}'"
+        for e in AssignmentFileType
+    ]
     for stmt in labels:
         try:
             async with engine.begin() as conn:

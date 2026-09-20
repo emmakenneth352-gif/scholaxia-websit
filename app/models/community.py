@@ -27,6 +27,7 @@ class AssignmentStatus(str, enum.Enum):
 class AssignmentFileType(str, enum.Enum):
     pdf = "pdf"
     image = "image"
+    doc = "doc"  # Word/Excel/PowerPoint/text and other documents
 
 
 class CommunityChannel(Base):

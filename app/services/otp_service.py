@@ -101,6 +101,17 @@ async def send_otp(email: str, full_name: str, purpose: str) -> str:
     return otp
 
 
+async def send_transactional_email(
+    to_email: str,
+    to_name: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+) -> None:
+    """Public wrapper — any feature can send email via the configured provider."""
+    await _send_email(to_email, to_name, subject, html_body, text_body)
+
+
 async def _send_email(
     to_email: str,
     to_name: str,

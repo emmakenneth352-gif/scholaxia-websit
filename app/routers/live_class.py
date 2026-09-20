@@ -32,6 +32,7 @@ from app.websockets import live_class_ws
 from app.services.live_class_access import get_live_access_info, parse_uuid, consume_live_session, live_class_requires_subscription, is_free_live_class
 from app.services.notification_service import send_subject_notification, send_user_notification, send_admins_notification, send_all_students_notification
 from app.services.access_code_delivery import deliver_access_codes_for_class
+from app.services.live_class_invites import send_live_class_invites
 from app.models.live_class_access_code import LiveClassAccessCodeDelivery
 
 router = APIRouter(prefix="/live-classes", tags=["Live Classes"])
@@ -975,6 +976,7 @@ async def create_class(
     _class_id   = str(live_class.id)
     _teacher_id = str(live_class.teacher_id)
     _is_live    = is_live
+    _invite_emails = [e for e in (payload.invited_student_emails or []) if (e or "").strip()] if vis == LiveClassVisibility.private.value else []
 
     # Run notifications + access-code delivery AFTER the transaction commits
     # (as a background task) so they never poison the class-creation transaction.
@@ -991,6 +993,17 @@ async def create_class(
                 await _notify_for_class(bg_db, cls, live_now=_is_live, start=start, end=end)
                 if _is_live:
                     await _notify_assigned_students_for_class(bg_db, _teacher_id, cls)
+                # Direct email invites (kids are invited by email — parents get
+                # class details + join code in their inbox).
+                try:
+                    t_res = await bg_db.execute(select(User).where(User.id == live_class.teacher_id))
+                    t = t_res.scalar_one_or_none()
+                    await send_live_class_invites(
+                        bg_db, cls, t.full_name if t else "Your teacher",
+                        extra_emails=_invite_emails,
+                    )
+                except Exception:
+                    pass
                 await bg_db.commit()
         except Exception:
             pass

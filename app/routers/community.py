@@ -366,7 +366,7 @@ class SubmitAssignmentRequest(BaseModel):
     channel_id: str
     tagged_teacher_id: str
     file_url: str
-    file_type: AssignmentFileType   # "pdf" | "image"
+    file_type: AssignmentFileType = AssignmentFileType.pdf  # pdf | image | doc
     caption: Optional[str] = None
 
 
@@ -624,9 +624,19 @@ COMMUNITY_ALLOWED_MIME = {
     "image/jpeg": ("image", "images"),
     "image/png": ("image", "images"),
     "image/webp": ("image", "images"),
+    "image/heic": ("image", "images"),
     "application/pdf": ("pdf", "assignments"),
     "application/msword": ("doc", "assignments"),
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("doc", "assignments"),
+    # Spreadsheets, slides and plain documents — assignments may be any file type.
+    "application/vnd.ms-excel": ("doc", "assignments"),
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ("doc", "assignments"),
+    "application/vnd.ms-powerpoint": ("doc", "assignments"),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ("doc", "assignments"),
+    "text/plain": ("doc", "assignments"),
+    "text/csv": ("doc", "assignments"),
+    "application/rtf": ("doc", "assignments"),
+    "application/zip": ("doc", "assignments"),
     "audio/webm": ("audio", "videos"),
     "audio/mpeg": ("audio", "videos"),
     "audio/mp4": ("audio", "videos"),
@@ -635,6 +645,12 @@ COMMUNITY_ALLOWED_MIME = {
     "audio/x-m4a": ("audio", "videos"),
     "audio/aac": ("audio", "videos"),
 }
+
+_DOC_EXTENSIONS = (
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv", ".rtf", ".zip",
+)
+_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".webp", ".heic")
 
 _AUDIO_EXTENSIONS = (".m4a", ".aac", ".mp3", ".webm", ".ogg", ".wav")
 
@@ -648,11 +664,17 @@ def _resolve_community_upload(
     name = (filename or "").lower()
     if name.endswith(_AUDIO_EXTENSIONS):
         return ("audio", "videos")
+    # Some OS/browser combinations send application/octet-stream for Office
+    # files — fall back to the file extension for documents and images.
+    if name.endswith(_DOC_EXTENSIONS):
+        return ("doc", "assignments")
+    if name.endswith(_IMAGE_EXTENSIONS):
+        return ("image", "images")
     raise HTTPException(
         status_code=400,
         detail=(
-            f"Unsupported file type '{content_type}'. "
-            "Allowed: images, PDF, Word docs, and voice notes (.m4a, .webm, .mp3)."
+            f"Unsupported file type '{content_type or name}'. "
+            "Allowed: images, PDF, Word/Excel/PowerPoint, text, CSV, ZIP, and voice notes."
         ),
     )
 

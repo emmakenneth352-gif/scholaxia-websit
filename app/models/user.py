@@ -45,6 +45,12 @@ class User(Base):
     language: Mapped[str | None] = mapped_column(String(10), nullable=True)  # en | fr | pt | ar
     # Bumped on each login so older JWTs on other devices stop working.
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Sub-admin scoping: comma-separated permission keys. NULL/empty = full
+    # (main) admin. Main admins create/remove sub-admins; nobody deletes a main admin.
+    sub_admin_permissions: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_by_admin_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )
     school_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("school_campuses.id"), nullable=True, index=True
     )

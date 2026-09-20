@@ -122,6 +122,8 @@ class UserInfo(BaseModel):
     kyc_completed: Optional[bool] = None
     country: Optional[str] = None
     language: Optional[str] = None
+    # Sub-admin scope for admin dashboards: None = main admin (full access).
+    sub_admin_permissions: Optional[list] = None
     age_group: Optional[str] = None
     grade_level: Optional[str] = None
     parent_email: Optional[str] = None
@@ -816,6 +818,11 @@ async def _login_user(payload: LoginRequest, db: AsyncSession):
         school_student_id=school_student_id,
         has_active_subscription=has_sub,
         exam_type=exam_type,
+        sub_admin_permissions=(
+            None
+            if not (getattr(user, "sub_admin_permissions", None) or "").strip()
+            else [p for p in (s.strip() for s in str(user.sub_admin_permissions).split(",")) if p]
+        ),
     )
 
     sv = int(getattr(user, "token_version", 0) or 0)

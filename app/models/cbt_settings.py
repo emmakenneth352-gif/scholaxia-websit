@@ -38,8 +38,20 @@ class CbtGlobalSettings(Base):
     # Common Entrance — independent from JAMB
     ce_questions_per_subject: Mapped[int] = mapped_column(Integer, default=40)
     ce_duration_minutes: Mapped[int] = mapped_column(Integer, default=60)
-    # Combined-exam subject list (like JAMB subjects, but admin-configured)
+    # Combined-exam subject list (like JAMB subjects, but admin-configurable)
     ce_subjects: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # ── Score scale (what the score is reported "over") ────────────────────
+    # JAMB reports one combined score over 400 (100 per subject by convention).
+    # WAEC/NECO/Junior WAEC/Common Entrance report each subject over 100.
+    jamb_score_total: Mapped[int] = mapped_column(Integer, default=400)
+    waec_score_per_subject: Mapped[int] = mapped_column(Integer, default=100)
+    neco_score_per_subject: Mapped[int] = mapped_column(Integer, default=100)
+    jw_score_per_subject: Mapped[int] = mapped_column(Integer, default=100)
+    ce_score_per_subject: Mapped[int] = mapped_column(Integer, default=100)
+    # Optional admin override of the motivational rating messages
+    # (keys: outstanding/excellent/very_good/good/fair/poor).
+    score_messages: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     randomize_questions: Mapped[bool] = mapped_column(Boolean, default=True)
     randomize_options: Mapped[bool] = mapped_column(Boolean, default=True)

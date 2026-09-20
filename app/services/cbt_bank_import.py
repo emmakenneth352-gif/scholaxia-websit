@@ -137,7 +137,9 @@ async def get_or_create_bank_exam(
     """Pick the canonical Question Bank exam for append, or create one. Never clears old rows."""
     board = normalize_board(normalize_exam_type(exam_type))
     subject = (subject or "").strip()
-    canonical_title = f"{board} {subject} Question Bank"
+    # Title carries the subject name only — the app strips legacy
+    # "…Question Bank" suffixes, and new banks should never add them back.
+    canonical_title = f"{board} {subject}".strip()
 
     exams = (
         await db.execute(
