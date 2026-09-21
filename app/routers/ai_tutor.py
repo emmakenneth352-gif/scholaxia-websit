@@ -37,6 +37,7 @@ from app.services.ai_service import (
 )
 from app.ai.recommendation_engine import get_recommendations
 from app.ai.weakness_analyzer import get_student_history, get_weak_topics
+from app.services import ai_token_service
 from app.ai.sia_intelligence import resolve_active_subject
 from app.ai.board_parser import extract_board_content
 from app.ai.model_backend import run_inference
@@ -256,6 +257,10 @@ async def ask_sia(
         )
         history = _normalize_history(payload.conversation_history)
 
+        # AI tokens: spend one token for this call; clients show the upgrade
+        # sheet whenever the returned balance is <= 0.
+        tokens_left = await ai_token_service.spend(db, current_user["sub"])
+
         # Photo attached? Route through vision so Sia actually SEES it.
         image_b64 = (payload.image_base64 or "").strip()
         if image_b64:
@@ -281,6 +286,7 @@ async def ask_sia(
                     "student": student_name,
                     "level": level,
                     "image_analyzed": True,
+                    "tokens_left": tokens_left,
                 }
             except Exception:
                 # Vision failed → fall through to a normal text answer below
@@ -321,6 +327,7 @@ async def ask_sia(
             "board": board,
             "student": student_name,
             "level": level,
+            "tokens_left": tokens_left,
         }
     except HTTPException:
         raise
@@ -374,6 +381,7 @@ Format rules:
 - 1 to 4 steps per reply.
 - After an important concept or a few solving steps, add ONE step with "wait": true whose voice asks a short understanding check like "Are you following me so far?" — that must be the LAST step of your reply.
 - If the student says they are confused or asks again, re-teach that part with a different simpler example.
+- The student leads. Teach EXACTLY what they asked for, in whichever subject their question belongs to. Never force, announce, or default to a subject (like Physics) the student did not mention. If the request is just a greeting or "teach me", ask them what they would like to learn today instead of picking a topic for them.
 - If the student says yes/ok/continue, continue from where you stopped.
 - Set "done": true only when the topic is fully taught (then the last step's voice summarizes and gives a small practice question).
 - Reply in the student's language and level.
@@ -427,12 +435,15 @@ async def sia_teach_step(
     user_prompt += f"\nStudent says: \"{question}\"\n\nProduce the next teaching steps as JSON."
 
     try:
+        tokens_left = await ai_token_service.spend(db, current_user["sub"])
         raw = await run_inference(
             user_prompt,
             system_prompt=_TEACHING_SYSTEM_PROMPT,
             max_tokens=1600,
             temperature=0.4,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         return {
             "steps": [{
@@ -491,6 +502,7 @@ async def sia_teach_step(
         "done": done,
         "student": student_name,
         "level": level,
+        "tokens_left": tokens_left,
         **({"parse_error": parse_error} if parse_error else {}),
     }
 

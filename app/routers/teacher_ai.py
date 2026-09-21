@@ -16,6 +16,9 @@ from app.core.deps import require_teacher
 from app.ai.prompt_builder import TEACHER_TASK_PROFILES
 from app.ai.model_backend import run_inference
 
+from app.core.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+
 router = APIRouter(prefix="/teacher-ai", tags=["Teacher AI"])
 
 VALID_TASKS = list(TEACHER_TASK_PROFILES.keys())
@@ -33,12 +36,14 @@ class TeacherAIResponse(BaseModel):
     result: str
     task: str
     subject: str
+    tokens_left: int | None = None
 
 
 @router.post("/ask", response_model=TeacherAIResponse)
 async def teacher_ask_ai(
     payload: TeacherAIRequest,
     current_user: dict = Depends(require_teacher),
+    db: _AsyncSession = Depends(get_db),
 ):
     """
     Teacher AI — helps teachers build content and manage their classes.
@@ -46,6 +51,10 @@ async def teacher_ask_ai(
     """
     try:
         task = payload.task if payload.task in VALID_TASKS else "general"
+
+        from app.services import ai_token_service
+
+        tokens_left = await ai_token_service.spend(db, current_user["sub"])
 
         history = None
         if payload.conversation_history:
@@ -91,6 +100,7 @@ async def teacher_ask_ai(
             result=result,
             task=task,
             subject=payload.subject,
+            tokens_left=tokens_left,
         )
     except HTTPException:
         raise

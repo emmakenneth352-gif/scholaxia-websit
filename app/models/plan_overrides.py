@@ -32,5 +32,7 @@ class PlanOverride(Base):
     boards: Mapped[str | None] = mapped_column(String(240), nullable=True)
     # For custom live plans: session count / minutes per session
     sessions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # For AI token packs: price is USD, `ai_tokens` is the credit granted.
+    ai_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=naive_utc_now, onupdate=naive_utc_now)

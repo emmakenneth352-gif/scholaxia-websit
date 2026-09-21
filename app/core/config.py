@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     # Paystack (library books, CBT packages, class packages)
     PAYSTACK_PUBLIC_KEY: str = ""
     PAYSTACK_SECRET_KEY: str = ""
+    # AI token packs are priced in USD; admins set the NGN conversion rate.
+    AI_USD_TO_NGN: float = 1600.0
     # Optional browser redirect after Paystack checkout (left blank for mobile SDK flows)
     PAYSTACK_CALLBACK_URL: str = ""
 

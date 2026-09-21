@@ -34,6 +34,7 @@ from app.routers import sil
 from app.routers import cbt_coupons, cbt_practice, videos, school_office, schools, external_exams
 from app.routers import cbt_subject_change
 from app.routers import past_questions_shop
+from app.routers import ai_tokens
 from app.websockets.live_class_ws import live_class_endpoint
 
 
@@ -118,6 +119,7 @@ app.include_router(performance.router, prefix="/api/v1")
 app.include_router(developer_auth.router, prefix="/api/v1")
 app.include_router(developer_keys.router, prefix="/api/v1")
 app.include_router(public_ai_api.router, prefix="/api")
+app.include_router(ai_tokens.router, prefix="/api/v1")
 app.include_router(profiles.router, prefix="/api/v1")
 
 

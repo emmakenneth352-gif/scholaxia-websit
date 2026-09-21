@@ -156,8 +156,11 @@ async def sia_kind_chat(
   Uses multi-model fallback (Gemini → OpenAI → DeepSeek → Groq).
     """
     try:
+        from app.services import ai_token_service as _tokens
+
         profile = await _get_kind_profile(current_user["sub"], db)
         name = await _get_child_name(current_user["sub"], db)
+        tokens_left = await _tokens.spend(db, current_user["sub"])
         answer = await kind_chat(
             question=payload.question,
             subject=payload.subject,
@@ -180,6 +183,7 @@ async def sia_kind_chat(
             "subject": payload.subject,
             "age_group": profile.age_group,
             "engine": "sia-kind-multi-model",
+            "tokens_left": tokens_left,
         }
     except HTTPException:
         raise

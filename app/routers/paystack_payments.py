@@ -67,6 +67,7 @@ PRODUCT_MARKETPLACE_BOOKING = "marketplace_booking"
 PRODUCT_MARKETPLACE_ORDER = "marketplace_order"
 PRODUCT_SKILL_ENROLLMENT = "skill_enrollment"
 PRODUCT_PAST_QUESTION_PDF = "past_question_pdf"
+PRODUCT_AI_TOKEN_PACK = "ai_token_pack"
 PRODUCT_TYPES = {
     PRODUCT_LIBRARY_BOOK,
     PRODUCT_CBT_PACKAGE,
@@ -75,6 +76,7 @@ PRODUCT_TYPES = {
     PRODUCT_MARKETPLACE_ORDER,
     PRODUCT_SKILL_ENROLLMENT,
     PRODUCT_PAST_QUESTION_PDF,
+    PRODUCT_AI_TOKEN_PACK,
 }
 
 ENTITLEMENT_CBT_PACKAGE = "cbt_package"
@@ -111,6 +113,7 @@ def _new_reference(product_type: str) -> str:
         "marketplace_order": "morder",
         "skill_enrollment": "skill",
         "past_question_pdf": "pastq",
+        "ai_token_pack": "aitok",
     }[product_type]
     return f"pstk-{short}-{uuid.uuid4().hex}"
 
@@ -488,6 +491,10 @@ async def _fulfill(db: AsyncSession, payment: Payment, tx_data: dict) -> None:
             access = await get_live_access_info(db, str(payment.student_id))
             if not access.get("active_plan"):
                 await _grant_class_package(db, payment)
+    elif payment.product_type == PRODUCT_AI_TOKEN_PACK and not already_fulfilled:
+        from app.routers.ai_tokens import fulfill_ai_token_pack
+
+        await fulfill_ai_token_pack(db, payment)
     elif payment.product_type == PRODUCT_MARKETPLACE_BOOKING:
         await _grant_marketplace_booking(db, payment)
     elif payment.product_type == PRODUCT_MARKETPLACE_ORDER:

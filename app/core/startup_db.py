@@ -264,6 +264,25 @@ async def ensure_school_campus_schema() -> None:
             logger.warning("school_campus schema skipped: %s (%s)", stmt, exc)
 
 
+async def ensure_ai_token_schema() -> None:
+    """AI token wallets + transactions + ai_tokens override column.
+
+    create_all covers the new tables; the ALTER covers the plan_overrides
+    column on databases that already have the table.
+    """
+    stmts = (
+        "ALTER TABLE plan_overrides ADD COLUMN IF NOT EXISTS ai_tokens INTEGER NULL",
+        "ALTER TABLE ai_token_wallets ADD COLUMN IF NOT EXISTS last_refill_at TIMESTAMP NULL",
+        "CREATE INDEX IF NOT EXISTS ix_ai_token_tx_user ON ai_token_transactions (user_id)",
+    )
+    for stmt in stmts:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(stmt))
+        except Exception as exc:
+            logger.warning("ai_token schema skipped: %s (%s)", stmt, exc)
+
+
 async def ensure_postgres_enums() -> None:
     """Commit each new enum label in its own transaction so it can be used immediately."""
     from app.models.community import AssignmentFileType
@@ -537,6 +556,10 @@ async def initialize_database() -> bool:
         await ensure_school_campus_schema()
     except Exception as exc:
         logger.warning("ensure_school_campus_schema: %s", exc)
+    try:
+        await ensure_ai_token_schema()
+    except Exception as exc:
+        logger.warning("ensure_ai_token_schema: %s", exc)
     try:
         await ensure_cbt_coupon_tables()
     except Exception as exc:
