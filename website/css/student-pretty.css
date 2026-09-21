@@ -839,6 +839,10 @@ body.app-body {
   border-radius: 18px;
   padding: 1rem;
   max-height: 420px;
+  /* Bubbles hug the top — grid's default stretch blew short messages up
+     into huge boxes to fill the min-height. */
+  align-content: start;
+  align-items: start;
 }
 
 .bubble {
@@ -1179,6 +1183,8 @@ body.app-body {
 .sia-chat {
   max-height: min(52vh, 520px);
   min-height: 320px;
+  align-content: start;
+  align-items: start;
   margin: 0.75rem 1.1rem;
   border-radius: 18px;
   border: 1px solid #ede9fe;
