@@ -204,6 +204,11 @@ function getSchedulePayload(goLiveNow) {
       });
     }
     if (ids.length) body.invited_student_ids = ids;
+    // Direct email invites: every address gets a class invitation email.
+    var emailInput = document.getElementById("host-invite-emails");
+    var rawEmails = (emailInput && emailInput.value) || "";
+    var emails = rawEmails.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return s.indexOf("@") > 0; });
+    if (emails.length) body.invited_student_emails = emails;
   }
   if (visibility === "school_group") {
     var gid = document.getElementById("host-school-group").value;
@@ -1400,8 +1405,11 @@ async function askTeacherAI() {
   }
   if (wrap) wrap.classList.remove("hidden");
   if (out) {
-    out.classList.add("loading");
-    out.textContent = "Tutor AI is thinking…";
+    out.classList.remove("loading");
+    out.textContent = "";
+    out.innerHTML =
+      '<span class="sia-typing-dots ai-inline-typing" aria-label="Tutor AI is typing">' +
+      "<span></span><span></span><span></span></span>";
   }
   if (btn) {
     btn.disabled = true;
@@ -1421,7 +1429,9 @@ async function askTeacherAI() {
       out.classList.remove("loading");
       out.textContent = res.result || "No response.";
     }
-    if (wrap) wrap.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    // Show the TOP of the result — reading flows down instead of landing at
+    // the bottom of a long answer.
+    if (wrap) wrap.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
     if (err) err.textContent = e.message;
     if (wrap) wrap.classList.add("hidden");

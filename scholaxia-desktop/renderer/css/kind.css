@@ -1164,3 +1164,25 @@ html[data-app-theme="dark"] .kind-theme-btn {
   background: #221d36;
   border-color: #372f52;
 }
+
+/* ── Sia typing indicator (kids chat) ── */
+.sia-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 2px;
+}
+.sia-typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #7c3aed;
+  opacity: 0.35;
+  animation: siaTypingBounce 1.2s infinite ease-in-out;
+}
+.sia-typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.sia-typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes siaTypingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}

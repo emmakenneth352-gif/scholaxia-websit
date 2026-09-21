@@ -303,13 +303,34 @@ async function loadKindHome() {
   }
 }
 
+var kindSiaThinking = false;
+
 function renderKindSia() {
   var el = document.getElementById("kind-sia-messages");
   if (!el) return;
-  el.innerHTML = kindSiaHistory.map(function (m) {
+  var html = kindSiaHistory.map(function (m) {
     return '<div class="kind-sia-msg ' + (m.isAi ? "ai" : "user") + '">' + kindEsc(m.text) + "</div>";
   }).join("");
-  el.scrollTop = el.scrollHeight;
+  // Typing indicator while Sia thinks.
+  if (kindSiaThinking) {
+    html +=
+      '<div class="kind-sia-msg ai sia-typing" aria-label="Sia is typing">' +
+      '<span class="sia-typing-dots"><span></span><span></span><span></span></span></div>';
+  }
+  el.innerHTML = html;
+  // While typing keep the indicator in view; once the reply lands, align the
+  // TOP of the newest reply in view — reads down naturally instead of
+  // dropping the child at the bottom of a long answer.
+  var last = el.lastElementChild;
+  if (!last) return;
+  if (kindSiaThinking) {
+    if (last.scrollIntoView) last.scrollIntoView({ block: "end", behavior: "smooth" });
+    else el.scrollTop = el.scrollHeight;
+  } else if (last.scrollIntoView) {
+    last.scrollIntoView({ block: "start", behavior: "smooth" });
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 async function kindSendSia() {
@@ -321,6 +342,7 @@ async function kindSendSia() {
   inp.value = "";
   if (err) err.textContent = "";
   kindSiaHistory.push({ isAi: false, text: q });
+  kindSiaThinking = true;
   renderKindSia();
 
   try {
@@ -339,9 +361,11 @@ async function kindSendSia() {
         "I'd love to help you learn! Tell me a subject (like English or Maths) and what you want to practice — reading, spelling, or a homework question.";
     }
     kindSiaHistory.push({ isAi: true, text: reply });
+    kindSiaThinking = false;
     renderKindSia();
     if (typeof kindSpeak === "function") kindSpeak(reply);
   } catch (e) {
+    kindSiaThinking = false;
     if (err) err.textContent = e.message || "Sia is resting. Try again!";
     kindSiaHistory.push({
       isAi: true,
@@ -370,7 +394,7 @@ async function kindSendImage(inputEl) {
       body: fd,
     });
     var data = await res.json().catch(function () { return {}; });
-    if (!res.ok) throw new Error(data.detail || "Sia can't see the picture right now.");
+    if (!res.ok) throw new Error(formatApiError(data.detail) || "Sia can't see the picture right now.");
     var reply = data.sia_kind || data.answer || "I couldn't look at that picture — show me again!";
     kindSiaHistory.push({ isAi: true, text: reply });
     renderKindSia();

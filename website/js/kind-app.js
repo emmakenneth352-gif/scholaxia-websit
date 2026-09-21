@@ -22,6 +22,7 @@
   var pageHistory = ["home"];
   var currentPage = "home";
   var siaHistory = [];
+  var siaThinking = false;
   var cbtState = { exam: null, session: null, answers: {}, index: 0 };
   var kindLibraryCache = [];
   var kindVideosCache = [];
@@ -183,12 +184,30 @@
         '<div class="sia-welcome"><div class="sia-orb sm">S</div><div><strong>Hi friend!</strong><p>What do you want to learn today?</p></div></div>';
       return;
     }
-    box.innerHTML = siaHistory
+    var html = siaHistory
       .map(function (m) {
         return '<div class="bubble ' + (m.isAi ? "bot" : "me") + '">' + esc(m.text) + "</div>";
       })
       .join("");
-    box.scrollTop = box.scrollHeight;
+    // Typing indicator while Sia thinks of the answer.
+    if (siaThinking) {
+      html +=
+        '<div class="bubble bot sia-typing" aria-label="Sia is typing">' +
+        '<span class="sia-typing-dots"><span></span><span></span><span></span></span></div>';
+    }
+    box.innerHTML = html;
+    // While typing keep the indicator in view; once the reply lands, align the
+    // TOP of the newest reply in view — reads down naturally.
+    var last = box.lastElementChild;
+    if (!last) return;
+    if (siaThinking) {
+      if (last.scrollIntoView) last.scrollIntoView({ block: "end", behavior: "smooth" });
+      else box.scrollTop = box.scrollHeight;
+    } else if (last.scrollIntoView) {
+      last.scrollIntoView({ block: "start", behavior: "smooth" });
+    } else {
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
   async function sendSia(question) {
@@ -200,6 +219,7 @@
       err.className = "form-status";
     }
     siaHistory.push({ isAi: false, text: q });
+    siaThinking = true;
     renderSia();
     try {
       var history = siaHistory.slice(-10).map(function (m) {
@@ -216,8 +236,10 @@
           "I'd love to help you learn! Tell me a subject (like English or Maths) and what you want to practise.";
       }
       siaHistory.push({ isAi: true, text: String(reply) });
+      siaThinking = false;
       renderSia();
     } catch (e) {
+      siaThinking = false;
       if (err) {
         err.textContent = e.message || "Sia is resting. Try again!";
         err.className = "form-status err";

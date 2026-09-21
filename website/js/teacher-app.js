@@ -216,7 +216,10 @@
     };
 
     if (vis === "private") {
-      // Code-only private class — no email invites required.
+      // Direct email invites (kids join from their list — parents get an email).
+      var rawEmails = (($("hostInviteEmails") && $("hostInviteEmails").value) || "");
+      var emails = rawEmails.split(",").map(function (s) { return s.trim(); }).filter(function (s) { return s.indexOf("@") > 0; });
+      if (emails.length) body.invited_student_emails = emails;
     }
     if (vis === "school_group") {
       var gid = ($("hostSchoolGroup") && $("hostSchoolGroup").value) || "";
@@ -1498,7 +1501,12 @@ async function endClass(id) {
     div.appendChild(label);
     div.appendChild(body);
     log.appendChild(div);
-    log.scrollTop = log.scrollHeight;
+    // Align the TOP of the newest reply in view — reads down naturally.
+    if (div.scrollIntoView) {
+      div.scrollIntoView({ block: "start", behavior: "smooth" });
+    } else {
+      log.scrollTop = log.scrollHeight;
+    }
   }
 
   async function askAI() {
@@ -1539,6 +1547,17 @@ async function endClass(id) {
         "\n\nTeacher follow-up: " +
         details;
     }
+    var log = $("aiChatLog");
+    var typing = null;
+    if (log) {
+      log.hidden = false;
+      typing = document.createElement("div");
+      typing.className = "ai-bubble ai-bubble-ai ai-typing";
+      typing.setAttribute("aria-label", "Teacher AI is typing");
+      typing.innerHTML = "<span></span><span></span><span></span>";
+      log.appendChild(typing);
+      if (typing.scrollIntoView) typing.scrollIntoView({ block: "end", behavior: "smooth" });
+    }
     try {
       var res = await api.api("/api/v1/teacher-ai/ask", {
         method: "POST",
@@ -1549,6 +1568,7 @@ async function endClass(id) {
           details: detailsPayload,
         },
       });
+      if (typing) typing.remove();
       var result = (res && res.result) || "No response.";
       appendAiBubble("ai", result);
       aiHistory.push({ role: "ai", text: result });
@@ -1558,11 +1578,13 @@ async function endClass(id) {
       }
       if (btn) btn.textContent = "Send reply";
     } catch (e) {
+      if (typing) typing.remove();
       if (err) {
         err.textContent = e.message || "AI request failed.";
         err.className = "form-status err";
       }
     } finally {
+      if (typing && typing.parentNode) typing.remove();
       if (btn) btn.disabled = false;
       if (btn && btn.textContent === "Working…") btn.textContent = "Ask Teacher AI";
     }

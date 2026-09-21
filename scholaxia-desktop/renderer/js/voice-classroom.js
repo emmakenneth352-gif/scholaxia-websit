@@ -181,7 +181,7 @@ function vcRenderChat() {
       "Tap 🔊 on a reply to hear it.</div>";
     return;
   }
-  el.innerHTML = vcState.chatLog.map(function (m, i) {
+  var html = vcState.chatLog.map(function (m, i) {
     var img = m.image ? '<img class="vc-msg-image" src="' + m.image + '" alt="" />' : "";
     var speak = m.role === "assistant"
       ? '<button type="button" class="vc-speak-btn" onclick="vcSpeakMsg(' + i + ')" title="Read aloud">🔊</button>'
@@ -193,7 +193,27 @@ function vcRenderChat() {
       "</div>"
     );
   }).join("");
-  el.scrollTop = el.scrollHeight;
+  // Typing indicator while the AI teacher prepares the answer.
+  if (vcState.busy && vcState.mode === "chat") {
+    html +=
+      '<div class="vc-msg vc-msg-sia vc-typing" id="vc-typing">' +
+      '<div class="vc-msg-avatar">S</div>' +
+      '<div class="vc-typing-bubble" aria-label="Sia is typing"><span></span><span></span><span></span></div>' +
+      "</div>";
+  }
+  el.innerHTML = html;
+  // While typing, keep the indicator itself in view (bottom); once the answer
+  // lands, align the TOP of the newest reply in view — reads down naturally.
+  var last = el.lastElementChild;
+  if (!last) return;
+  if (vcState.busy && vcState.mode === "chat") {
+    if (last.scrollIntoView) last.scrollIntoView({ block: "end", behavior: "smooth" });
+    else el.scrollTop = el.scrollHeight;
+  } else if (last.scrollIntoView) {
+    last.scrollIntoView({ block: "start", behavior: "smooth" });
+  } else {
+    el.scrollTop = el.scrollHeight;
+  }
 }
 
 function vcSpeakMsg(i) {
@@ -275,6 +295,22 @@ function vcStatus(msg) {
   if (el) el.textContent = msg || "";
 }
 
+/** FastAPI validation errors return detail as an ARRAY of objects —
+ *  String()-ing it produced the infamous "[object Object]". Flatten it. */
+function vcDetailText(data, fallback) {
+  var d = data && data.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    var line = d.map(function (x) {
+      var where = (x.loc || []).filter(function (p) { return p !== "body"; }).join(".");
+      return (where ? where + ": " : "") + (x.msg || x.message || "");
+    }).join(" — ").trim();
+    if (line) return line;
+  }
+  if (d && typeof d === "object") return d.msg || d.message || JSON.stringify(d);
+  return (data && (data.message || data.error)) || fallback || "Request failed.";
+}
+
 function vcSyncButtons() {
   var mic = document.getElementById("vc-mic-btn");
   if (mic) {
@@ -314,7 +350,7 @@ async function vcTranscribeBlob(blob, ext) {
     body: fd,
   });
   var data = await res.json().catch(function () { return {}; });
-  if (!res.ok) throw new Error(data.detail || "Could not transcribe the recording. Try again.");
+  if (!res.ok) throw new Error(vcDetailText(data, "Could not transcribe the recording. Try again."));
   return String(data.text || "").trim();
 }
 
@@ -488,8 +524,9 @@ async function vcAsk() {
 
   if (vcState.mode === "chat") {
     vcBubble("user", q || "📷 Photo", imagePreview);
-    vcClearImage();
   }
+  // Keep the File until the request is built — clearing earlier sent an empty
+  // upload and the server answered with a validation array ([object Object]).
 
   // The teacher speaks — same voice service as the rest of the app.
   function speakAnswer(text) {
@@ -516,9 +553,9 @@ async function vcAsk() {
         body: fd,
       });
       var data = await res.json().catch(function () { return {}; });
-      if (!res.ok) throw new Error(data.detail || "Could not read the image.");
+      if (!res.ok) throw new Error(vcDetailText(data, "Could not read the image."));
       answer = data.sia || data.answer || "";
-      if (vcState.mode !== "chat") vcClearImage();
+      vcClearImage();
     } else {
       var hist = vcState.history.slice(-8).map(function (m) {
         return { role: m.role, content: m.content };
@@ -536,7 +573,7 @@ async function vcAsk() {
         }),
       });
       var data2 = await res2.json().catch(function () { return {}; });
-      if (!res2.ok) throw new Error(data2.detail || "The AI teacher could not answer.");
+      if (!res2.ok) throw new Error(vcDetailText(data2, "The AI teacher could not answer."));
       answer = data2.sia || data2.answer || "";
       if (data2.board && data2.board.length) {
         board = vcMergeBoard(board, data2.board);
@@ -557,6 +594,10 @@ async function vcAsk() {
 
     vcState.history.push({ role: "user", content: q || "📷 photo" });
     vcState.history.push({ role: "assistant", content: answer });
+    // Clear busy BEFORE rendering the reply so the typing indicator disappears
+    // the moment the answer bubble appears.
+    vcState.busy = false;
+    vcSyncButtons();
     if (vcState.mode === "chat") {
       // Normal chat: full answer inline. Speak only if Voice is ON.
       vcBubble("assistant", answer);
@@ -567,13 +608,17 @@ async function vcAsk() {
     }
     vcStatus("");
   } catch (e) {
-    var msg = e.message || "Something went wrong. Try again.";
+    var msg = (e && e.message) || "Something went wrong. Try again.";
     vcStatus(msg);
     // The status line is only visible in Classroom mode — surface errors in chat too.
     if (vcState.mode === "chat") vcBubble("assistant", "⚠️ " + msg);
   } finally {
-    vcState.busy = false;
-    vcSyncButtons();
+    vcClearImage();
+    if (vcState.busy) {
+      vcState.busy = false;
+      vcSyncButtons();
+      if (vcState.mode === "chat") vcRenderChat();
+    }
   }
 }
 

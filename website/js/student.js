@@ -2200,7 +2200,8 @@
     siaBtn.disabled = true;
     siaBtn.textContent = "Sia is thinking…";
     box.hidden = false;
-    box.innerHTML = "<strong>Sia</strong><p>Loading deeper explanation…</p>";
+    box.innerHTML =
+      '<strong>Sia</strong><p class="sia-typing"><span class="sia-typing-dots"><span></span><span></span><span></span></span></p>';
     fetchSiaDeepExplain(q)
       .then(function (res) {
         var text = (res && (res.sia || res.answer || res.message)) || "Could not load explanation.";
@@ -3014,6 +3015,34 @@
         retries: 0,
         preferXhr: true,
       })
+      .catch(function (startErr) {
+        // OFFLINE RESUME: reuse the last cached attempt + downloaded sections.
+        if (isCbtPackageError(startErr)) throw startErr;
+        var offline = typeof navigator !== "undefined" && !navigator.onLine;
+        var cachedAttempt = null;
+        try {
+          cachedAttempt = JSON.parse(localStorage.getItem("sia_cbt_attempt_last") || "null");
+        } catch (eParse) { cachedAttempt = null; }
+        var cachedSections = cbtCachedSections(cachedAttempt && cachedAttempt.attempt_id);
+        if (
+          offline &&
+          cachedAttempt &&
+          String(cachedAttempt.exam_type || "").toUpperCase() === String(examType || "").toUpperCase() &&
+          cachedSections && Object.keys(cachedSections).length
+        ) {
+          cachedAttempt.sections = (cachedAttempt.sections || []).map(function (sec, i) {
+            return cachedSections[i] || sec;
+          });
+          finished = true;
+          clearTimeout(watchdog);
+          clearTimeout(hardStop);
+          resetStartBtn();
+          openPracticeAttempt(cachedAttempt);
+          setStartStatus("Offline — playing your downloaded questions.", true);
+          return null;
+        }
+        throw startErr;
+      })
       .then(function (attempt) {
         if (finished && !attempt) return;
         finished = true;
@@ -3022,6 +3051,7 @@
         resetStartBtn();
         try {
           openPracticeAttempt(attempt);
+          cbtCacheOfflinePack(attempt);
           setStartStatus("", true);
         } catch (openErr) {
           setStartStatus(errMsg(openErr) || "Could not open exam. Tap Start again.", false);
@@ -3042,6 +3072,32 @@
         }
         setStartStatus(errMsg(err) || "Could not start CBT. Try again.", false);
       });
+  }
+
+  function cbtCachedSections(attemptId) {
+    if (!attemptId) return null;
+    try {
+      var raw = localStorage.getItem("sia_cbt_sections_" + attemptId);
+      var map = raw ? JSON.parse(raw) : null;
+      return map && typeof map === "object" ? map : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Persist the attempt + every downloaded section so CBT can resume offline.
+  function cbtCacheOfflinePack(attempt) {
+    try {
+      if (!attempt || !attempt.attempt_id) return;
+      localStorage.setItem("sia_cbt_attempt_last", JSON.stringify(attempt));
+      var map = cbtCachedSections(attempt.attempt_id) || {};
+      (attempt.sections || []).forEach(function (sec, i) {
+        if (sec && sec.questions && sec.questions.length) map[i] = sec;
+      });
+      if (Object.keys(map).length) {
+        localStorage.setItem("sia_cbt_sections_" + attempt.attempt_id, JSON.stringify(map));
+      }
+    } catch (eQuota) {}
   }
 
   function sectionQuestions(section) {
@@ -3267,10 +3323,28 @@
           }
           sections[nextIndex] = sec;
           st.sections = sections;
+          cbtCacheOfflinePack({
+            attempt_id: st.practiceAttemptId,
+            exam_type: st.examType,
+            sections: sections,
+            duration_minutes: st.durationMinutes,
+            seconds_left: st.remainingSec,
+          });
           apply();
         })
         .catch(function (err) {
           if (!Exam.current || Exam.current._sectionLoadId !== loadId) return;
+          // OFFLINE: play the downloaded copy of this subject.
+          var offlineNow = typeof navigator !== "undefined" && !navigator.onLine;
+          var cachedSec = offlineNow
+            ? (cbtCachedSections(st.practiceAttemptId) || {})[nextIndex]
+            : null;
+          if (cachedSec && (cachedSec.questions || []).length) {
+            sections[nextIndex] = cachedSec;
+            st.sections = sections;
+            apply();
+            return;
+          }
           var msg = errMsg(err) || "Could not load subject questions. Try again.";
           if ($("examQuestionText")) $("examQuestionText").textContent = msg;
           if ($("examOptions")) {
@@ -4676,7 +4750,12 @@
     el.className = "bubble " + (isMe ? "me" : "bot");
     el.textContent = text;
     box.appendChild(el);
-    box.scrollTop = box.scrollHeight;
+    // Align the TOP of the newest bubble in view — reads down naturally.
+    if (el.scrollIntoView) {
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+    } else {
+      box.scrollTop = box.scrollHeight;
+    }
   }
 
   function askSia(text) {
@@ -4688,10 +4767,12 @@
     if (siaHistory.length > 12) siaHistory = siaHistory.slice(-12);
 
     var thinking = document.createElement("div");
-    thinking.className = "bubble bot";
-    thinking.textContent = "Sia is thinking…";
+    thinking.className = "bubble bot sia-typing";
+    thinking.setAttribute("aria-label", "Sia is typing");
+    thinking.innerHTML =
+      '<span class="sia-typing-dots"><span></span><span></span><span></span></span>';
     $("siaChat").appendChild(thinking);
-    $("siaChat").scrollTop = $("siaChat").scrollHeight;
+    thinking.scrollIntoView({ block: "end", behavior: "smooth" });
 
     api
       .api("/api/v1/sia/ask", {
