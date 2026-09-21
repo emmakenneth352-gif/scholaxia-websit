@@ -633,6 +633,7 @@ def light_sections(sections: list[dict]) -> list[dict]:
                 "subject": sec.get("subject"),
                 "total": int(sec.get("total") or len(qs) or 0),
                 "completed": bool(sec.get("completed")),
+                "has_questions": bool(qs),
                 "questions": [],
             }
         )
@@ -883,8 +884,63 @@ async def start_practice_attempt(
     if not settings.get("cbt_enabled", True):
         raise ValueError("CBT practice is currently disabled by admin.")
 
-    # Instant Start: abandon old in-progress rows with a lightweight UPDATE
-    # (never SELECT the huge JSON sections blob into Python).
+    # Reuse an in-progress attempt for the SAME board + subjects instead of
+    # creating a new one on every open. The mobile app caches papers per
+    # attempt id — a brand-new row each open forced a full re-download
+    # ("Synchronizing…") and reset the student's progress every time.
+    def _norm_subjects(lst) -> list[str]:
+        return sorted({str(s).strip().lower() for s in (lst or []) if str(s).strip()})
+
+    reusable: CbtPracticeAttempt | None = None
+    try:
+        open_attempts = (
+            (
+                await db.execute(
+                    select(CbtPracticeAttempt)
+                    .where(
+                        CbtPracticeAttempt.student_id == sid,
+                        CbtPracticeAttempt.exam_type == board,
+                        CbtPracticeAttempt.status == "in_progress",
+                    )
+                    .order_by(CbtPracticeAttempt.started_at.desc())
+                    .limit(5)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        requested = _norm_subjects(subjects)
+        for cand in open_attempts:
+            if _norm_subjects(cand.subjects) == requested:
+                reusable = cand
+                break
+    except Exception:
+        logger.exception("practice start: reuse lookup failed")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        reusable = None
+
+    if reusable is not None:
+        # Timer expired while the student was away? Grant a fresh clock — the
+        # old behaviour created a brand-new attempt (full duration) each open,
+        # so this is no more lenient, it just keeps the same paper.
+        now = naive_utc_now()
+        if reusable.ends_at is None or reusable.ends_at <= now:
+            reusable.ends_at = now + timedelta(minutes=int(reusable.duration_minutes or 60))
+            try:
+                await db.flush()
+            except Exception:
+                logger.exception("practice start: could not refresh attempt timer")
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
+        return reusable
+
+    # No reusable attempt: abandon old in-progress rows with a lightweight
+    # UPDATE (never SELECT the huge JSON sections blob into Python).
     try:
         await db.execute(
             update(CbtPracticeAttempt)
