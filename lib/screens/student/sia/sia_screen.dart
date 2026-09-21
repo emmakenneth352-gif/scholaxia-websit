@@ -24,7 +24,7 @@ class _SiaScreenState extends State<SiaScreen> {
   String? _educationLevel;
   String _studentName = 'there';
   bool _loading = false;
-  bool _voiceOn = true;
+  bool _voiceOn = false; // read replies aloud only when the student taps 🔊
   List<_Msg> _messages = [];
   String _tutorMode = 'smart'; // smart, friendly, strict, exam_mode
 
@@ -200,8 +200,26 @@ class _SiaScreenState extends State<SiaScreen> {
     await _loadProfile();
   }
 
+  final GlobalKey _lastMsgKey = GlobalKey();
+
   void _scrollToEnd() {
-    // Newest-at-top list: no scrolling needed — new messages appear at the top.
+    // When a new AI reply lands, align its TOP with the top of the screen —
+    // the student reads downwards naturally instead of being dropped at the
+    // bottom of the reply and forced to scroll back up.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final ctx = _lastMsgKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.0, // top of the newest message at the top of the view
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      } else if (_scrollCtrl.hasClients) {
+        _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+      }
+    });
   }
 
   Future<void> _loadProfile() async {
@@ -309,8 +327,10 @@ class _SiaScreenState extends State<SiaScreen> {
   String _plainChat(String text) {
     var t = text;
     t = t.replaceAll(RegExp(r'```[\s\S]*?```'), ' (code block) ');
-    t = t.replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1');
-    t = t.replaceAll(RegExp(r'\*([^*\n]+)\*'), r'$1');
+    // Dart's replaceAll does NOT expand "$1" (that's JavaScript) — use
+    // replaceAllMapped or the literal "$1" shows up in the chat bubble.
+    t = t.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\*([^*\n]+)\*'), (m) => m.group(1)!);
     t = t.replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '');
     t = t.replaceAll(RegExp(r'^[-*]\s+', multiLine: true), '• ');
     return t.trim();
@@ -444,16 +464,20 @@ class _SiaScreenState extends State<SiaScreen> {
   }
 
   Widget _buildMessages(BuildContext context) {
-    // Newest message first: the reply appears at the TOP of the screen so the
-    // student reads it immediately — no auto-scroll chasing the bottom.
+    // Oldest first, newest at the bottom — answers start at the top of the
+    // reply and read downwards like normal chat apps.
     return ListView.builder(
       controller: _scrollCtrl,
-      reverse: true,
+      reverse: false,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       itemCount: _messages.length,
       itemBuilder: (_, i) {
-        final m = _messages[_messages.length - 1 - i];
-        return m.isAi ? _aiMsg(context, m) : _userMsg(context, m);
+        final m = _messages[i];
+        final child = m.isAi ? _aiMsg(context, m) : _userMsg(context, m);
+        // Tag the newest message so _scrollToEnd can align its top on screen.
+        return i == _messages.length - 1
+            ? KeyedSubtree(key: _lastMsgKey, child: child)
+            : child;
       },
     );
   }

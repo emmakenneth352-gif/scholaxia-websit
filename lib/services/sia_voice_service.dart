@@ -55,10 +55,29 @@ class SiaVoiceService {
   String cleanForSpeech(String text) {
     var t = text;
     t = t.replaceAll(RegExp(r'```[\s\S]*?```'), ' ');
-    t = t.replaceAll(RegExp(r'`([^`]+)`'), r'$1');
-    t = t.replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1');
-    t = t.replaceAll(RegExp(r'\*([^*]+)\*'), r'$1');
+    // NOTE: Dart's replaceAll does NOT expand "$1" (that's JavaScript).
+    // Group substitution needs replaceAllMapped or the literal "$1" lands in
+    // the spoken/displayed text.
+    t = t.replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1)!);
+    // LaTeX-ish math delimiters: "$cell$" -> "cell", "$$x^2$$" -> "x squared"
+    t = t.replaceAllMapped(RegExp(r'\$\$([^$]+?)\$\$'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\$([^$\n]{1,80}?)\$'), (m) => m.group(1)!);
+    // "A $1 is the $1" left-overs: lone dollar signs confuse TTS ("one dollars")
+    t = t.replaceAllMapped(RegExp(r'\$\s*(\d+(?:\.\d+)?)'), (m) => m.group(1)!);
+    t = t.replaceAll('\$', '');
+    t = t.replaceAllMapped(RegExp(r'\\\((.+?)\\\)'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\\\[(.+?)\\\]'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\*([^*]+)\*'), (m) => m.group(1)!);
     t = t.replaceAll(RegExp(r'^#+\s*', multiLine: true), '');
+    // Pronunciation fixes: symbols TTS reads badly (number x number only)
+    t = t.replaceAll(RegExp(r'(?<=\d)\s*x\s*(?=\d)', caseSensitive: false), ' times ');
+    t = t.replaceAll('=', ' equals ');
+    t = t.replaceAll('/', ' over ');
+    t = t.replaceAll(RegExp(r'>='), ' is greater than or equal to ');
+    t = t.replaceAll(RegExp(r'<='), ' is less than or equal to ');
+    t = t.replaceAll(RegExp(r'\s*>\s*'), ' is greater than ');
+    t = t.replaceAll(RegExp(r'\s*<\s*'), ' is less than ');
     t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (t.length > 1400) t = '${t.substring(0, 1400).trim()}...';
     return t;
@@ -123,18 +142,9 @@ class SiaVoiceService {
     _playDone = done;
     _setSpeaking(true);
 
-    // Windows: SAPI is fast and needs no extra packages
-    if (!kIsWeb && Platform.isWindows) {
-      final ok = await _speakWindowsSapi(phrase);
-      if (ok) {
-        await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
-        _playDone = null;
-        return true;
-      }
-      // SAPI failed — fall through to cloud TTS below.
-    }
-
-    // Cloud TTS (works on all platforms)
+    // 1) Cloud neural TTS first — clear, natural voices (Edge/ElevenLabs on
+    //    the server). The robotic Windows SAPI voice is only a fallback when
+    //    the network/TTS service is unavailable.
     var cloudOk = false;
     try {
       final bytes =
@@ -145,14 +155,25 @@ class SiaVoiceService {
     } catch (e) {
       debugPrint('SiaVoice cloud TTS failed: $e');
     }
-    if (!cloudOk) {
-      _finishPlay();
-      return false;
+    if (cloudOk) {
+      // Wait until onPlayerComplete really fires (or a generous safety timeout).
+      await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
+      _playDone = null;
+      return true;
     }
-    // Wait until onPlayerComplete really fires (or a generous safety timeout).
-    await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
-    _playDone = null;
-    return true;
+
+    // 2) Windows SAPI fallback (offline).
+    if (!kIsWeb && Platform.isWindows) {
+      final ok = await _speakWindowsSapi(phrase);
+      if (ok) {
+        await done.future.timeout(const Duration(minutes: 3), onTimeout: () {});
+        _playDone = null;
+        return true;
+      }
+    }
+
+    _finishPlay();
+    return false;
   }
 
   Future<bool> _speakWindowsSapi(String text) async {

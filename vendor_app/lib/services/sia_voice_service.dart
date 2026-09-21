@@ -55,9 +55,11 @@ class SiaVoiceService {
   String cleanForSpeech(String text) {
     var t = text;
     t = t.replaceAll(RegExp(r'```[\s\S]*?```'), ' ');
-    t = t.replaceAll(RegExp(r'`([^`]+)`'), r'$1');
-    t = t.replaceAll(RegExp(r'\*\*([^*]+)\*\*'), r'$1');
-    t = t.replaceAll(RegExp(r'\*([^*]+)\*'), r'$1');
+    // Dart's replaceAll does NOT expand "$1" (that's JavaScript) — use
+    // replaceAllMapped or the literal "$1" lands in the spoken text.
+    t = t.replaceAllMapped(RegExp(r'`([^`]+)`'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\*\*([^*]+)\*\*'), (m) => m.group(1)!);
+    t = t.replaceAllMapped(RegExp(r'\*([^*]+)\*'), (m) => m.group(1)!);
     t = t.replaceAll(RegExp(r'^#+\s*', multiLine: true), '');
     t = t.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (t.length > 1400) t = '${t.substring(0, 1400).trim()}...';
