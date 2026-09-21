@@ -50,7 +50,10 @@ DEFAULT_SETTINGS = {
     "score_messages": None,
     "randomize_questions": True,
     "randomize_options": True,
-    "allow_resume": True,
+    # Resume OFF by default: leaving and coming back hands out a freshly
+    # randomised paper (what students expect from practice). Admins can turn
+    # resume on in CBT Settings to keep the mid-exam paper + progress.
+    "allow_resume": False,
     "auto_submit_on_timeout": True,
 }
 
@@ -110,7 +113,7 @@ async def ensure_cbt_settings_schema() -> None:
             score_messages JSON DEFAULT NULL,
             randomize_questions BOOLEAN DEFAULT TRUE,
             randomize_options BOOLEAN DEFAULT TRUE,
-            allow_resume BOOLEAN DEFAULT TRUE,
+            allow_resume BOOLEAN DEFAULT FALSE,
             auto_submit_on_timeout BOOLEAN DEFAULT TRUE,
             updated_at TIMESTAMP DEFAULT NOW()
         )
@@ -126,6 +129,10 @@ async def ensure_cbt_settings_schema() -> None:
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS jw_score_per_subject INTEGER DEFAULT 100",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS ce_score_per_subject INTEGER DEFAULT 100",
         "ALTER TABLE cbt_global_settings ADD COLUMN IF NOT EXISTS score_messages JSON DEFAULT NULL",
+        "ALTER TABLE cbt_global_settings ALTER COLUMN allow_resume SET DEFAULT FALSE",
+        # One-time flip for existing deployments: fresh questions on return
+        # (the owner asked for this behaviour; admins can re-enable resume).
+        "UPDATE cbt_global_settings SET allow_resume = FALSE WHERE allow_resume IS TRUE",
         """
         CREATE TABLE IF NOT EXISTS cbt_practice_attempts (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -217,7 +224,7 @@ def settings_to_dict(row: CbtGlobalSettings | None) -> dict[str, Any]:
         "score_messages": getattr(row, "score_messages", None) or None,
         "randomize_questions": bool(row.randomize_questions if row.randomize_questions is not None else True),
         "randomize_options": bool(row.randomize_options if row.randomize_options is not None else True),
-        "allow_resume": bool(row.allow_resume if row.allow_resume is not None else True),
+        "allow_resume": bool(row.allow_resume if row.allow_resume is not None else False),
         "auto_submit_on_timeout": bool(
             row.auto_submit_on_timeout if row.auto_submit_on_timeout is not None else True
         ),
@@ -884,43 +891,45 @@ async def start_practice_attempt(
     if not settings.get("cbt_enabled", True):
         raise ValueError("CBT practice is currently disabled by admin.")
 
-    # Reuse an in-progress attempt for the SAME board + subjects instead of
-    # creating a new one on every open. The mobile app caches papers per
-    # attempt id — a brand-new row each open forced a full re-download
-    # ("Synchronizing…") and reset the student's progress every time.
+    # Reuse an in-progress attempt for the SAME board + subjects ONLY when the
+    # admin has "Allow resume" switched on. Default is OFF: leaving and coming
+    # back hands out a freshly randomised paper — students expect practice to
+    # reshuffle questions each time (the mobile app re-syncs the new paper
+    # automatically, so nothing breaks).
     def _norm_subjects(lst) -> list[str]:
         return sorted({str(s).strip().lower() for s in (lst or []) if str(s).strip()})
 
     reusable: CbtPracticeAttempt | None = None
-    try:
-        open_attempts = (
-            (
-                await db.execute(
-                    select(CbtPracticeAttempt)
-                    .where(
-                        CbtPracticeAttempt.student_id == sid,
-                        CbtPracticeAttempt.exam_type == board,
-                        CbtPracticeAttempt.status == "in_progress",
-                    )
-                    .order_by(CbtPracticeAttempt.started_at.desc())
-                    .limit(5)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        requested = _norm_subjects(subjects)
-        for cand in open_attempts:
-            if _norm_subjects(cand.subjects) == requested:
-                reusable = cand
-                break
-    except Exception:
-        logger.exception("practice start: reuse lookup failed")
+    if settings.get("allow_resume", False):
         try:
-            await db.rollback()
+            open_attempts = (
+                (
+                    await db.execute(
+                        select(CbtPracticeAttempt)
+                        .where(
+                            CbtPracticeAttempt.student_id == sid,
+                            CbtPracticeAttempt.exam_type == board,
+                            CbtPracticeAttempt.status == "in_progress",
+                        )
+                        .order_by(CbtPracticeAttempt.started_at.desc())
+                        .limit(5)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            requested = _norm_subjects(subjects)
+            for cand in open_attempts:
+                if _norm_subjects(cand.subjects) == requested:
+                    reusable = cand
+                    break
         except Exception:
-            pass
-        reusable = None
+            logger.exception("practice start: reuse lookup failed")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            reusable = None
 
     if reusable is not None:
         now = naive_utc_now()
