@@ -923,21 +923,26 @@ async def start_practice_attempt(
         reusable = None
 
     if reusable is not None:
-        # Timer expired while the student was away? Grant a fresh clock — the
-        # old behaviour created a brand-new attempt (full duration) each open,
-        # so this is no more lenient, it just keeps the same paper.
         now = naive_utc_now()
-        if reusable.ends_at is None or reusable.ends_at <= now:
-            reusable.ends_at = now + timedelta(minutes=int(reusable.duration_minutes or 60))
+        timer_active = reusable.ends_at is not None and reusable.ends_at > now
+        if timer_active:
+            # Same paper, same progress — the student is resuming mid-exam.
+            return reusable
+        # Timer expired: hand out a FRESH randomised paper. Students expect
+        # "start again" to reshuffle questions — reusing an old paper forever
+        # (until submit) made practice feel broken/stale. Mark the old row so
+        # grading history stays intact, then fall through to create a new one.
+        try:
+            reusable.status = "abandoned"
+            reusable.submitted_at = now
+            await db.flush()
+        except Exception:
+            logger.exception("practice start: could not expire stale attempt")
             try:
-                await db.flush()
+                await db.rollback()
             except Exception:
-                logger.exception("practice start: could not refresh attempt timer")
-                try:
-                    await db.rollback()
-                except Exception:
-                    pass
-        return reusable
+                pass
+        reusable = None
 
     # No reusable attempt: abandon old in-progress rows with a lightweight
     # UPDATE (never SELECT the huge JSON sections blob into Python).
