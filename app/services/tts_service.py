@@ -33,10 +33,11 @@ ELEVENLABS_SUPPORTED_LANGUAGES = {
 }
 
 # Clear female neural voices (Edge TTS — no key required).
-# English: Aria (en-US-AriaNeural) — clearer and more expressive than Jenny for
-# educational content; en-GB-SoniaNeural as an alternative crisp UK voice.
+# English: Ava (en-US-AvaNeural) — the most ChatGPT-like natural voice Edge
+# offers: warm, crisp, expressive — noticeably clearer than Aria/Jenny for
+# spoken lessons. Aria stays as an alternative.
 _EDGE_VOICE_BY_LANG = {
-    "english": "en-US-AriaNeural",
+    "english": "en-US-AvaNeural",
     "french": "fr-FR-DeniseNeural",
     "spanish": "es-ES-ElviraNeural",
     "portuguese": "pt-BR-FranciscaNeural",

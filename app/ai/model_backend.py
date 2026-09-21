@@ -146,6 +146,13 @@ async def _infer_gemini(prompt: str, conversation_history: list = None,
                         max_tokens: int = None, temperature: float = None) -> str:
     """Google Gemini — uses X-goog-api-key header, gemini-flash-latest model."""
     model = settings.GEMINI_MODEL  # default: gemini-flash-latest
+    if image_base64:
+        # Thinking models (2.5-pro/2.5-flash) burn output tokens on hidden
+        # reasoning and return EMPTY answers at small budgets; gemini-2.0-flash
+        # is retired on current keys. Route photo questions to the stable
+        # flash alias — vision-capable, fast, served on every Gemini key.
+        if "flash-latest" not in model and "image" not in model:
+            model = "gemini-flash-latest"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     contents = []
@@ -187,6 +194,13 @@ async def _infer_gemini(prompt: str, conversation_history: list = None,
                 "generationConfig": {
                     "maxOutputTokens": max_tokens or settings.AI_MAX_TOKENS,
                     "temperature": temperature if temperature is not None else settings.AI_TEMPERATURE,
+                    # Image answers must not be eaten by hidden thinking —
+                    # flash accepts thinkingBudget 0 (pro does not).
+                    **(
+                        {"thinkingConfig": {"thinkingBudget": 0}}
+                        if image_base64 and "pro" not in model
+                        else {}
+                    ),
                 },
             },
         )
@@ -453,7 +467,9 @@ async def run_inference(prompt: str, conversation_history: list = None,
     backend = _resolve_ai_backend()
 
     # DeepSeek (and hosted/local) cannot read images. If a photo is attached,
-    # fall through to the best vision model available.
+    # fall through to the best vision model available — and try EVERY
+    # vision-capable provider in turn so one dead key can't kill photo help.
+    try_order = None
     if image_base64 and backend in ("deepseek", "hosted", "local"):
         vision_order = []
         if settings.GEMINI_API_KEY:
@@ -464,6 +480,12 @@ async def run_inference(prompt: str, conversation_history: list = None,
             vision_order.append("groq")
         if vision_order:
             backend = vision_order[0]
+            try_order = vision_order
+        else:
+            raise RuntimeError(
+                "No vision provider configured on the server. "
+                "Add GEMINI_API_KEY or OPENAI_API_KEY on Render so photo questions work."
+            )
 
     backends = {
         "gemini": lambda: _infer_gemini(
@@ -490,7 +512,8 @@ async def run_inference(prompt: str, conversation_history: list = None,
     }
 
     # Use only the configured backend (DeepSeek-only when AI_BACKEND=deepseek).
-    try_order = [backend] if backend in backends else ["deepseek"]
+    if try_order is None:
+        try_order = [backend] if backend in backends else ["deepseek"]
 
     last_error = None
     tried = []

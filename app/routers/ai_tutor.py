@@ -14,7 +14,7 @@ from typing import Optional, List
 import io, base64
 
 from app.core.database import get_db
-from app.core.deps import require_student, require_student_or_kind
+from app.core.deps import require_student, require_student_or_kind, get_current_user
 from app.models.user import User, StudentProfile
 from app.models.sia_note import SiaNote
 from app.services.ai_service import (
@@ -805,12 +805,13 @@ async def list_languages():
 async def sia_transcribe(
     audio: UploadFile = File(...),
     language: str = Form(default="en"),
-    current_user: dict = Depends(require_student_or_kind),
+    current_user: dict = Depends(get_current_user),
 ):
     """
-    Convert a recorded voice clip to text so students can talk to the AI
-    Teacher. Used by the desktop app (Electron) where the Web Speech API has
-    no engine. Providers: Groq Whisper → OpenAI Whisper (see stt_service).
+    Convert a recorded voice clip to text so students and teachers can talk
+    to the AI Teacher. Used by the desktop app (Electron) where the Web Speech
+    API has no engine, and by the Flutter desktop/Windows fallback.
+    Providers: Groq Whisper → OpenAI Whisper (see stt_service).
     """
     from app.services.stt_service import transcribe_audio
 
