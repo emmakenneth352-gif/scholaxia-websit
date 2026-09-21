@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -32,22 +32,23 @@ def _tokens_left(balance: int) -> int:
     return max(0, balance)
 
 
-async def _wallet_payload(db: AsyncSession, user_id: str) -> dict:
+async def _wallet_payload(db: AsyncSession, user_id) -> dict:
     await ai_token_service.ensure_wallet(db, user_id)
-    balance = await ai_token_service.get_balance(db, user_id)
-    res = await db.execute(
-        text(
-            "SELECT last_refill_at, updated_at FROM ai_token_wallets WHERE user_id = :uid"
-        ),
-        {"uid": user_id},
-    )
-    row = res.first()
+    uid = uuid.UUID(str(user_id))
+    balance = await ai_token_service.get_balance(db, uid)
     next_refill = None
-    if row and row.last_refill_at is not None:
-        try:
-            next_refill = (row.last_refill_at + timedelta(days=ai_token_service.REFILL_INTERVAL_DAYS)).isoformat()
-        except Exception:
-            next_refill = None
+    try:
+        from app.models.ai_token import AiTokenWallet
+
+        wallet = (
+            await db.execute(select(AiTokenWallet).where(AiTokenWallet.user_id == uid))
+        ).scalar_one_or_none()
+        if wallet is not None and wallet.last_refill_at is not None:
+            next_refill = (
+                wallet.last_refill_at + timedelta(days=ai_token_service.REFILL_INTERVAL_DAYS)
+            ).isoformat()
+    except Exception:
+        next_refill = None
     return {
         "balance": int(balance),
         "tokens_left": _tokens_left(int(balance)),

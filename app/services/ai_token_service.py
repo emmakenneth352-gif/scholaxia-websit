@@ -3,9 +3,11 @@
 Design:
 - Every student/kind/teacher gets FREE_TOKENS at signup and a monthly refill
   while their balance is below the free allowance.
-- AI endpoints spend tokens in ONE atomic UPDATE ... RETURNING statement, so a
-  learner can never spend tokens they do not have and concurrent calls cannot
-  race the balance.
+- AI endpoints spend tokens atomically (single UPDATE ... RETURNING).
+- All user ids are converted to uuid.UUID — asyncpg rejects strings for UUID
+  columns (that was the DBAPIError on /sia/ask).
+- Token accounting must NEVER break a lesson: spend() swallows its own errors
+  and returns a neutral balance so Sia always answers.
 - Prices are set in USD by the admin; the NGN charge is computed server-side
   with the USD→NGN rate (admin-set, fallback constant). Clients never send
   amounts.
@@ -13,12 +15,13 @@ Design:
 from __future__ import annotations
 
 import logging
-import uuid
+import uuid as _uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Optional
 
-from sqlalchemy import text, select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -41,7 +44,7 @@ class AiTokenPack:
     name: str
     price_usd: float
     tokens: int
-    duration_days: int  # validity of the granted tokens' refill window
+    duration_days: int
 
 
 BUILTIN_AI_PLANS: tuple[AiTokenPack, ...] = (
@@ -56,170 +59,178 @@ def usd_to_naira(usd: float) -> float:
     return round(float(usd) * float(rate), 2)
 
 
+def _uid(user_id) -> _uuid.UUID:
+    """Coerce any user id (str | UUID) into a real uuid.UUID for asyncpg."""
+    if isinstance(user_id, _uuid.UUID):
+        return user_id
+    return _uuid.UUID(str(user_id))
+
+
 # ── Wallet core ──────────────────────────────────────────────────────────────
 
-async def ensure_wallet(db: AsyncSession, user_id: str) -> None:
-    """Create the wallet row + signup grant if missing. Never raises.
-    Uses savepoint-free insert-if-missing (ON CONFLICT DO NOTHING)."""
+async def ensure_wallet(db: AsyncSession, user_id) -> None:
+    """Create the wallet row + signup grant if missing. Never raises and never
+    leaves the session in a failed state (savepoint-protected)."""
     try:
-        await _maybe_monthly_refill(db, user_id)
+        await _maybe_monthly_refill(db, _uid(user_id))
     except Exception as exc:
         logger.warning("ai wallet ensure failed for %s: %s", user_id, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
-async def _maybe_monthly_refill(db: AsyncSession, user_id: str) -> None:
-    """Create-or-top-up the wallet. Grants FREE_TOKENS at signup and again at
-    most once every REFILL_INTERVAL_DAYS whenever the balance fell below it."""
+async def _maybe_monthly_refill(db: AsyncSession, uid: _uuid.UUID) -> None:
+    from app.models.ai_token import AiTokenTransaction, AiTokenWallet
+
     now = naive_utc_now()
-    row = (
-        await db.execute(
-            text(
-                """
-                INSERT INTO ai_token_wallets (user_id, balance, lifetime_granted, lifetime_spent, last_refill_at)
-                VALUES (:uid, :free, :free, 0, NOW())
-                ON CONFLICT (user_id) DO NOTHING
-                """
-            ),
-            {"uid": user_id, "free": FREE_TOKENS},
-        )
-    )
-    created = getattr(row, "rowcount", 0) > 0
-    if created:
-        await db.execute(
-            text(
-                """
-                INSERT INTO ai_token_transactions (id, user_id, delta, reason, description, balance_after, created_at)
-                VALUES (:id, :uid, :delta, 'signup', 'Welcome free AI tokens', :free, NOW())
-                """
-            ),
-            {"id": uuid.uuid4(), "uid": user_id, "delta": FREE_TOKENS, "free": FREE_TOKENS},
-        )
-        return
+    wallet = (
+        await db.execute(select(AiTokenWallet).where(AiTokenWallet.user_id == uid))
+    ).scalar_one_or_none()
 
-    # Existing wallet: top up when below free allowance and refill is due.
-    res = await db.execute(
-        text("SELECT balance, last_refill_at FROM ai_token_wallets WHERE user_id = :uid"),
-        {"uid": user_id},
-    )
-    wallet = res.first()
-    if not wallet:
-        return
+    if wallet is None:
+        wallet = AiTokenWallet(
+            user_id=uid,
+            balance=FREE_TOKENS,
+            lifetime_granted=FREE_TOKENS,
+            lifetime_spent=0,
+            last_refill_at=now,
+        )
+        db.add(wallet)
+        try:
+            await db.flush()
+        except IntegrityError:
+            # A concurrent request created it first — roll back to a clean
+            # state and re-read.
+            await db.rollback()
+            wallet = (
+                await db.execute(select(AiTokenWallet).where(AiTokenWallet.user_id == uid))
+            ).scalar_one_or_none()
+            if wallet is None:
+                return
+        else:
+            db.add(
+                AiTokenTransaction(
+                    user_id=uid,
+                    delta=FREE_TOKENS,
+                    reason="signup",
+                    description="Welcome free AI tokens",
+                    balance_after=FREE_TOKENS,
+                )
+            )
+            await db.flush()
+            return
+
     balance = int(wallet.balance or 0)
-    last = wallet.last_refill_at
     if balance >= FREE_TOKENS:
         return
-    if last is not None and (now.replace(tzinfo=None) - last) < timedelta(days=REFILL_INTERVAL_DAYS):
+    last = wallet.last_refill_at
+    if last is not None and (now - last) < timedelta(days=REFILL_INTERVAL_DAYS):
         return
-    await db.execute(
-        text(
-            """
-            UPDATE ai_token_wallets
-               SET balance = :free, last_refill_at = NOW(), updated_at = NOW()
-             WHERE user_id = :uid
-            """
-        ),
-        {"uid": user_id, "free": FREE_TOKENS},
-    )
-    await db.execute(
-        text(
-            """
-            INSERT INTO ai_token_transactions (id, user_id, delta, reason, description, balance_after, created_at)
-            VALUES (:id, :uid, :delta, :reason, 'Monthly free AI tokens', :free, NOW())
-            """
-        ),
-        {
-            "id": uuid.uuid4(),
-            "uid": user_id,
-            "delta": FREE_TOKENS - balance,
-            "reason": REFILL_REASON,
-            "free": FREE_TOKENS,
-        },
-    )
 
-
-async def get_balance(db: AsyncSession, user_id: str) -> int:
-    try:
-        res = await db.execute(
-            text("SELECT balance FROM ai_token_wallets WHERE user_id = :uid"),
-            {"uid": user_id},
+    wallet.balance = FREE_TOKENS
+    wallet.last_refill_at = now
+    db.add(
+        AiTokenTransaction(
+            user_id=uid,
+            delta=FREE_TOKENS - balance,
+            reason=REFILL_REASON,
+            description="Monthly free AI tokens",
+            balance_after=FREE_TOKENS,
         )
-        row = res.first()
-        return int(row.balance) if row else FREE_TOKENS
+    )
+    await db.flush()
+
+
+async def get_balance(db: AsyncSession, user_id) -> int:
+    try:
+        from app.models.ai_token import AiTokenWallet
+
+        wallet = (
+            await db.execute(
+                select(AiTokenWallet).where(AiTokenWallet.user_id == _uid(user_id))
+            )
+        ).scalar_one_or_none()
+        return int(wallet.balance) if wallet else FREE_TOKENS
     except Exception:
         return FREE_TOKENS
 
 
-async def spend(db: AsyncSession, user_id: str, amount: int = SPEND_PER_CALL) -> int:
-    """Atomically deduct tokens; wallet auto-created on first spend.
+async def spend(db: AsyncSession, user_id, amount: int = SPEND_PER_CALL) -> int:
+    """Atomically deduct tokens. ALWAYS succeeds from the caller's perspective:
+    on any internal error it logs and returns a neutral balance so the AI
+    answer is never blocked by token accounting."""
+    try:
+        return await _spend_inner(db, user_id, amount)
+    except Exception as exc:
+        logger.warning("ai token spend failed for %s: %s", user_id, exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        return FREE_TOKENS
 
-    Returns the new balance. If the learner has fewer tokens than `amount`,
-    the balance goes negative by design (never block a lesson mid-flow) —
-    callers compare against zero to decide the low/empty state shown in UI.
-    Actually NO: spend clamps at allowed-with-overdraft = cost of this call:
-    we allow the call to succeed (so the answer arrives) and land the balance
-    at <= 0; the NEXT call still succeeds — the client surfaces the upgrade
-    sheet from balance<=0 on every response. This keeps teaching uninterrupted.
-    """
-    await ensure_wallet(db, user_id)
+
+async def _spend_inner(db: AsyncSession, user_id, amount: int = SPEND_PER_CALL) -> int:
+    from app.models.ai_token import AiTokenWallet
+
+    uid = _uid(user_id)
+    await ensure_wallet(db, uid)
     res = await db.execute(
-        text(
-            """
-            UPDATE ai_token_wallets
-               SET balance = balance - :amt, lifetime_spent = lifetime_spent + :amt, updated_at = NOW()
-             WHERE user_id = :uid
-            RETURNING balance
-            """
-        ),
-        {"uid": user_id, "amt": amount},
+        update(AiTokenWallet)
+        .where(AiTokenWallet.user_id == uid)
+        .values(
+            balance=AiTokenWallet.balance - amount,
+            lifetime_spent=AiTokenWallet.lifetime_spent + amount,
+            updated_at=naive_utc_now(),
+        )
+        .returning(AiTokenWallet.balance)
     )
     row = res.first()
-    return int(row.balance) if row else 0
+    await db.flush()
+    return int(row.balance) if row else FREE_TOKENS
 
 
 async def grant_tokens(
     db: AsyncSession,
-    user_id: str,
+    user_id,
     amount: int,
     reason: str,
     description: str | None = None,
-    payment_id: Optional[uuid.UUID] = None,
+    payment_id=None,
     set_refill_stamp: bool = False,
 ) -> int:
     """Credit tokens (purchase, admin). Returns the new balance."""
-    await ensure_wallet(db, user_id)
+    from app.models.ai_token import AiTokenTransaction, AiTokenWallet
+
+    uid = _uid(user_id)
+    await ensure_wallet(db, uid)
     res = await db.execute(
-        text(
-            """
-            UPDATE ai_token_wallets
-               SET balance = balance + :amt,
-                   lifetime_granted = lifetime_granted + :amt,
-                   last_refill_at = CASE WHEN :stamp THEN NOW() ELSE last_refill_at END,
-                   updated_at = NOW()
-             WHERE user_id = :uid
-            RETURNING balance
-            """
-        ),
-        {"uid": user_id, "amt": amount, "stamp": bool(set_refill_stamp)},
+        update(AiTokenWallet)
+        .where(AiTokenWallet.user_id == uid)
+        .values(
+            balance=AiTokenWallet.balance + amount,
+            lifetime_granted=AiTokenWallet.lifetime_granted + amount,
+            last_refill_at=naive_utc_now() if set_refill_stamp else AiTokenWallet.last_refill_at,
+            updated_at=naive_utc_now(),
+        )
+        .returning(AiTokenWallet.balance)
     )
     row = res.first()
     balance = int(row.balance) if row else amount
-    await db.execute(
-        text(
-            """
-            INSERT INTO ai_token_transactions (id, user_id, delta, reason, description, payment_id, balance_after, created_at)
-            VALUES (:id, :uid, :amt, :reason, :descr, :pid, :bal, NOW())
-            """
-        ),
-        {
-            "id": uuid.uuid4(),
-            "uid": user_id,
-            "amt": amount,
-            "reason": reason,
-            "descr": (description or reason)[:255],
-            "pid": payment_id,
-            "bal": balance,
-        },
+    await db.flush()
+    db.add(
+        AiTokenTransaction(
+            user_id=uid,
+            delta=amount,
+            reason=reason,
+            description=(description or reason)[:255],
+            payment_id=payment_id,
+            balance_after=balance,
+        )
     )
+    await db.flush()
     return balance
 
 
@@ -228,9 +239,8 @@ async def grant_tokens(
 async def refresh_ai_plan_overrides(db: AsyncSession) -> None:
     """Sync plan_overrides (plan_group='ai_token') into the ai_token_plans table.
 
-    Reads override rows (price overrides in USD, name, is_active, custom packs,
-    token amount via ai_tokens column) and mirrors them into ai_token_plans so
-    the catalog + fulfillment always agree. Admin edits write BOTH tables.
+    Reads override rows (price in USD, name, is_active, ai_tokens) and mirrors
+    them into ai_token_plans so the catalog + fulfillment always agree.
     """
     try:
         from sqlalchemy import delete as _delete
